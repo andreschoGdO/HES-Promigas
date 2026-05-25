@@ -1616,7 +1616,7 @@ function ReactivaTab() {
                 <CartesianGrid stroke="rgba(0,0,0,0.06)" />
                 <XAxis dataKey="casa" stroke="var(--text-muted)" fontSize={10} angle={-30} textAnchor="end" height={60} interval={0} />
                 <YAxis stroke="var(--text-muted)" fontSize={11} label={{ value: 'ERI / EA (%)', angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'var(--text-muted)' } }} />
-                <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8 }} formatter={(v: number) => `${v}%`} />
+                <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8 }} formatter={(v) => `${v}%`} />
                 <Line type="monotone" dataKey="ratio_pct" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} name="Ratio %" />
                 <Line type="monotone" dataKey={() => 50} stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} dot={false} name="Umbral CREG (50%)" />
               </LineChart>

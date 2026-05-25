@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Settings, LogOut, Sun } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, Bell } from 'lucide-react';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -12,6 +12,7 @@ export function Sidebar() {
   ];
 
   const adminItems = [
+    { label: 'Configuración Alertas', path: '/alertas', icon: Bell },
     { label: 'Configuración API', path: '/configuracion', icon: Settings },
   ];
 

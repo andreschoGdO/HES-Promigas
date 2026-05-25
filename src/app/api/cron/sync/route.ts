@@ -30,6 +30,7 @@ interface AuditSteps {
   cierres?: { inserted: number; total: number };
   consumo?: { inserted: number; days: number };
   casa_metrics?: { upserted: number; range_days: number };
+  alerts?: { evaluated: number; fired: number };
 }
 
 export async function GET(request: Request) {
@@ -106,8 +107,16 @@ export async function GET(request: Request) {
       errors.push(`casa_metrics: ${e instanceof Error ? e.message : e}`);
     }
 
+    // 6. Evaluar alertas contra las métricas pre-computadas
+    try {
+      const j = (await callInternal('/api/alerts/evaluate')) as { evaluated?: number; fired?: number };
+      steps.alerts = { evaluated: j.evaluated ?? 0, fired: j.fired ?? 0 };
+    } catch (e) {
+      errors.push(`alerts: ${e instanceof Error ? e.message : e}`);
+    }
+
     // Update audit
-    const finalStatus = errors.length === 0 ? 'success' : errors.length === 5 ? 'error' : 'partial';
+    const finalStatus = errors.length === 0 ? 'success' : errors.length === 6 ? 'error' : 'partial';
     if (auditId) {
       await supabaseAdmin
         .from('cron_runs')

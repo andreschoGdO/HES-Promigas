@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import { classifyDevice } from '../page';
 
-type Tab = 'cierres' | 'consumos';
+type Tab = 'cierres' | 'consumos' | 'alertas';
 type TypeFilter = 'all' | 'meter' | 'inverter' | 'gateway' | 'other';
 
 interface DeviceOption {
@@ -501,6 +501,7 @@ export default function DashboardPage() {
         {([
           { id: 'cierres' as const, label: 'Cierres y Granular' },
           { id: 'consumos' as const, label: 'Consumo por Dispositivo' },
+          { id: 'alertas' as const, label: 'Alertas por Casa' },
         ]).map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`tab ${tab === t.id ? 'active' : ''}`}>
             {t.label}
@@ -510,6 +511,7 @@ export default function DashboardPage() {
 
       {tab === 'cierres' && <CierresGranularTab devices={devices} />}
       {tab === 'consumos' && <ConsumosTab />}
+      {tab === 'alertas' && <AlertasCasaTab />}
     </>
   );
 }
@@ -1357,6 +1359,150 @@ function ConsumosTab() {
           </table>
         </div>
       </div>
+    </>
+  );
+}
+
+/* ---------------- TAB: Alertas por Casa ---------------- */
+
+interface AlertEventRow {
+  id: string;
+  casa: string;
+  record_date: string;
+  variable: string;
+  value: number;
+  threshold: number;
+  operator: string;
+  severity: 'high' | 'medium' | 'low';
+  message: string;
+  fired_at: string;
+  acknowledged: boolean;
+  alert_rules: { name: string } | null;
+}
+
+const SEV_META: Record<string, { label: string; color: string }> = {
+  high: { label: 'Alto', color: '#ef4444' },
+  medium: { label: 'Medio', color: '#f59e0b' },
+  low: { label: 'Bajo', color: '#3b82f6' },
+};
+
+function AlertasCasaTab() {
+  const [events, setEvents] = useState<AlertEventRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterAck, setFilterAck] = useState<'all' | 'pending'>('pending');
+
+  const load = async () => {
+    setLoading(true);
+    const url = filterAck === 'pending' ? '/api/alerts/events?acknowledged=false' : '/api/alerts/events';
+    const r = await fetch(url);
+    const j = await r.json();
+    setEvents(j.events ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [filterAck]);
+
+  // Agrupar por casa
+  const byCasa = useMemo(() => {
+    const m = new Map<string, AlertEventRow[]>();
+    for (const ev of events) {
+      if (!m.has(ev.casa)) m.set(ev.casa, []);
+      m.get(ev.casa)!.push(ev);
+    }
+    return Array.from(m.entries()).sort((a, b) => {
+      // Casas con eventos high primero
+      const sa = a[1].filter(e => e.severity === 'high').length;
+      const sb = b[1].filter(e => e.severity === 'high').length;
+      if (sa !== sb) return sb - sa;
+      return b[1].length - a[1].length;
+    });
+  }, [events]);
+
+  const totals = useMemo(() => {
+    const t = { high: 0, medium: 0, low: 0 };
+    for (const ev of events) t[ev.severity]++;
+    return t;
+  }, [events]);
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+        {(['high','medium','low'] as const).map((sev) => (
+          <div key={sev} className="glass-panel" style={{ flex: '1 1 180px', padding: '14px 18px' }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{SEV_META[sev].label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: SEV_META[sev].color }} />
+              <span style={{ fontSize: '1.6rem', fontWeight: 700 }}>{totals[sev]}</span>
+            </div>
+          </div>
+        ))}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+          <button className={`chip ${filterAck === 'pending' ? 'active' : ''}`} onClick={() => setFilterAck('pending')}>Pendientes</button>
+          <button className={`chip ${filterAck === 'all' ? 'active' : ''}`} onClick={() => setFilterAck('all')}>Todas</button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>Cargando…</div>
+      ) : byCasa.length === 0 ? (
+        <div className="alert-success" style={{ fontSize: '0.85rem' }}>
+          ✓ Ninguna alerta activa. El sistema está operando dentro de los umbrales configurados.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {byCasa.map(([casa, list]) => {
+            const high = list.filter(e => e.severity === 'high').length;
+            const med = list.filter(e => e.severity === 'medium').length;
+            const low = list.filter(e => e.severity === 'low').length;
+            const topSev = high > 0 ? 'high' : med > 0 ? 'medium' : 'low';
+            return (
+              <div key={casa} className="glass-panel" style={{ padding: '14px 20px', borderLeft: `4px solid ${SEV_META[topSev].color}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                  <h3 style={{ margin: 0, fontSize: '1rem' }}>{casa}</h3>
+                  <div style={{ display: 'flex', gap: 6, fontSize: '0.75rem' }}>
+                    {high > 0 && <span style={{ padding: '2px 8px', borderRadius: 8, background: SEV_META.high.color + '20', color: SEV_META.high.color, fontWeight: 600 }}>{high} alto</span>}
+                    {med > 0 && <span style={{ padding: '2px 8px', borderRadius: 8, background: SEV_META.medium.color + '20', color: SEV_META.medium.color, fontWeight: 600 }}>{med} medio</span>}
+                    {low > 0 && <span style={{ padding: '2px 8px', borderRadius: 8, background: SEV_META.low.color + '20', color: SEV_META.low.color, fontWeight: 600 }}>{low} bajo</span>}
+                  </div>
+                </div>
+                <table style={{ width: '100%', fontSize: '0.78rem' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      <th style={{ padding: '4px 8px' }}>Fecha</th>
+                      <th style={{ padding: '4px 8px' }}>Regla</th>
+                      <th style={{ padding: '4px 8px' }}>Detalle</th>
+                      <th style={{ padding: '4px 8px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((ev) => (
+                      <tr key={ev.id} style={{ opacity: ev.acknowledged ? 0.5 : 1, borderTop: '1px solid var(--border)' }}>
+                        <td style={{ padding: '6px 8px' }}>{ev.record_date}</td>
+                        <td style={{ padding: '6px 8px' }}>{ev.alert_rules?.name ?? ev.variable}</td>
+                        <td style={{ padding: '6px 8px', fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                          {ev.variable} = {Number(ev.value).toFixed(2)} {ev.operator} {ev.threshold}
+                        </td>
+                        <td style={{ padding: '6px 8px' }}>
+                          {ev.acknowledged ? (
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>✓</span>
+                          ) : (
+                            <button
+                              onClick={async () => { await fetch('/api/alerts/events', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ev.id, acknowledged: true }) }); load(); }}
+                              style={{ fontSize: '0.7rem', padding: '2px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-elevated)', cursor: 'pointer' }}
+                            >
+                              Ack
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }

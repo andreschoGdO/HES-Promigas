@@ -31,18 +31,25 @@ interface AlertEvent {
   alert_rules: { name: string } | null;
 }
 
-const VARIABLES = [
-  { key: 'generacion_wh', label: 'Generación (Wh)' },
-  { key: 'demanda_wh', label: 'Demanda (Wh)' },
-  { key: 'importacion_wh', label: 'Importación red (Wh)' },
-  { key: 'excedentes_wh', label: 'Excedentes (Wh)' },
-  { key: 'gen_dem_pct', label: 'Gen / Dem (%)' },
-  { key: 'exc_gen_pct', label: 'Exc / Gen (%)' },
-  { key: 'imp_dem_pct', label: 'Imp / Dem (%)' },
-  { key: 'yield_real', label: 'Yield Real (kWh/kWp)' },
-  { key: 'desempeno_pct', label: 'Desempeño / PR (%)' },
-  { key: 'imax_a', label: 'Corriente máxima (A)' },
-  { key: 'potencia_kw', label: 'Potencia instalada (kW)' },
+interface VarOption { key: string; label: string; group: string; }
+const VARIABLES: VarOption[] = [
+  // Solar y consumo (diarias)
+  { key: 'generacion_wh',         label: 'Generación (Wh)',              group: 'Solar / Diario' },
+  { key: 'demanda_wh',            label: 'Demanda (Wh)',                 group: 'Solar / Diario' },
+  { key: 'importacion_wh',        label: 'Importación red (Wh)',         group: 'Solar / Diario' },
+  { key: 'excedentes_wh',         label: 'Excedentes (Wh)',              group: 'Solar / Diario' },
+  { key: 'gen_dem_pct',           label: 'Gen / Dem (%)',                group: 'Solar / Diario' },
+  { key: 'exc_gen_pct',           label: 'Exc / Gen (%)',                group: 'Solar / Diario' },
+  { key: 'imp_dem_pct',           label: 'Imp / Dem (%)',                group: 'Solar / Diario' },
+  { key: 'yield_real',            label: 'Yield Real (kWh/kWp)',         group: 'Solar / Diario' },
+  { key: 'desempeno_pct',         label: 'Desempeño / PR (%)',           group: 'Solar / Diario' },
+  { key: 'imax_a',                label: 'Corriente máxima (A)',         group: 'Solar / Diario' },
+  { key: 'potencia_kw',           label: 'Potencia instalada (kW)',      group: 'Solar / Diario' },
+  // Reactiva (mensual — CREG 015-2018)
+  { key: 'eri_ratio_pct_mtd',     label: 'Ratio ERI/EA mes-en-curso (%)', group: 'Reactiva / CREG (mensual)' },
+  { key: 'excedente_kvarh_mtd',   label: 'Excedente sobre 50% (kvarh)',  group: 'Reactiva / CREG (mensual)' },
+  { key: 'cos_phi_mtd',           label: 'Factor de potencia cos φ',     group: 'Reactiva / CREG (mensual)' },
+  { key: 'penalizacion_cop_mtd',  label: 'Penalización estimada (COP)',  group: 'Reactiva / CREG (mensual)' },
 ];
 
 const OPERATORS = [
@@ -301,7 +308,13 @@ function NewRuleForm({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
         <div className="input-group">
           <label className="input-label">Variable</label>
           <select value={variable} onChange={(e) => setVariable(e.target.value)}>
-            {VARIABLES.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
+            {Array.from(new Set(VARIABLES.map((v) => v.group))).map((group) => (
+              <optgroup key={group} label={group}>
+                {VARIABLES.filter((v) => v.group === group).map((v) => (
+                  <option key={v.key} value={v.key}>{v.label}</option>
+                ))}
+              </optgroup>
+            ))}
           </select>
         </div>
         <div className="input-group">

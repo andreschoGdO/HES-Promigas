@@ -1,11 +1,41 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { BarChart3, Settings, LogOut, Sun, Bell } from 'lucide-react';
+import { createBrowserClient } from '@supabase/ssr';
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [user, setUser] = useState<{ email: string; initial: string } | null>(null);
+
+  useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user?.email) {
+        const email = data.user.email;
+        setUser({ email, initial: email[0].toUpperCase() });
+      }
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    );
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  };
+
+  // No renderizar sidebar en rutas de auth
+  if (pathname.startsWith('/login') || pathname.startsWith('/auth')) return null;
 
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: BarChart3 },

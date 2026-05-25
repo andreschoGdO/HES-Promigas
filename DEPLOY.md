@@ -41,27 +41,51 @@ supabase_phase2_casa_metrics.sql
 Esto crea `daily_casa_metrics` (métricas pre-computadas) y `cron_runs` (auditoría).
 Sin esto, el dashboard usa fallback en vivo (más lento, sin imax pre-computado).
 
-## 4. Email Auth con Outlook (Microsoft OAuth)
+## 4. Email Auth con código OTP (sin Azure)
 
-### En Supabase
+### a) Habilitar Email Auth en Supabase
 
-1. Dashboard → Authentication → Providers → **Azure (Microsoft)**
-2. Enable + agrega:
-   - Azure Client ID (de tu Azure App Registration)
-   - Azure Client Secret
-   - Tenant ID (o `common` para multi-tenant)
-3. Add Redirect URL: `https://tu-vercel-app.vercel.app/auth/callback`
+1. Dashboard Supabase → **Authentication** → **Providers** → **Email**
+2. Toggle ON: `Enable email signup`, `Confirm email`
+3. Toggle OFF: `Enable email change confirmations` (opcional)
+4. **Site URL**: `https://tu-vercel-app.vercel.app`
+5. **Redirect URLs**: agrega `https://tu-vercel-app.vercel.app/auth/callback`
 
-### En Azure (registrar la app)
+### b) Aplicar el template "SUNNY APP" al correo
 
-1. https://portal.azure.com → Azure AD → App registrations → New
-2. Single tenant (tu org @gdo.com.co) o Multi-tenant
-3. Redirect URI: `https://upiehuyqhxaqoavtxbig.supabase.co/auth/v1/callback`
-4. Copia Client ID y crea un Client Secret
+1. Dashboard Supabase → **Authentication** → **Email Templates**
+2. Selecciona el template **"Magic Link"**
+3. **Subject**: `SUNNY APP — Código de acceso`
+4. **From name**: `SUNNY APP`
+5. **Message body**: pega TODO el contenido de `supabase_email_template_magic_link.html`
+6. Click **Save changes**
 
-### Restricción de dominio @gdo.com.co
+El template incluye:
+- Logo solar + nombre "SUNNY APP"
+- Código de 6 dígitos prominente (`{{ .Token }}`)
+- Botón alternativo "Entrar a SUNNY APP" con magic link (`{{ .ConfirmationURL }}`)
+- Branding HES Promigas
 
-Ya implementada en `src/middleware.ts` — rechaza cualquier email que no termine en `@gdo.com.co`.
+### c) Restricción de dominio @gdo.com.co
+
+Ya implementada en `src/middleware.ts` y `src/app/login/page.tsx` — rechaza cualquier email que no termine en `@gdo.com.co` tanto al enviar el código como al verificar.
+
+### d) Flujo del usuario
+
+1. Usuario va a `/login`
+2. Escribe su correo `xxx@gdo.com.co` → "Enviar código"
+3. Recibe email "SUNNY APP — Código de acceso" en su Outlook
+4. Lee el código de 6 dígitos en el correo
+5. Lo escribe en el campo de la app → "Verificar y entrar"
+6. Sesión iniciada, redirige a `/dashboard`
+
+### e) Dev local (sin Magic Link configurado todavía)
+
+Hasta que actives el provider Email en Supabase, pon en `.env.local`:
+```
+DISABLE_AUTH=1
+```
+El middleware ignora la autenticación y te deja entrar directo. **No uses esto en producción.**
 
 ## 5. Cron Manual
 

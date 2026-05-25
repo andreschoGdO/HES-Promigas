@@ -1,0 +1,166 @@
+<!--
+  Email template — SUNNY APP · Código de acceso
+  Compatible con Gmail, Outlook, Outlook.com, Apple Mail, iOS Mail.
+
+  Aplicar en: Supabase Dashboard → Authentication → Email Templates → "Magic Link"
+    Subject:        SUNNY APP — Tu código de acceso
+    Sender name:    SUNNY APP
+    Sender email:   noreply@<tu dominio>   (opcional, lo configuras luego en SMTP custom)
+    Body:           todo el HTML debajo (desde <!DOCTYPE> hasta </html>)
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>SUNNY APP · Código de acceso</title>
+  <!--[if mso]>
+    <style type="text/css">
+      table { border-collapse: collapse; }
+      td, th, div, p { font-family: 'Segoe UI', Arial, sans-serif !important; }
+    </style>
+  <![endif]-->
+</head>
+<body style="margin:0; padding:0; background-color:#eef3f1; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing:antialiased; color:#050f0d;">
+
+  <!-- Preheader (texto que Outlook muestra como preview, oculto en el cuerpo) -->
+  <div style="display:none; max-height:0px; overflow:hidden; opacity:0;">
+    Tu código de acceso para SUNNY APP — válido por 60 minutos.
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef3f1;">
+    <tr>
+      <td align="center" style="padding: 40px 16px;">
+
+        <!-- Card principal -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px; background-color:#ffffff; border-radius:20px; overflow:hidden; box-shadow: 0 12px 40px rgba(7, 197, 168, 0.10);">
+
+          <!-- HERO con gradiente turquesa -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #07c5a8 0%, #0a9e88 100%); background-color:#07c5a8; padding: 44px 36px 36px; text-align:center;">
+
+              <!-- Logo del sol en círculo blanco -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto 18px;">
+                <tr>
+                  <td align="center" style="width:76px; height:76px; background-color:#ffffff; border-radius:50%; vertical-align:middle; box-shadow: 0 6px 20px rgba(0,0,0,0.10);">
+                    <!-- SVG Sun icon en turquesa -->
+                    <div style="line-height:0; color:#07c5a8;">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="#07c5a8" stroke="#07c5a8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:block; margin:auto;">
+                        <circle cx="12" cy="12" r="4.5" fill="#07c5a8"></circle>
+                        <line x1="12" y1="1.8" x2="12" y2="4.2"></line>
+                        <line x1="12" y1="19.8" x2="12" y2="22.2"></line>
+                        <line x1="4.5" y1="4.5" x2="6.2" y2="6.2"></line>
+                        <line x1="17.8" y1="17.8" x2="19.5" y2="19.5"></line>
+                        <line x1="1.8" y1="12" x2="4.2" y2="12"></line>
+                        <line x1="19.8" y1="12" x2="22.2" y2="12"></line>
+                        <line x1="4.5" y1="19.5" x2="6.2" y2="17.8"></line>
+                        <line x1="17.8" y1="6.2" x2="19.5" y2="4.5"></line>
+                      </svg>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <h1 style="margin:0; font-size:26px; font-weight:800; letter-spacing:1.5px; color:#ffffff; font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
+                SUNNY APP
+              </h1>
+              <p style="margin:6px 0 0; font-size:13px; color:rgba(255,255,255,0.85); letter-spacing:0.5px;">
+                HES Promigas · Monitoreo solar
+              </p>
+            </td>
+          </tr>
+
+          <!-- Saludo -->
+          <tr>
+            <td style="padding: 36px 40px 8px;">
+              <p style="margin:0 0 8px; font-size:16px; font-weight:600; color:#050f0d;">
+                ¡Hola! 👋
+              </p>
+              <p style="margin:0; font-size:15px; line-height:1.6; color:#3d4a47;">
+                Recibimos una solicitud de acceso a tu cuenta. Usa el siguiente código de un solo uso para entrar:
+              </p>
+            </td>
+          </tr>
+
+          <!-- CÓDIGO -->
+          <tr>
+            <td style="padding: 24px 40px 8px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="background: #f0fdfa; border: 2px dashed #07c5a8; border-radius:14px; padding: 24px 16px;">
+                    <div style="font-size:10px; font-weight:800; color:#0a7a68; letter-spacing:0.2em; text-transform:uppercase; margin-bottom:10px;">
+                      Código de acceso
+                    </div>
+                    <div style="font-family: 'SF Mono', 'Courier New', monospace; font-size:36px; font-weight:800; letter-spacing:0.5em; color:#050f0d; line-height:1;">
+                      {{ .Token }}
+                    </div>
+                    <div style="font-size:11px; color:#0a7a68; margin-top:10px;">
+                      Expira en 60 minutos · uso único
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Botón alternativo -->
+          <tr>
+            <td style="padding: 22px 40px 8px;">
+              <p style="margin:0 0 14px; font-size:13px; color:#7a8784; text-align:center; line-height:1.55;">
+                — O si prefieres, haz clic aquí para entrar directo —
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block; background-color:#050f0d; color:#ffffff; text-decoration:none;
+                              font-weight:700; font-size:14px; padding: 13px 30px; border-radius:999px;
+                              letter-spacing:0.3px; font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
+                      Entrar a SUNNY APP →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Separador y nota de seguridad -->
+          <tr>
+            <td style="padding: 34px 40px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="border-top:1px solid #e7eae9; padding-top:20px;">
+                    <p style="margin:0 0 8px; font-size:12px; font-weight:700; color:#050f0d; letter-spacing:0.04em; text-transform:uppercase;">
+                      🔒 Nota de seguridad
+                    </p>
+                    <p style="margin:0; font-size:12px; line-height:1.6; color:#7a8784;">
+                      Si <strong>tú no solicitaste</strong> este código, puedes ignorar este correo. Nadie podrá acceder a tu cuenta sin él.
+                      El acceso está restringido a usuarios con correo <strong>@gdo.com.co</strong>.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+
+        <!-- Footer -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
+          <tr>
+            <td align="center" style="padding: 24px 16px 8px;">
+              <p style="margin:0; font-size:11px; color:#9aa6a3; line-height:1.7;">
+                Este correo se generó automáticamente · No respondas a este mensaje<br>
+                <strong style="color:#07c5a8;">SUNNY APP</strong> · GdO Tecnología · HES Promigas
+              </p>
+            </td>
+          </tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

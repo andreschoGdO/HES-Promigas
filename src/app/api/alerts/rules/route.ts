@@ -1,7 +1,17 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-const ALLOWED_VARIABLES = ['generacion_wh', 'importacion_wh', 'excedentes_wh', 'demanda_wh', 'gen_dem_pct', 'exc_gen_pct', 'imp_dem_pct', 'yield_real', 'desempeno_pct', 'potencia_kw', 'imax_a'];
+const ALLOWED_VARIABLES = [
+  // Métricas diarias (de daily_casa_metrics)
+  'generacion_wh', 'importacion_wh', 'excedentes_wh', 'demanda_wh',
+  'gen_dem_pct', 'exc_gen_pct', 'imp_dem_pct',
+  'yield_real', 'desempeno_pct', 'potencia_kw', 'imax_a',
+  // Métricas mensuales de reactiva (CREG 015-2018 — calculadas month-to-date)
+  'eri_ratio_pct_mtd',        // Ratio ERI/EA mes-en-curso (%)
+  'excedente_kvarh_mtd',      // Excedente sobre umbral 50% mes-en-curso (kvarh)
+  'cos_phi_mtd',              // Factor de potencia aproximado mes-en-curso
+  'penalizacion_cop_mtd',     // Estimación COP penalización mes-en-curso
+];
 const ALLOWED_OPERATORS = ['gt', 'lt', 'eq', 'gte', 'lte'];
 const ALLOWED_SEVERITIES = ['high', 'medium', 'low'];
 

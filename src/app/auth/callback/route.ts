@@ -28,9 +28,10 @@ export async function GET(request: Request) {
     return NextResponse.redirect(u);
   }
 
-  // Validar dominio antes de redirigir
+  // Validar dominio antes de redirigir (@gdo.com.co o @promigas.com)
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user?.email?.toLowerCase().endsWith('@gdo.com.co')) {
+  const email = user?.email?.toLowerCase() ?? '';
+  if (!email.endsWith('@gdo.com.co') && !email.endsWith('@promigas.com')) {
     await supabase.auth.signOut();
     const u = new URL(url.toString());
     u.pathname = '/login';

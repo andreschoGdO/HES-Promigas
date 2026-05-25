@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { Sun, Mail, AlertCircle, CheckCircle2, ArrowLeft, KeyRound } from 'lucide-react';
 
-const ALLOWED_DOMAIN = '@gdo.com.co';
+const ALLOWED_DOMAINS = ['@gdo.com.co', '@promigas.com'];
+const isAllowedEmail = (email: string) => ALLOWED_DOMAINS.some((d) => email.toLowerCase().endsWith(d));
+const ALLOWED_DOMAINS_LABEL = ALLOWED_DOMAINS.join(' o ');
 
 function LoginInner() {
   const router = useRouter();
@@ -20,7 +22,7 @@ function LoginInner() {
 
   useEffect(() => {
     if (params.get('error') === 'domain') {
-      setMsg({ kind: 'error', text: `Solo se permite acceso a correos ${ALLOWED_DOMAIN}.` });
+      setMsg({ kind: 'error', text: `Solo se permite acceso a correos ${ALLOWED_DOMAINS_LABEL}.` });
     } else if (params.get('error') === 'exchange-failed') {
       setMsg({ kind: 'error', text: 'El enlace expiró o ya fue usado. Solicita un nuevo código.' });
     }
@@ -35,8 +37,8 @@ function LoginInner() {
     e.preventDefault();
     setMsg(null);
     const trimmed = email.trim().toLowerCase();
-    if (!trimmed.endsWith(ALLOWED_DOMAIN)) {
-      setMsg({ kind: 'error', text: `El correo debe terminar en ${ALLOWED_DOMAIN}` });
+    if (!isAllowedEmail(trimmed)) {
+      setMsg({ kind: 'error', text: `El correo debe terminar en ${ALLOWED_DOMAINS_LABEL}` });
       return;
     }
     setSending(true);
@@ -74,9 +76,9 @@ function LoginInner() {
       setMsg({ kind: 'error', text: 'Código inválido o expirado. Solicita uno nuevo.' });
       return;
     }
-    if (!data.user?.email?.toLowerCase().endsWith(ALLOWED_DOMAIN)) {
+    if (!isAllowedEmail(data.user?.email ?? '')) {
       await supabase().auth.signOut();
-      setMsg({ kind: 'error', text: `Solo se permite acceso a correos ${ALLOWED_DOMAIN}.` });
+      setMsg({ kind: 'error', text: `Solo se permite acceso a correos ${ALLOWED_DOMAINS_LABEL}.` });
       return;
     }
     setMsg({ kind: 'success', text: 'Acceso autorizado, redirigiendo...' });
@@ -112,7 +114,7 @@ function LoginInner() {
                 type="email"
                 required
                 autoFocus
-                placeholder={`tu.nombre${ALLOWED_DOMAIN}`}
+                placeholder={`tu.nombre${ALLOWED_DOMAINS[0]}`}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={sending}
@@ -166,7 +168,7 @@ function LoginInner() {
         )}
 
         <p style={{ marginTop: 20, fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5 }}>
-          Acceso restringido a usuarios <strong>{ALLOWED_DOMAIN}</strong>.<br />
+          Acceso restringido a usuarios <strong>{ALLOWED_DOMAINS_LABEL}</strong>.<br />
           {step === 'email'
             ? 'Recibirás un código de un solo uso en tu Outlook.'
             : 'El código expira en 60 minutos. Si no llega, revisa Spam o vuelve a solicitarlo.'}

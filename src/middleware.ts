@@ -18,7 +18,8 @@ const PUBLIC_PATHS = [
   '/auth/callback',
 ];
 
-const ALLOWED_DOMAIN = '@gdo.com.co';
+const ALLOWED_DOMAINS = ['@gdo.com.co', '@promigas.com'];
+const isAllowedEmail = (email: string) => ALLOWED_DOMAINS.some((d) => email.toLowerCase().endsWith(d));
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -82,9 +83,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Validación de dominio @gdo.com.co
+  // Validación de dominio (@gdo.com.co o @promigas.com)
   const email = user.email ?? '';
-  if (!email.toLowerCase().endsWith(ALLOWED_DOMAIN)) {
+  if (!isAllowedEmail(email)) {
     await supabase.auth.signOut();
     const url = request.nextUrl.clone();
     url.pathname = '/login';

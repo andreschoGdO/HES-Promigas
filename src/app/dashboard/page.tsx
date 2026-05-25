@@ -1,7 +1,8 @@
 "use client";
 import { supabase } from '@/lib/supabase';
 import { useEffect, useMemo, useState } from 'react';
-import { Filter, RefreshCw, Download, Activity, Play } from 'lucide-react';
+import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { VARIABLES, findVariable, type VariableMeta } from '@/lib/variables-dict';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -245,6 +246,64 @@ function SliceDonut({ slices, total }: { slices: Slice[]; total: number }) {
         <span style={{ fontSize: '0.55rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Total</span>
         <span style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>{total}</span>
       </div>
+    </div>
+  );
+}
+
+/** Visualizador del diccionario de variables (columna ↔ key Metrum + descripción) */
+function VariablesDictionary({ keys, title = 'Diccionario de variables' }: { keys?: string[]; title?: string }) {
+  const [open, setOpen] = useState(false);
+  const list: VariableMeta[] = useMemo(() => {
+    if (!keys || keys.length === 0) return VARIABLES;
+    return keys.map((k) => findVariable(k)).filter(Boolean) as VariableMeta[];
+  }, [keys]);
+
+  if (list.length === 0) return null;
+
+  return (
+    <div className="glass-panel" style={{ padding: 0 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)' }}
+      >
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem', fontWeight: 600 }}>
+          <BookOpen size={16} style={{ color: 'var(--accent)' }} />
+          {title} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({list.length} variables)</span>
+        </span>
+        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+      {open && (
+        <div style={{ borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: '0.78rem' }}>
+            <thead style={{ background: 'var(--bg-elevated)' }}>
+              <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <th style={{ padding: '8px 14px' }}>Columna / UI</th>
+                <th style={{ padding: '8px 14px' }}>Key Metrum</th>
+                <th style={{ padding: '8px 14px' }}>Unidad</th>
+                <th style={{ padding: '8px 14px' }}>Origen</th>
+                <th style={{ padding: '8px 14px' }}>Categoría</th>
+                <th style={{ padding: '8px 14px' }}>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((v) => (
+                <tr key={v.key} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: '6px 14px', fontWeight: 600 }}>{v.label}</td>
+                  <td style={{ padding: '6px 14px', fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--accent)' }}>{v.key}</td>
+                  <td style={{ padding: '6px 14px', color: 'var(--text-secondary)' }}>{v.unit || '—'}</td>
+                  <td style={{ padding: '6px 14px' }}>
+                    <span style={{ fontSize: '0.68rem', padding: '1px 8px', borderRadius: 10, background: v.source === 'derived' ? '#07c5a820' : v.source === 'metrum' ? '#3b82f620' : '#94a3b820', color: v.source === 'derived' ? '#07c5a8' : v.source === 'metrum' ? '#3b82f6' : '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
+                      {v.source}
+                    </span>
+                  </td>
+                  <td style={{ padding: '6px 14px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{v.category}</td>
+                  <td style={{ padding: '6px 14px', color: 'var(--text-secondary)', fontSize: '0.74rem' }}>{v.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -863,6 +922,11 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
 
       {/* === CIERRE DIARIO (vista por CASA por DÍA) === */}
       {subTab === 'cierre' && (
+      <>
+      <VariablesDictionary
+        title="Diccionario — columnas del Cierre Diario"
+        keys={['generacion_wh', 'importacion_wh', 'excedentes_wh', 'demanda_wh', 'gen_dem_pct', 'exc_gen_pct', 'imp_dem_pct', 'yield_real', 'desempeno_pct', 'potencia_kw', 'imax_a']}
+      />
       <div className="glass-panel" style={{ padding: 0 }}>
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div>
@@ -952,10 +1016,13 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           </table>
         </div>
       </div>
+      </>
       )}
 
       {/* ===== SECCIÓN: GRANULAR ===== */}
       {subTab === 'granular' && (
+      <>
+      {allKeys.length > 0 && <VariablesDictionary title="Diccionario — keys de Metrum disponibles" keys={allKeys} />}
       <div className="glass-panel">
         <div className="card-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1043,6 +1110,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           </>
         )}
       </div>
+      </>
       )}
     </>
   );

@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import { classifyDevice } from '../page';
 
-type Tab = 'cierres' | 'consumos' | 'alertas';
+type Tab = 'cierres' | 'consumos' | 'alertas' | 'reactiva';
 type TypeFilter = 'all' | 'meter' | 'inverter' | 'gateway' | 'other';
 
 interface DeviceOption {
@@ -308,71 +308,6 @@ function VariablesDictionary({ keys, title = 'Diccionario de variables' }: { key
   );
 }
 
-function OfflineDevicesList({ devices }: { devices: DeviceOption[] }) {
-  const offline = useMemo(() => {
-    return devices
-      .filter((d) => d.is_active === false && classifyDevice(d) !== 'meter')
-      .map((d) => ({
-        device: d,
-        category: classifyDevice(d) as 'gateway' | 'meter' | 'inverter' | 'other',
-        ubicacion: [d.location, d.city].filter(Boolean).join(' — ') || '—',
-      }))
-      .sort((a, b) => (a.device.casa ?? '').localeCompare(b.device.casa ?? ''));
-  }, [devices]);
-
-  if (offline.length === 0) return null;
-
-  return (
-    <div className="glass-panel" style={{ padding: '14px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#cbd5e1' }} />
-          <h2 className="card-title">Sin Conexión ({offline.length})</h2>
-        </div>
-        <button
-          className="secondary-btn"
-          onClick={() => {
-            downloadCSV(
-              'sin-conexion.csv',
-              ['Categoría', 'Dispositivo', 'Casa', 'Ubicación', 'Marca', 'Modelo'],
-              offline.map((o) => [o.category, o.device.name, o.device.casa ?? '', o.ubicacion, o.device.marca ?? '', o.device.modelo ?? '']),
-            );
-          }}
-          style={{ fontSize: '0.8rem' }}
-        >
-          <Download size={14} /> CSV
-        </button>
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', fontSize: '0.82rem' }}>
-          <thead>
-            <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              <th style={{ padding: '6px 10px' }}>Categoría</th>
-              <th style={{ padding: '6px 10px' }}>Dispositivo</th>
-              <th style={{ padding: '6px 10px' }}>Casa</th>
-              <th style={{ padding: '6px 10px' }}>Ubicación</th>
-              <th style={{ padding: '6px 10px' }}>Marca / Modelo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {offline.map((o) => (
-              <tr key={o.device.id} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: '6px 10px', textTransform: 'capitalize' }}>{o.category}</td>
-                <td style={{ padding: '6px 10px', fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{o.device.name}</td>
-                <td style={{ padding: '6px 10px' }}>{o.device.casa ?? '—'}</td>
-                <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>{o.ubicacion}</td>
-                <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>
-                  {[o.device.marca, o.device.modelo].filter(Boolean).join(' · ') || '—'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 function BreakdownCard({ title, slices }: { title: string; slices: Slice[] }) {
   const total = slices.reduce((a, s) => a + s.value, 0);
   return (
@@ -492,18 +427,13 @@ export default function DashboardPage() {
     return out;
   }, [devices]);
 
-  // Inversores: En Línea / Sin Conexión via is_active
+  // Inversores: solo total (sin desglose online/offline)
   const inverterSlices = useMemo<Slice[]>(() => {
-    let online = 0, offline = 0;
+    let total = 0;
     for (const d of devices) {
-      if (classifyDevice(d) !== 'inverter') continue;
-      if (d.is_active === false) offline++;
-      else online++;
+      if (classifyDevice(d) === 'inverter') total++;
     }
-    const out: Slice[] = [];
-    if (online > 0)  out.push({ label: 'En Línea',     value: online,  color: ONLINE_COLOR });
-    if (offline > 0) out.push({ label: 'Sin Conexión', value: offline, color: OFFLINE_COLOR });
-    return out;
+    return total > 0 ? [{ label: 'Inversores', value: total, color: '#07c5a8' }] : [];
   }, [devices]);
 
   // Módems: En Línea / Sin Conexión via is_active
@@ -554,12 +484,11 @@ export default function DashboardPage() {
         <BreakdownCard title="Inversores" slices={inverterSlices} />
       </div>
 
-      <OfflineDevicesList devices={devices} />
-
       <div className="tabs">
         {([
           { id: 'cierres' as const, label: 'Cierres y Granular' },
           { id: 'consumos' as const, label: 'Consumo por Dispositivo' },
+          { id: 'reactiva' as const, label: 'Reactiva vs Activa (CREG)' },
           { id: 'alertas' as const, label: 'Alertas por Casa' },
         ]).map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`tab ${tab === t.id ? 'active' : ''}`}>
@@ -570,6 +499,7 @@ export default function DashboardPage() {
 
       {tab === 'cierres' && <CierresGranularTab devices={devices} />}
       {tab === 'consumos' && <ConsumosTab />}
+      {tab === 'reactiva' && <ReactivaTab />}
       {tab === 'alertas' && <AlertasCasaTab />}
     </>
   );
@@ -1453,6 +1383,341 @@ const SEV_META: Record<string, { label: string; color: string }> = {
   medium: { label: 'Medio', color: '#f59e0b' },
   low: { label: 'Bajo', color: '#3b82f6' },
 };
+
+/* ---------------- TAB: Reactiva vs Activa (penalización CREG Colombia) ---------------- */
+
+// Regla CREG 015-2018 (y modificaciones):
+//   Penalización mensual si Σ Reactiva Inductiva > 50% de Σ Activa Importada
+//   Equivalente a cos φ < 0.9 (factor de potencia ≥ 0.9 = sin penalización).
+//   Excedente penalizable = ER_inductiva − 0.5 × EA_importada
+//   Tarifa típica kvarh ≈ COP 100-150 (variable por comercializador)
+
+interface ReactivaClosure {
+  device_id: string;
+  record_date: string;
+  energy_active_imported_wh: number | null;
+  energy_active_exported_wh: number | null;
+  energy_reactive_imported_varh: number | null;
+  energy_reactive_exported_varh: number | null;
+  devices: { name: string; type: string; casa: string | null } | null;
+}
+
+interface CasaMonth {
+  casa: string;
+  month: string;            // YYYY-MM
+  ea_wh: number;            // Σ delta EA importada (Wh)
+  eri_varh: number;         // Σ delta ER inductiva (varh)
+  ere_varh: number;         // Σ delta ER capacitiva (varh)
+  ratio: number | null;     // ERI / EA
+  excedente_varh: number;   // max(0, ERI − 0.5·EA)
+  estimacion_cop: number;   // excedente_varh / 1000 × tarifa
+  penalizada: boolean;
+  cos_phi_approx: number | null;
+  dias: number;
+}
+
+const THRESHOLD_RATIO = 0.5;  // 50% — equivalente a fp 0.9 según CREG
+
+function ReactivaTab() {
+  const [closures, setClosures] = useState<ReactivaClosure[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 2);
+    return d.toISOString().slice(0, 10);
+  });
+  const [endDate, setEndDate] = useState<string>(dateStr(today()));
+  const [tarifaCOP, setTarifaCOP] = useState<number>(130); // COP por kvarh excedente
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Solo medidores de red (type = 'red') porque son los que registran consumo desde la red
+      const baselineStart = startDate
+        ? dateStr(new Date(new Date(startDate + 'T00:00:00').getTime() - 86400000))
+        : '';
+      const { data, error } = await supabase
+        .from('daily_energy_closures')
+        .select('device_id, record_date, energy_active_imported_wh, energy_active_exported_wh, energy_reactive_imported_varh, energy_reactive_exported_varh, devices!inner(name, type, casa)')
+        .eq('devices.type', 'red')
+        .gte('record_date', baselineStart || startDate)
+        .lte('record_date', endDate)
+        .order('record_date', { ascending: true })
+        .limit(10000);
+      if (error) throw error;
+      setClosures((data ?? []) as unknown as ReactivaClosure[]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate]);
+
+  // Calcular per casa per mes a partir de los closures
+  const casaMonths = useMemo<CasaMonth[]>(() => {
+    // 1. Agrupar por device, ordenar por fecha
+    const byDevice = new Map<string, ReactivaClosure[]>();
+    for (const c of closures) {
+      if (!c.devices?.casa) continue;
+      if (!byDevice.has(c.device_id)) byDevice.set(c.device_id, []);
+      byDevice.get(c.device_id)!.push(c);
+    }
+    for (const arr of byDevice.values()) arr.sort((a, b) => a.record_date.localeCompare(b.record_date));
+
+    // 2. Acumular deltas diarios por casa+mes
+    const acc = new Map<string, CasaMonth>();
+    for (const rows of byDevice.values()) {
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const prev = rows[i - 1];
+        const casa = r.devices?.casa;
+        if (!casa) continue;
+        if (r.record_date < startDate) continue;
+        const month = r.record_date.slice(0, 7);
+        const key = `${casa}|${month}`;
+        let m = acc.get(key);
+        if (!m) {
+          m = { casa, month, ea_wh: 0, eri_varh: 0, ere_varh: 0, ratio: null, excedente_varh: 0, estimacion_cop: 0, penalizada: false, cos_phi_approx: null, dias: 0 };
+          acc.set(key, m);
+        }
+        const dEA  = (r.energy_active_imported_wh ?? null) !== null && prev.energy_active_imported_wh !== null
+          ? r.energy_active_imported_wh! - prev.energy_active_imported_wh : 0;
+        const dERI = (r.energy_reactive_imported_varh ?? null) !== null && prev.energy_reactive_imported_varh !== null
+          ? r.energy_reactive_imported_varh! - prev.energy_reactive_imported_varh : 0;
+        const dERE = (r.energy_reactive_exported_varh ?? null) !== null && prev.energy_reactive_exported_varh !== null
+          ? r.energy_reactive_exported_varh! - prev.energy_reactive_exported_varh : 0;
+        m.ea_wh += Math.max(0, dEA);
+        m.eri_varh += Math.max(0, dERI);
+        m.ere_varh += Math.max(0, dERE);
+        m.dias++;
+      }
+    }
+
+    // 3. Calcular ratios y penalizaciones
+    const result: CasaMonth[] = [];
+    for (const m of acc.values()) {
+      if (m.ea_wh > 0) {
+        m.ratio = m.eri_varh / m.ea_wh;
+        m.cos_phi_approx = m.ea_wh / Math.sqrt(m.ea_wh ** 2 + m.eri_varh ** 2);
+        const limite = THRESHOLD_RATIO * m.ea_wh;
+        m.excedente_varh = Math.max(0, m.eri_varh - limite);
+        m.penalizada = m.eri_varh > limite;
+        m.estimacion_cop = (m.excedente_varh / 1000) * tarifaCOP;
+      }
+      result.push(m);
+    }
+    // Ordenar mes desc, casa asc
+    result.sort((a, b) => b.month.localeCompare(a.month) || a.casa.localeCompare(b.casa));
+    return result;
+  }, [closures, startDate, tarifaCOP]);
+
+  const totales = useMemo(() => {
+    const t = { casas_penalizadas: 0, excedente_total_kvarh: 0, cop_total: 0 };
+    const casasSet = new Set<string>();
+    for (const m of casaMonths) {
+      if (m.penalizada) {
+        casasSet.add(m.casa);
+        t.excedente_total_kvarh += m.excedente_varh / 1000;
+        t.cop_total += m.estimacion_cop;
+      }
+    }
+    t.casas_penalizadas = casasSet.size;
+    return t;
+  }, [casaMonths]);
+
+  // Datos para chart: ratio % por casa (último mes)
+  const chartData = useMemo(() => {
+    const lastMonth = casaMonths[0]?.month;
+    if (!lastMonth) return [];
+    return casaMonths
+      .filter((m) => m.month === lastMonth && m.ratio !== null)
+      .map((m) => ({ casa: m.casa, ratio_pct: Math.round((m.ratio ?? 0) * 100), penalizada: m.penalizada }))
+      .sort((a, b) => b.ratio_pct - a.ratio_pct);
+  }, [casaMonths]);
+
+  const lastMonthLabel = casaMonths[0]?.month ?? '';
+
+  return (
+    <>
+      <div className="glass-panel">
+        <div className="card-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Filter size={18} style={{ color: 'var(--text-secondary)' }} />
+            <h2 className="card-title">Análisis Reactiva vs Activa</h2>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>· Regla CREG 015-2018 · umbral 50% (fp 0.9)</span>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, alignItems: 'end' }}>
+          <div className="input-group" style={{ marginBottom: 0 }}>
+            <label className="input-label">Desde</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </div>
+          <div className="input-group" style={{ marginBottom: 0 }}>
+            <label className="input-label">Hasta</label>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+          <div className="input-group" style={{ marginBottom: 0 }}>
+            <label className="input-label">Tarifa COP / kvarh excedente</label>
+            <input type="number" value={tarifaCOP} onChange={(e) => setTarifaCOP(Number(e.target.value) || 0)} min={0} step={10} />
+          </div>
+        </div>
+      </div>
+
+      {error && <div className="alert-error">{error}</div>}
+
+      {/* Cards de resumen */}
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <div className="glass-panel" style={{ flex: '1 1 220px', padding: '14px 18px' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Casas penalizadas</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: totales.casas_penalizadas > 0 ? '#ef4444' : '#10b981' }} />
+            <span style={{ fontSize: '1.7rem', fontWeight: 700 }}>{totales.casas_penalizadas}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>en el período</span>
+          </div>
+        </div>
+        <div className="glass-panel" style={{ flex: '1 1 220px', padding: '14px 18px' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Excedente reactivo</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}>
+            <span style={{ fontSize: '1.7rem', fontWeight: 700 }}>{totales.excedente_total_kvarh.toFixed(1)}</span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>kvarh</span>
+          </div>
+        </div>
+        <div className="glass-panel" style={{ flex: '1 1 220px', padding: '14px 18px' }}>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estimación penalización</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}>
+            <span style={{ fontSize: '1.7rem', fontWeight: 700, color: totales.cop_total > 0 ? '#ef4444' : 'var(--text-primary)' }}>
+              ${totales.cop_total.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+            </span>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>COP</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Chart último mes */}
+      {chartData.length > 0 && (
+        <div className="glass-panel">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: '0.95rem' }}>
+              Ratio ERI / EA por casa — <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{lastMonthLabel}</span>
+            </h3>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>línea roja = umbral 50%</span>
+          </div>
+          <div style={{ width: '100%', height: 280 }}>
+            <ResponsiveContainer>
+              <LineChart data={chartData}>
+                <CartesianGrid stroke="rgba(0,0,0,0.06)" />
+                <XAxis dataKey="casa" stroke="var(--text-muted)" fontSize={10} angle={-30} textAnchor="end" height={60} interval={0} />
+                <YAxis stroke="var(--text-muted)" fontSize={11} label={{ value: 'ERI / EA (%)', angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'var(--text-muted)' } }} />
+                <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8 }} formatter={(v: number) => `${v}%`} />
+                <Line type="monotone" dataKey="ratio_pct" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} name="Ratio %" />
+                <Line type="monotone" dataKey={() => 50} stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} dot={false} name="Umbral CREG (50%)" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Tabla per casa per mes */}
+      <div className="glass-panel" style={{ padding: 0 }}>
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0, fontSize: '0.95rem' }}>Detalle mensual ({casaMonths.length} filas)</h3>
+          <button
+            className="secondary-btn"
+            disabled={casaMonths.length === 0}
+            onClick={() => {
+              const headers = ['Mes', 'Casa', 'EA Importada (kWh)', 'ER Inductiva (kvarh)', 'ER Capacitiva (kvarh)', 'Ratio ERI/EA (%)', 'cos φ ≈', 'Umbral 50% kvarh', 'Excedente (kvarh)', 'Penalizada', `Estimación COP @ ${tarifaCOP}/kvarh`];
+              const rows = casaMonths.map((m) => [
+                m.month, m.casa,
+                (m.ea_wh / 1000).toFixed(2),
+                (m.eri_varh / 1000).toFixed(2),
+                (m.ere_varh / 1000).toFixed(2),
+                m.ratio !== null ? (m.ratio * 100).toFixed(1) : '',
+                m.cos_phi_approx !== null ? m.cos_phi_approx.toFixed(3) : '',
+                ((m.ea_wh * 0.5) / 1000).toFixed(2),
+                (m.excedente_varh / 1000).toFixed(2),
+                m.penalizada ? 'SI' : 'NO',
+                m.estimacion_cop.toFixed(0),
+              ]);
+              downloadCSV(`reactiva-${startDate}_${endDate}.csv`, headers, rows);
+            }}
+            style={{ fontSize: '0.8rem' }}
+          >
+            <Download size={14} /> CSV
+          </button>
+        </div>
+        <div className="table-container" style={{ border: 'none', overflowX: 'auto' }}>
+          <table style={{ fontSize: '0.78rem', minWidth: 1000 }}>
+            <thead>
+              <tr>
+                <th>Mes</th>
+                <th>Casa</th>
+                <th title="Energía Activa Importada">EA Imp.</th>
+                <th title="Energía Reactiva Inductiva (kvarh) — la que paga penalización">ER Inductiva</th>
+                <th title="Energía Reactiva Capacitiva (kvarh)">ER Capacitiva</th>
+                <th title="ER Inductiva / EA — > 50% = penalización">Ratio</th>
+                <th title="Factor de potencia ≈ cos(φ)">cos φ ≈</th>
+                <th title="Excedente sobre el 50% — kvarh penalizables">Excedente</th>
+                <th>Estado</th>
+                <th title="Excedente × tarifa COP/kvarh">Estimación</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</td></tr>
+              ) : casaMonths.length === 0 ? (
+                <tr><td colSpan={10} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Sin data. Verifica el rango.</td></tr>
+              ) : casaMonths.map((m) => (
+                <tr key={`${m.casa}|${m.month}`} style={{ background: m.penalizada ? 'rgba(239, 68, 68, 0.04)' : undefined }}>
+                  <td style={{ fontFamily: 'ui-monospace, monospace' }}>{m.month}</td>
+                  <td style={{ fontWeight: 600 }}>{m.casa}</td>
+                  <td style={{ textAlign: 'right' }}>{(m.ea_wh / 1000).toFixed(1)} kWh</td>
+                  <td style={{ textAlign: 'right' }}>{(m.eri_varh / 1000).toFixed(1)} kvarh</td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{(m.ere_varh / 1000).toFixed(1)} kvarh</td>
+                  <td style={{ textAlign: 'right', fontWeight: m.penalizada ? 700 : 400, color: m.penalizada ? '#ef4444' : undefined }}>
+                    {m.ratio !== null ? `${(m.ratio * 100).toFixed(1)}%` : '—'}
+                  </td>
+                  <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{m.cos_phi_approx?.toFixed(3) ?? '—'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: m.penalizada ? 600 : 400 }}>
+                    {m.excedente_varh > 0 ? `${(m.excedente_varh / 1000).toFixed(1)} kvarh` : '—'}
+                  </td>
+                  <td>
+                    {m.penalizada ? (
+                      <span style={{ padding: '2px 8px', borderRadius: 10, background: '#ef444420', color: '#ef4444', fontSize: '0.7rem', fontWeight: 700 }}>PENALIZADA</span>
+                    ) : (
+                      <span style={{ padding: '2px 8px', borderRadius: 10, background: '#10b98120', color: '#10b981', fontSize: '0.7rem', fontWeight: 700 }}>OK</span>
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: m.estimacion_cop > 0 ? 700 : 400, color: m.estimacion_cop > 0 ? '#ef4444' : undefined }}>
+                    {m.estimacion_cop > 0 ? `$${m.estimacion_cop.toLocaleString('es-CO', { maximumFractionDigits: 0 })}` : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Nota explicativa */}
+      <div className="alert-warning" style={{ fontSize: '0.78rem', lineHeight: 1.6 }}>
+        <strong>📘 Cómo se calcula:</strong> La <strong>Resolución CREG 015 de 2018</strong> exige que el factor de potencia (cos φ)
+        en redes ≤ 50 kW sea ≥ <strong>0.9</strong>, lo que equivale a que la energía reactiva inductiva consumida no supere el
+        <strong> 50% de la energía activa importada</strong> medida mensualmente. Cuando lo supera, el comercializador penaliza
+        cada kvarh excedente. La tarifa de penalización varía por comercializador (~$100-150 COP/kvarh).
+        <br /><br />
+        Los datos vienen del <strong>medidor de red</strong> (no del solar) y se agregan por mes calendario. La estimación COP es
+        referencial — la tarifa real está en tu factura.
+      </div>
+    </>
+  );
+}
 
 function AlertasCasaTab() {
   const [events, setEvents] = useState<AlertEventRow[]>([]);

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, FileDown, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench } from 'lucide-react';
+import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil } from 'lucide-react';
 import { VISIT_SCHEMAS, findSchema, type VisitType, type VisitTypeSchema, type VisitField } from '@/lib/visit-schemas';
 import { generateVisitPDF, type VisitPDFData, type VisitPhoto } from '@/lib/visit-pdf';
 
@@ -34,6 +34,13 @@ const supa = () => createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
+// Determina si un campo se renderiza ancho completo (textarea, radios con muchas opciones, etc.)
+const isFullWidthField = (f: VisitField) => {
+  if (f.type === 'textarea') return true;
+  if (f.type === 'radio' && (f.options?.length ?? 0) > 3) return true;
+  return false;
+};
+
 export default function VisitasPage() {
   const [tab, setTab] = useState<Tab>('historial');
   const [activeVisitId, setActiveVisitId] = useState<string | null>(null);
@@ -46,24 +53,28 @@ export default function VisitasPage() {
   }, []);
 
   return (
-    <div style={{ paddingBottom: 40 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <ClipboardCheck size={24} style={{ color: 'var(--accent)' }} />
-        <h1 style={{ margin: 0 }}>Visitas en Campo</h1>
+    <div style={{ maxWidth: 980, margin: '0 auto', paddingBottom: 60 }}>
+      {/* HEADER */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <ClipboardCheck size={24} style={{ color: 'var(--accent)' }} />
+          <h1 style={{ margin: 0 }}>Visitas en Campo</h1>
+        </div>
+        <p style={{ color: 'var(--text-secondary)', marginTop: 4, fontSize: '0.88rem' }}>
+          Registra y consulta las actas de visitas técnicas. Optimizado para celular.
+        </p>
       </div>
-      <p style={{ color: 'var(--text-secondary)', marginTop: 4, marginBottom: 16 }}>
-        Registra y consulta las actas de visitas técnicas. Diseñado para celular.
-      </p>
 
-      {/* Tabs grandes para móvil */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+      {/* TABS — primary navigation */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>
         {VISIT_SCHEMAS.map((s) => {
           const Icon = VISIT_ICONS[s.type];
+          const active = tab === s.type;
           return (
             <button key={s.type}
               onClick={() => { setTab(s.type); setActiveVisitId(null); }}
-              className={`chip ${tab === s.type ? 'active' : ''}`}
-              style={{ fontSize: '0.85rem', padding: '8px 14px', borderLeft: `4px solid ${s.color}`, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              className={`chip ${active ? 'active' : ''}`}
+              style={{ fontSize: '0.85rem', padding: '10px 14px', borderLeft: `4px solid ${s.color}`, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Icon size={14} /> {s.shortLabel}
             </button>
           );
@@ -71,7 +82,7 @@ export default function VisitasPage() {
         <button
           onClick={() => { setTab('historial'); setActiveVisitId(null); }}
           className={`chip ${tab === 'historial' ? 'active' : ''}`}
-          style={{ fontSize: '0.85rem', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          style={{ fontSize: '0.85rem', padding: '10px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <History size={14} /> Historial
         </button>
       </div>
@@ -85,13 +96,13 @@ export default function VisitasPage() {
       {tab === 'historial' && (
         activeVisitId
           ? <VisitForm visitId={activeVisitId} schema={findSchema('previa')!} userEmail={userEmail} onBack={() => setActiveVisitId(null)} loadOnMount />
-          : <HistorialView onOpen={(id) => setActiveVisitId(id)} />
+          : <HistorialTable onOpen={(id) => setActiveVisitId(id)} />
       )}
     </div>
   );
 }
 
-/* ───────────── Vista por tipo: lista reciente + botón Nueva ───────────── */
+/* ───────────────────── Vista por tipo ───────────────────── */
 function VisitTypeView({ type, userEmail, onOpen }: { type: VisitType; userEmail: string; onOpen: (id: string) => void }) {
   const [items, setItems] = useState<VisitListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,15 +116,13 @@ function VisitTypeView({ type, userEmail, onOpen }: { type: VisitType; userEmail
     setItems(j.visits ?? []);
     setLoading(false);
   };
-
   useEffect(() => { load(); }, [type]);
 
   const createNew = async () => {
     setCreating(true);
     try {
       const r = await fetch('/api/visits', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visit_type: type, technician_email: userEmail, status: 'draft' }),
       });
       const j = await r.json();
@@ -123,28 +132,23 @@ function VisitTypeView({ type, userEmail, onOpen }: { type: VisitType; userEmail
 
   return (
     <>
-      <div className="glass-panel" style={{ padding: 18, borderLeft: `4px solid ${schema.color}` }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.1rem' }}>{schema.label}</h2>
-          <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{schema.description}</p>
-          <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.72rem', fontFamily: 'ui-monospace, monospace' }}>{schema.formCode}</p>
-        </div>
-        <button
-          onClick={createNew}
-          disabled={creating}
-          className="primary-btn"
-          style={{ marginTop: 14, width: '100%', justifyContent: 'center', padding: '14px', fontSize: '1rem', fontWeight: 600 }}>
-          <Plus size={18} /> {creating ? 'Creando...' : `Nueva ${schema.shortLabel}`}
+      <div className="glass-panel" style={{ padding: 22, borderLeft: `4px solid ${schema.color}` }}>
+        <h2 style={{ margin: 0, fontSize: '1.15rem' }}>{schema.label}</h2>
+        <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{schema.description}</p>
+        <p style={{ margin: '6px 0 14px', color: 'var(--text-muted)', fontSize: '0.72rem', fontFamily: 'ui-monospace, monospace' }}>{schema.formCode}</p>
+        <button onClick={createNew} disabled={creating} className="primary-btn"
+          style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '0.95rem', fontWeight: 600 }}>
+          <Plus size={18} /> {creating ? 'Creando…' : `Nueva ${schema.shortLabel.toLowerCase()}`}
         </button>
       </div>
 
-      <div style={{ marginTop: 14, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+      <div style={{ marginTop: 18, marginBottom: 8, fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
         Últimas {items.length} {schema.shortLabel.toLowerCase()}{items.length !== 1 ? 's' : ''}
       </div>
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
       ) : items.length === 0 ? (
-        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>Aún no hay actas de este tipo. Crea la primera arriba.</div>
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>Aún no hay actas de este tipo.</div>
       ) : (
         items.map((it) => <VisitCard key={it.id} item={it} onClick={() => onOpen(it.id)} />)
       )}
@@ -152,8 +156,8 @@ function VisitTypeView({ type, userEmail, onOpen }: { type: VisitType; userEmail
   );
 }
 
-/* ───────────── Historial: todas las visitas ───────────── */
-function HistorialView({ onOpen }: { onOpen: (id: string) => void }) {
+/* ───────────────────── Tabla del Historial ───────────────────── */
+function HistorialTable({ onOpen }: { onOpen: (id: string) => void }) {
   const [items, setItems] = useState<VisitListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<VisitType | 'all'>('all');
@@ -162,7 +166,7 @@ function HistorialView({ onOpen }: { onOpen: (id: string) => void }) {
 
   const load = async () => {
     setLoading(true);
-    const params = new URLSearchParams({ limit: '200' });
+    const params = new URLSearchParams({ limit: '500' });
     if (filterType !== 'all') params.set('type', filterType);
     if (filterStatus !== 'all') params.set('status', filterStatus);
     if (filterCasa) params.set('casa', filterCasa);
@@ -171,22 +175,25 @@ function HistorialView({ onOpen }: { onOpen: (id: string) => void }) {
     setItems(j.visits ?? []);
     setLoading(false);
   };
-
   useEffect(() => { load(); }, [filterType, filterStatus, filterCasa]);
 
-  const grouped = useMemo(() => {
-    const m = new Map<string, VisitListItem[]>();
-    for (const it of items) {
-      if (!m.has(it.visit_date)) m.set(it.visit_date, []);
-      m.get(it.visit_date)!.push(it);
+  const handleDownloadPDF = async (id: string) => {
+    try {
+      const r = await fetch(`/api/visits/${id}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      await generateVisitPDF(j.visit as VisitPDFData, (j.photos ?? []) as VisitPhoto[]);
+    } catch (e) {
+      alert('Error generando PDF: ' + (e instanceof Error ? e.message : 'desconocido'));
     }
-    return Array.from(m.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-  }, [items]);
+  };
 
   return (
     <>
-      <div className="glass-panel" style={{ padding: 14 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+      {/* Filtros */}
+      <div className="glass-panel" style={{ padding: 16, marginBottom: 16 }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Tipo</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
           <button className={`chip ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')}>Todas</button>
           {VISIT_SCHEMAS.map((s) => {
             const Icon = VISIT_ICONS[s.type];
@@ -197,65 +204,114 @@ function HistorialView({ onOpen }: { onOpen: (id: string) => void }) {
             );
           })}
         </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-          <button className={`chip ${filterStatus === 'all' ? 'active' : ''}`} onClick={() => setFilterStatus('all')}>Todos los estados</button>
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Estado</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+          <button className={`chip ${filterStatus === 'all' ? 'active' : ''}`} onClick={() => setFilterStatus('all')}>Todos</button>
           <button className={`chip ${filterStatus === 'draft' ? 'active' : ''}`} onClick={() => setFilterStatus('draft')}>Borradores</button>
           <button className={`chip ${filterStatus === 'completed' ? 'active' : ''}`} onClick={() => setFilterStatus('completed')}>Completadas</button>
         </div>
-        <input
-          type="text"
-          placeholder="Filtrar por casa (ej: Casa 10)"
-          value={filterCasa}
-          onChange={(e) => setFilterCasa(e.target.value)}
-          style={{ width: '100%' }}
-        />
+        <input type="text" placeholder="Buscar por casa…" value={filterCasa} onChange={(e) => setFilterCasa(e.target.value)} style={{ width: '100%' }} />
       </div>
 
+      {/* Tabla en desktop / cards en móvil */}
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
       ) : items.length === 0 ? (
-        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>Sin visitas para los filtros actuales.</div>
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>Sin actas para los filtros actuales.</div>
       ) : (
-        grouped.map(([date, list]) => (
-          <div key={date} style={{ marginTop: 14 }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 6, padding: '0 4px' }}>
-              {date} <span style={{ fontWeight: 400 }}>· {list.length} visita{list.length !== 1 ? 's' : ''}</span>
+        <>
+          {/* Desktop: tabla */}
+          <div className="glass-panel hist-desktop" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Tipo</th>
+                    <th>Fecha</th>
+                    <th>Casa</th>
+                    <th>Realizado por</th>
+                    <th>Estado</th>
+                    <th style={{ width: 110, textAlign: 'right' }}>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((it) => {
+                    const schema = findSchema(it.visit_type)!;
+                    const Icon = VISIT_ICONS[it.visit_type];
+                    const shortId = it.id.slice(0, 8).toUpperCase();
+                    const statusColor = it.status === 'completed' ? '#10b981' : it.status === 'cancelled' ? '#94a3b8' : '#f59e0b';
+                    const statusLabel = it.status === 'completed' ? 'Completada' : it.status === 'cancelled' ? 'Cancelada' : 'Borrador';
+                    return (
+                      <tr key={it.id} style={{ borderLeft: `3px solid ${schema.color}` }}>
+                        <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{shortId}</td>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.8rem' }}>
+                            <Icon size={14} style={{ color: schema.color }} /> {schema.shortLabel}
+                          </span>
+                        </td>
+                        <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem' }}>{it.visit_date}</td>
+                        <td><strong>{it.casa ?? <em style={{ color: 'var(--text-muted)' }}>sin casa</em>}</strong></td>
+                        <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{it.technician_name ?? '—'}</td>
+                        <td>
+                          <span style={{ padding: '2px 10px', borderRadius: 10, background: statusColor + '20', color: statusColor, fontSize: '0.7rem', fontWeight: 700 }}>{statusLabel}</span>
+                        </td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <button onClick={() => handleDownloadPDF(it.id)} title="Descargar PDF"
+                            style={{ padding: 6, background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', borderRadius: 4 }}>
+                            <FileDown size={16} />
+                          </button>
+                          <button onClick={() => onOpen(it.id)} title="Ver / Editar"
+                            style={{ padding: 6, background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', borderRadius: 4 }}>
+                            <Pencil size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            {list.map((it) => <VisitCard key={it.id} item={it} onClick={() => onOpen(it.id)} />)}
           </div>
-        ))
+
+          {/* Mobile: cards */}
+          <div className="hist-mobile">
+            {items.map((it) => <VisitCard key={it.id} item={it} onClick={() => onOpen(it.id)} />)}
+          </div>
+        </>
       )}
+      <style jsx>{`
+        .hist-desktop { display: block; }
+        .hist-mobile { display: none; }
+        @media (max-width: 768px) {
+          .hist-desktop { display: none; }
+          .hist-mobile { display: block; }
+        }
+      `}</style>
     </>
   );
 }
 
-/* ───────────── Card resumen de una visita ───────────── */
+/* ───────────── Card resumen (usado solo en mobile y en TypeView) ───────────── */
 function VisitCard({ item, onClick }: { item: VisitListItem; onClick: () => void }) {
   const schema = findSchema(item.visit_type)!;
   const Icon = VISIT_ICONS[item.visit_type];
-  const statusBadge = item.status === 'completed'
-    ? { label: 'Completada', color: '#10b981' }
-    : item.status === 'cancelled'
-      ? { label: 'Cancelada', color: '#94a3b8' }
-      : { label: 'Borrador', color: '#f59e0b' };
-
+  const statusColor = item.status === 'completed' ? '#10b981' : item.status === 'cancelled' ? '#94a3b8' : '#f59e0b';
+  const statusLabel = item.status === 'completed' ? 'Completada' : item.status === 'cancelled' ? 'Cancelada' : 'Borrador';
   return (
-    <button
-      onClick={onClick}
-      className="glass-panel"
+    <button onClick={onClick} className="glass-panel"
       style={{ width: '100%', textAlign: 'left', padding: 14, marginTop: 10, cursor: 'pointer', border: 'none', display: 'flex', alignItems: 'center', gap: 12, borderLeft: `4px solid ${schema.color}` }}>
-      <div style={{ color: schema.color, flexShrink: 0 }}><Icon size={22} /></div>
+      <Icon size={22} style={{ color: schema.color, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
           <strong style={{ fontSize: '0.95rem' }}>{schema.shortLabel}</strong>
-          <span style={{ fontSize: '0.7rem', padding: '1px 8px', borderRadius: 10, background: statusBadge.color + '20', color: statusBadge.color, fontWeight: 700 }}>{statusBadge.label}</span>
+          <span style={{ fontSize: '0.7rem', padding: '1px 8px', borderRadius: 10, background: statusColor + '20', color: statusColor, fontWeight: 700 }}>{statusLabel}</span>
         </div>
         <div style={{ marginTop: 4, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-          {item.casa ?? <em style={{ color: 'var(--text-muted)' }}>(sin casa asignada)</em>}
-          {item.technician_name && <> · {item.technician_name}</>}
+          {item.casa ?? <em style={{ color: 'var(--text-muted)' }}>(sin casa)</em>}{item.technician_name && <> · {item.technician_name}</>}
         </div>
-        <div style={{ marginTop: 4, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-          {item.visit_date} · creada {new Date(item.created_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+        <div style={{ marginTop: 4, fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace' }}>
+          {item.visit_date} · ID {item.id.slice(0, 8).toUpperCase()}
         </div>
       </div>
       <ChevronRight size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
@@ -263,7 +319,7 @@ function VisitCard({ item, onClick }: { item: VisitListItem; onClick: () => void
   );
 }
 
-/* ───────────── Formulario de una visita ───────────── */
+/* ───────────────────── Formulario de visita ───────────────────── */
 interface VisitFull {
   id: string;
   visit_type: VisitType;
@@ -302,10 +358,21 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [photoCategory, setPhotoCategory] = useState<string>('');
+  const [customCategory, setCustomCategory] = useState<string>('');
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Usa el schema del visit cargado en lugar del prop si difiere
   const schema = visit ? findSchema(visit.visit_type) ?? schemaProp : schemaProp;
+
+  // Inicializa: primera sección abierta, demás cerradas
+  useEffect(() => {
+    if (visit && schema && Object.keys(openSections).length === 0) {
+      const init: Record<string, boolean> = { __ident: true };
+      schema.sections.forEach((s, i) => { init[s.title] = i === 0; });
+      setOpenSections(init);
+    }
+  }, [visit?.id, schema]);  // eslint-disable-line
 
   const load = async () => {
     const r = await fetch(`/api/visits/${visitId}`);
@@ -313,7 +380,6 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     setVisit(j.visit);
     setPhotos(j.photos ?? []);
   };
-
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [visitId, loadOnMount]);
 
   useEffect(() => {
@@ -332,12 +398,10 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
 
   const save = async (finalize = false) => {
     if (!visit) return;
-    setSaving(true);
-    setMsg(null);
+    setSaving(true); setMsg(null);
     try {
       const r = await fetch(`/api/visits/${visitId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           casa: visit.casa, house_id: visit.house_id,
           technician_name: visit.technician_name, technician_email: visit.technician_email || userEmail,
@@ -358,25 +422,37 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
 
   const handlePhotoUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setUploading(true);
-    setMsg(null);
+    const catToUse = photoCategory === 'Otro' ? customCategory.trim() : photoCategory;
+    if (!catToUse) {
+      setMsg({ kind: 'error', text: 'Selecciona una categoría antes de subir la foto' });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setUploading(true); setMsg(null);
     try {
       for (const file of Array.from(files)) {
         const fd = new FormData();
         fd.append('file', file);
+        fd.append('description', catToUse);
         fd.append('uploaded_by', userEmail || 'unknown');
         const r = await fetch(`/api/visits/${visitId}/photos`, { method: 'POST', body: fd });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? 'Error subiendo foto');
         setPhotos((prev) => [...prev, j.photo]);
       }
-      setMsg({ kind: 'success', text: `${files.length} foto${files.length !== 1 ? 's' : ''} subida${files.length !== 1 ? 's' : ''}` });
+      setMsg({ kind: 'success', text: `${files.length} foto${files.length !== 1 ? 's' : ''} subida${files.length !== 1 ? 's' : ''} como "${catToUse}"` });
     } catch (e) {
       setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Error subiendo' });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const updatePhotoDescription = async (photoId: string, newDescription: string) => {
+    setPhotos((prev) => prev.map((p) => p.id === photoId ? { ...p, description: newDescription } : p));
+    // No tenemos endpoint PATCH para foto, persistir via direct supabase update
+    await supa().from('field_visit_photos').update({ description: newDescription }).eq('id', photoId);
   };
 
   const deletePhoto = async (photoId: string) => {
@@ -386,13 +462,13 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
   };
 
   const deleteVisit = async () => {
-    if (!confirm('¿Eliminar esta acta? Esta acción NO se puede deshacer.')) return;
+    if (!confirm('¿Eliminar esta acta? NO se puede deshacer.')) return;
     const r = await fetch(`/api/visits/${visitId}`, { method: 'DELETE' });
     if (r.ok) onBack();
   };
 
   const captureGeo = () => {
-    if (!navigator.geolocation) { setMsg({ kind: 'error', text: 'GPS no disponible en este dispositivo' }); return; }
+    if (!navigator.geolocation) { setMsg({ kind: 'error', text: 'GPS no disponible' }); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setVisit((v) => v ? { ...v, lat: pos.coords.latitude, lng: pos.coords.longitude } : v);
@@ -403,36 +479,37 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     );
   };
 
+  const downloadPDF = async () => {
+    try { await generateVisitPDF(visit as unknown as VisitPDFData, photos as unknown as VisitPhoto[]); }
+    catch (e) { setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Error generando PDF' }); }
+  };
+
+  const toggleSection = (title: string) => setOpenSections((s) => ({ ...s, [title]: !s[title] }));
+
+  const statusColor = visit.status === 'completed' ? '#10b981' : '#f59e0b';
+  const statusLabel = visit.status === 'completed' ? 'Completada' : 'Borrador';
+
   return (
     <>
-      {/* Header sticky */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg-base)', padding: '8px 0', marginBottom: 10 }}>
-        <button onClick={onBack} className="secondary-btn" style={{ fontSize: '0.85rem' }}>← Volver</button>
-      </div>
+      {/* Volver — botón siempre visible arriba */}
+      <button onClick={onBack} className="secondary-btn" style={{ marginBottom: 14, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <ArrowLeft size={14} /> Volver al listado
+      </button>
 
-      <div className="glass-panel" style={{ padding: 16, borderLeft: `4px solid ${schema.color}` }}>
+      {/* Strip de identidad del acta */}
+      <div className="glass-panel" style={{ padding: 16, borderLeft: `4px solid ${schema.color}`, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {(() => { const Icon = VISIT_ICONS[visit.visit_type]; return <Icon size={28} style={{ color: schema.color, flexShrink: 0 }} />; })()}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: '1.1rem' }}>{schema.label}</h2>
+            <h2 style={{ margin: 0, fontSize: '1.05rem' }}>{schema.label}</h2>
             <div style={{ marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace' }}>{schema.formCode}</span>
-              <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: 10, background: (visit.status === 'completed' ? '#10b98120' : '#f59e0b20'), color: visit.status === 'completed' ? '#10b981' : '#f59e0b', fontWeight: 700 }}>
-                {visit.status === 'completed' ? 'Completada' : 'Borrador'}
-              </span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace' }}>ID {visit.id.slice(0, 8).toUpperCase()}</span>
+              <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 10, background: statusColor + '20', color: statusColor, fontWeight: 700 }}>{statusLabel}</span>
             </div>
           </div>
-          <button
-            onClick={async () => {
-              try {
-                await generateVisitPDF(visit as unknown as VisitPDFData, photos as unknown as VisitPhoto[]);
-              } catch (e) {
-                setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Error generando PDF' });
-              }
-            }}
-            className="secondary-btn"
-            style={{ fontSize: '0.82rem' }}>
-            <FileDown size={14} /> Descargar PDF
+          <button onClick={downloadPDF} className="secondary-btn" style={{ fontSize: '0.82rem' }}>
+            <FileDown size={14} /> PDF
           </button>
         </div>
       </div>
@@ -443,96 +520,143 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
         </div>
       )}
 
-      {/* Sección 0: identificación general */}
-      <div className="glass-panel">
-        <h3 style={{ margin: 0, marginBottom: 12, fontSize: '0.95rem' }}>Identificación</h3>
-        <div className="input-group">
-          <label className="input-label">Casa</label>
-          <select value={visit.house_id ?? ''} onChange={(e) => {
-            const h = houses.find((x) => x.id === e.target.value);
-            setVisit((v) => v ? { ...v, house_id: h?.id ?? null, casa: h?.casa ?? null } : v);
-          }}>
-            <option value="">— Sin asociar —</option>
-            {houses.map((h) => <option key={h.id} value={h.id}>{h.casa}{h.location ? ` · ${h.location}` : ''}</option>)}
-          </select>
-        </div>
-        <div className="input-group">
-          <label className="input-label">Técnico que realiza la visita</label>
-          <input type="text" value={visit.technician_name ?? ''} onChange={(e) => setVisit((v) => v ? { ...v, technician_name: e.target.value } : v)} placeholder="Nombre completo" />
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div className="input-group" style={{ flex: 1 }}>
-            <label className="input-label">Fecha</label>
-            <input type="date" value={visit.visit_date} onChange={(e) => setVisit((v) => v ? { ...v, visit_date: e.target.value } : v)} />
-          </div>
-          <div className="input-group" style={{ flex: 1 }}>
-            <label className="input-label">Hora</label>
-            <input type="time" value={visit.visit_time ?? ''} onChange={(e) => setVisit((v) => v ? { ...v, visit_time: e.target.value } : v)} />
-          </div>
-        </div>
-        <button onClick={captureGeo} className="secondary-btn" style={{ width: '100%', justifyContent: 'center' }}>
-          <MapPin size={14} /> {visit.lat && visit.lng ? `GPS: ${visit.lat.toFixed(4)}, ${visit.lng.toFixed(4)}` : 'Capturar ubicación GPS'}
-        </button>
-      </div>
+      {/* Identificación general (siempre visible, no colapsable) */}
+      <CollapsibleSection
+        title="Identificación de la visita"
+        open={openSections.__ident ?? true}
+        onToggle={() => toggleSection('__ident')}>
+        <FieldsGrid>
+          {/* Casa: texto libre para PREVIA, dropdown para los demás */}
+          {schema.casaIsFreeText ? (
+            <FieldWrapper label="Nombre del conjunto o casa" required>
+              <input type="text"
+                placeholder="Ej: Reservas de Pance · Casa 30"
+                value={visit.casa ?? ''}
+                onChange={(e) => setVisit((v) => v ? { ...v, casa: e.target.value, house_id: null } : v)}
+                style={{ minHeight: 44 }} />
+            </FieldWrapper>
+          ) : (
+            <FieldWrapper label="Casa" required>
+              <select value={visit.house_id ?? ''} onChange={(e) => {
+                const h = houses.find((x) => x.id === e.target.value);
+                setVisit((v) => v ? { ...v, house_id: h?.id ?? null, casa: h?.casa ?? null } : v);
+              }}>
+                <option value="">— Selecciona —</option>
+                {houses.map((h) => <option key={h.id} value={h.id}>{h.casa}{h.location ? ` · ${h.location}` : ''}</option>)}
+              </select>
+            </FieldWrapper>
+          )}
 
-      {/* Secciones del schema */}
+          <FieldWrapper label="Técnico que realiza la visita" required>
+            <input type="text" value={visit.technician_name ?? ''}
+              onChange={(e) => setVisit((v) => v ? { ...v, technician_name: e.target.value } : v)}
+              placeholder="Nombre completo" />
+          </FieldWrapper>
+
+          <FieldWrapper label="Fecha">
+            <input type="date" value={visit.visit_date}
+              onChange={(e) => setVisit((v) => v ? { ...v, visit_date: e.target.value } : v)} />
+          </FieldWrapper>
+
+          <FieldWrapper label="Hora">
+            <input type="time" value={visit.visit_time ?? ''}
+              onChange={(e) => setVisit((v) => v ? { ...v, visit_time: e.target.value } : v)} />
+          </FieldWrapper>
+
+          <FieldWrapper label="Ubicación GPS" fullWidth>
+            <button onClick={captureGeo} className="secondary-btn" type="button" style={{ width: '100%', justifyContent: 'center' }}>
+              <MapPin size={14} /> {visit.lat && visit.lng ? `${visit.lat.toFixed(4)}, ${visit.lng.toFixed(4)}` : 'Capturar ubicación GPS'}
+            </button>
+          </FieldWrapper>
+        </FieldsGrid>
+      </CollapsibleSection>
+
+      {/* Secciones del schema, colapsables */}
       {schema.sections.map((sec) => (
-        <FormSection key={sec.title} section={sec} formData={visit.form_data} setField={setField} />
+        <CollapsibleSection
+          key={sec.title}
+          title={sec.title}
+          open={openSections[sec.title] ?? false}
+          onToggle={() => toggleSection(sec.title)}>
+          <FieldsGrid>
+            {sec.fields.map((f) => (
+              <FieldWrapper key={f.key} label={f.label} required={f.required} unit={f.unit} fullWidth={isFullWidthField(f)} help={f.help}>
+                <FieldInput field={f} value={visit.form_data[f.key]} onChange={(v) => setField(f.key, v)} />
+              </FieldWrapper>
+            ))}
+          </FieldsGrid>
+        </CollapsibleSection>
       ))}
 
       {/* Notas adicionales */}
-      <div className="glass-panel">
-        <h3 style={{ margin: 0, marginBottom: 12, fontSize: '0.95rem' }}>Notas adicionales</h3>
-        <textarea
-          value={visit.notes ?? ''}
-          onChange={(e) => setVisit((v) => v ? { ...v, notes: e.target.value } : v)}
+      <CollapsibleSection title="Notas adicionales" open={openSections['__notas'] ?? false} onToggle={() => toggleSection('__notas')}>
+        <textarea value={visit.notes ?? ''} onChange={(e) => setVisit((v) => v ? { ...v, notes: e.target.value } : v)}
           rows={4} style={{ width: '100%' }} placeholder="Cualquier observación que no quepa en los campos anteriores…" />
-      </div>
+      </CollapsibleSection>
 
       {/* Fotos */}
-      <div className="glass-panel">
-        <h3 style={{ margin: 0, marginBottom: 12, fontSize: '0.95rem' }}>Registro fotográfico ({photos.length})</h3>
-        <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '0 0 10px', lineHeight: 1.45 }}>Categorías sugeridas: medidor eléctrico, tablero de distribución, proyección ubicación de equipos, tipo de cubierta, cerchas identificadas, vistas aéreas, fachada de la casa.</p>
+      <CollapsibleSection title={`Registro fotográfico (${photos.length})`} open={openSections['__fotos'] ?? true} onToggle={() => toggleSection('__fotos')}>
+        <div style={{ marginBottom: 12 }}>
+          <label className="input-label" style={{ fontSize: '0.78rem' }}>Categoría de la(s) próxima(s) foto(s)</label>
+          <select value={photoCategory} onChange={(e) => setPhotoCategory(e.target.value)} style={{ marginBottom: 8 }}>
+            <option value="">— Selecciona categoría —</option>
+            {schema.photoCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+          </select>
+          {photoCategory === 'Otro' && (
+            <input type="text" placeholder="Describe la categoría" value={customCategory} onChange={(e) => setCustomCategory(e.target.value)} style={{ marginTop: 4 }} />
+          )}
+        </div>
+
         <input ref={fileInputRef} type="file" accept="image/*" capture="environment" multiple
           onChange={(e) => handlePhotoUpload(e.target.files)}
           style={{ display: 'none' }} />
-        <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-          className="primary-btn" style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '1rem' }}>
-          <Camera size={18} /> {uploading ? 'Subiendo...' : 'Tomar / subir fotos'}
+        <button onClick={() => fileInputRef.current?.click()} disabled={uploading || !photoCategory}
+          className="primary-btn" style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '0.95rem' }}>
+          <Camera size={18} /> {uploading ? 'Subiendo…' : 'Tomar / subir fotos'}
         </button>
+
         {photos.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8, marginTop: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginTop: 14 }}>
             {photos.map((p) => (
-              <div key={p.id} style={{ position: 'relative', aspectRatio: '1/1', borderRadius: 10, overflow: 'hidden', background: 'var(--bg-elevated)' }}>
-                {p.url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.url} alt={p.filename ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
-                    onClick={() => window.open(p.url ?? '', '_blank')} />
-                )}
-                <button onClick={() => deletePhoto(p.id)}
-                  style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  title="Eliminar">
-                  <X size={12} />
-                </button>
+              <div key={p.id} style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: 'var(--bg-elevated)' }}>
+                <div style={{ position: 'relative', aspectRatio: '1/1' }}>
+                  {p.url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.url} alt={p.description ?? p.filename ?? ''}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
+                      onClick={() => window.open(p.url ?? '', '_blank')} />
+                  )}
+                  <button onClick={() => deletePhoto(p.id)} title="Eliminar"
+                    style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: 24, height: 24, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <X size={12} />
+                  </button>
+                </div>
+                <input type="text" value={p.description ?? ''}
+                  onChange={(e) => updatePhotoDescription(p.id, e.target.value)}
+                  placeholder="Título / categoría"
+                  style={{ width: '100%', border: 'none', padding: '6px 8px', fontSize: '0.72rem', background: 'transparent', borderTop: '1px solid var(--border)' }} />
               </div>
             ))}
           </div>
         )}
-      </div>
+      </CollapsibleSection>
 
-      {/* Botones de acción — sticky bottom */}
-      <div style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-base)', padding: '12px 0 4px', marginTop: 16, borderTop: '1px solid var(--border)' }}>
+      {/* Botones de acción sticky */}
+      <div style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-base)', padding: '14px 0 4px', marginTop: 20, borderTop: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => save(false)} disabled={saving} className="secondary-btn" style={{ flex: 1, minWidth: 140, justifyContent: 'center', padding: '14px' }}>
-            <Save size={16} /> Guardar borrador
+          <button onClick={onBack} className="secondary-btn" style={{ minWidth: 120, justifyContent: 'center', padding: '12px' }}>
+            <ArrowLeft size={14} /> Volver
+          </button>
+          <button onClick={() => save(false)} disabled={saving} className="secondary-btn" style={{ flex: 1, minWidth: 140, justifyContent: 'center', padding: '12px' }}>
+            <Save size={14} /> Guardar borrador
           </button>
           {visit.status !== 'completed' && (
-            <button onClick={() => save(true)} disabled={saving} className="primary-btn" style={{ flex: 2, minWidth: 180, justifyContent: 'center', padding: '14px', fontWeight: 600 }}>
+            <button onClick={() => save(true)} disabled={saving} className="primary-btn" style={{ flex: 2, minWidth: 180, justifyContent: 'center', padding: '12px', fontWeight: 600 }}>
               Marcar completada
             </button>
           )}
         </div>
-        <button onClick={deleteVisit} style={{ marginTop: 8, width: '100%', background: 'transparent', color: '#ef4444', border: '1px solid #ef444440', borderRadius: 8, padding: 10, cursor: 'pointer', fontSize: '0.82rem' }}>
+        <button onClick={deleteVisit} style={{ marginTop: 8, width: '100%', background: 'transparent', color: '#ef4444', border: '1px solid #ef444440', borderRadius: 8, padding: 10, cursor: 'pointer', fontSize: '0.8rem' }}>
           <Trash2 size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Eliminar acta
         </button>
       </div>
@@ -540,68 +664,106 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
   );
 }
 
-/* ───────────── Sección con sus campos ───────────── */
-function FormSection({ section, formData, setField }: {
-  section: { title: string; fields: VisitField[] };
-  formData: Record<string, unknown>;
-  setField: (key: string, value: unknown) => void;
+/* ───────────── Componente sección colapsable ───────────── */
+function CollapsibleSection({ title, open, onToggle, children }: {
+  title: string; open: boolean; onToggle: () => void; children: React.ReactNode;
 }) {
   return (
-    <div className="glass-panel">
-      <h3 style={{ margin: 0, marginBottom: 14, fontSize: '0.95rem' }}>
-        {section.title}
-      </h3>
-      {section.fields.map((f) => <FieldInput key={f.key} field={f} value={formData[f.key]} onChange={(v) => setField(f.key, v)} />)}
+    <div className="glass-panel" style={{ padding: 0, marginBottom: 12, overflow: 'hidden' }}>
+      <button onClick={onToggle}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-primary)', textAlign: 'left' }}>
+        <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>{title}</span>
+        {open ? <ChevronDown size={18} style={{ color: 'var(--text-muted)' }} /> : <ChevronRight size={18} style={{ color: 'var(--text-muted)' }} />}
+      </button>
+      {open && (
+        <div style={{ padding: '0 18px 18px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ paddingTop: 14 }}>{children}</div>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ───────────── Render de un campo individual ───────────── */
+/* ───────────── Grid 2 columnas para campos cortos ───────────── */
+function FieldsGrid({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="fields-grid">
+      {children}
+      <style jsx>{`
+        .fields-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+        }
+        @media (max-width: 600px) {
+          .fields-grid { grid-template-columns: 1fr; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+/* ───────────── Wrapper de un campo con label + help ───────────── */
+function FieldWrapper({ label, required, unit, fullWidth, help, children }: {
+  label: string; required?: boolean; unit?: string; fullWidth?: boolean; help?: string; children: React.ReactNode;
+}) {
+  return (
+    <div style={{ gridColumn: fullWidth ? '1 / -1' : 'auto', display: 'flex', flexDirection: 'column' }}>
+      <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: 6 }}>
+        {label}{required && <span style={{ color: '#ef4444', marginLeft: 3 }}>*</span>}
+        {unit && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> ({unit})</span>}
+      </label>
+      {help && <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0 0 6px', lineHeight: 1.4 }}>{help}</p>}
+      {children}
+    </div>
+  );
+}
+
+/* ───────────── Render del input según tipo ───────────── */
 function FieldInput({ field, value, onChange }: { field: VisitField; value: unknown; onChange: (v: unknown) => void }) {
   const v = value ?? (field.type === 'checkbox' ? false : '');
 
-  return (
-    <div className="input-group" style={{ marginBottom: 14 }}>
-      <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600 }}>
-        {field.label} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
-        {field.unit && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> ({field.unit})</span>}
+  if (field.type === 'textarea') {
+    return <textarea value={String(v)} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder} rows={3} style={{ width: '100%' }} />;
+  }
+  if (field.type === 'select') {
+    return (
+      <select value={String(v)} onChange={(e) => onChange(e.target.value)}>
+        <option value="">— Selecciona —</option>
+        {field.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+    );
+  }
+  if (field.type === 'radio') {
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {field.options?.map((opt) => (
+          <button key={opt} type="button" onClick={() => onChange(opt)}
+            className={`chip ${v === opt ? 'active' : ''}`}
+            style={{ fontSize: '0.82rem', padding: '8px 14px' }}>
+            {opt}
+          </button>
+        ))}
+      </div>
+    );
+  }
+  if (field.type === 'checkbox') {
+    return (
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 12px', background: v ? 'var(--accent)20' : 'var(--bg-elevated)', borderRadius: 8, border: `1px solid ${v ? 'var(--accent)' : 'var(--border)'}` }}>
+        <input type="checkbox" checked={!!v} onChange={(e) => onChange(e.target.checked)} style={{ width: 20, height: 20, cursor: 'pointer' }} />
+        <span style={{ fontSize: '0.85rem' }}>{v ? 'Sí' : 'Marcar como sí'}</span>
       </label>
-      {field.help && <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0 0 6px', lineHeight: 1.4 }}>{field.help}</p>}
-
-      {field.type === 'textarea' ? (
-        <textarea value={String(v)} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder} rows={3} style={{ width: '100%' }} />
-      ) : field.type === 'select' ? (
-        <select value={String(v)} onChange={(e) => onChange(e.target.value)}>
-          <option value="">— Selecciona —</option>
-          {field.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-        </select>
-      ) : field.type === 'radio' ? (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {field.options?.map((opt) => (
-            <button key={opt} type="button"
-              onClick={() => onChange(opt)}
-              className={`chip ${v === opt ? 'active' : ''}`}
-              style={{ fontSize: '0.82rem', padding: '8px 14px' }}>
-              {opt}
-            </button>
-          ))}
-        </div>
-      ) : field.type === 'checkbox' ? (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 12px', background: v ? 'var(--accent)' + '20' : 'var(--bg-elevated)', borderRadius: 8, border: `1px solid ${v ? 'var(--accent)' : 'var(--border)'}` }}>
-          <input type="checkbox" checked={!!v} onChange={(e) => onChange(e.target.checked)} style={{ width: 20, height: 20, cursor: 'pointer' }} />
-          <span style={{ fontSize: '0.88rem' }}>{v ? 'Sí' : 'Marcar como sí'}</span>
-        </label>
-      ) : (
-        <input
-          type={field.type === 'tel' || field.type === 'email' ? field.type : (field.type === 'number' ? 'text' : field.type)}
-          inputMode={field.inputMode}
-          value={String(v)}
-          onChange={(e) => onChange(field.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value.replace(',', '.'))) : e.target.value)}
-          placeholder={field.placeholder}
-          required={field.required}
-          style={{ width: '100%', minHeight: 44 }}
-        />
-      )}
-    </div>
+    );
+  }
+  return (
+    <input
+      type={field.type === 'tel' || field.type === 'email' ? field.type : (field.type === 'number' ? 'text' : field.type)}
+      inputMode={field.inputMode}
+      value={String(v)}
+      onChange={(e) => onChange(field.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value.replace(',', '.'))) : e.target.value)}
+      placeholder={field.placeholder}
+      required={field.required}
+      style={{ width: '100%', minHeight: 44 }}
+    />
   );
 }

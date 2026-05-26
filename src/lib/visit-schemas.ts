@@ -34,6 +34,8 @@ export interface VisitTypeSchema {
   description: string;
   color: string;          // acento de marca (sin emoji)
   formCode: string;       // ej. FO:Prefactibilidad
+  casaIsFreeText: boolean;  // si true, no se selecciona casa existente (es la primera visita)
+  photoCategories: string[];  // categorías sugeridas para clasificar cada foto
   sections: VisitSection[];
 }
 
@@ -46,6 +48,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
     description: 'Inspección y diagnóstico del sitio previo a la instalación.',
     color: '#07c5a8',
     formCode: 'FO:Prefactibilidad',
+    casaIsFreeText: true,
+    photoCategories: ['Fachada de la casa', 'Medidor eléctrico', 'Tablero de distribución', 'Proyección ubicación de equipos', 'Tipo de cubierta', 'Cerchas identificadas', 'Vistas aéreas', 'Otro'],
     sections: [
       {
         title: 'I. Información general',
@@ -145,6 +149,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
     description: 'Registro de la instalación física del sistema solar.',
     color: '#10b981',
     formCode: 'FO:Instalacion',
+    casaIsFreeText: false,
+    photoCategories: ['Inversor instalado', 'Paneles instalados', 'Tablero conectado', 'Gateway Pulsar', 'Medidor solar', 'Medidor red', 'Batería', 'Otro'],
     sections: [
       {
         title: 'I. Identificación de la instalación',
@@ -229,6 +235,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
     description: 'Atención a fallas, paradas o requerimientos urgentes.',
     color: '#ef4444',
     formCode: 'FO:Emergencia',
+    casaIsFreeText: false,
+    photoCategories: ['Equipo afectado', 'Daño visible', 'Antes de intervención', 'Durante intervención', 'Después de intervención', 'Repuestos usados', 'Otro'],
     sections: [
       {
         title: 'I. Motivo del llamado',
@@ -280,6 +288,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
     description: 'Revisión y ajustes para dejar el sistema en condiciones óptimas según norma.',
     color: '#f59e0b',
     formCode: 'FO:Normalizacion',
+    casaIsFreeText: false,
+    photoCategories: ['Estado inicial', 'Estado final', 'Cambios aplicados', 'Rotulación', 'Documentación entregada', 'Lectura medidor solar', 'Lectura medidor red', 'Otro'],
     sections: [
       {
         title: 'I. Razón de la normalización',

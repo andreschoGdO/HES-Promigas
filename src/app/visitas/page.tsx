@@ -528,7 +528,7 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           </button>
           {visit.status !== 'completed' && (
             <button onClick={() => save(true)} disabled={saving} className="primary-btn" style={{ flex: 2, minWidth: 180, justifyContent: 'center', padding: '14px', fontWeight: 600 }}>
-              <Eye size={16} /> Marcar completada
+              Marcar completada
             </button>
           )}
         </div>

@@ -682,7 +682,37 @@ tbody tr:hover td { background: var(--bg-elevated); }
 .font-mono { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; }
 
 /* ===== Responsive ===== */
+/* ─── Botón hamburguesa Topbar (visible solo móvil) ─── */
+.topbar-hamburger {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--text-primary);
+  align-items: center;
+  justify-content: center;
+}
+.topbar-hamburger:hover { background: var(--bg-elevated); }
+
+/* ─── Backdrop del sidebar drawer ─── */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 199;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease;
+}
+.sidebar-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+}
+
 @media (max-width: 1024px) {
+  /* Sidebar collapsado por iconos en tablet — mantiene espacio */
   .sidebar { width: 56px; overflow: hidden; }
   .sidebar-logo-text,
   .sidebar-section,
@@ -694,8 +724,29 @@ tbody tr:hover td { background: var(--bg-elevated); }
   .main-area { margin-left: 56px; }
 }
 
-@media (max-width: 640px) {
-  .sidebar { display: none; }
+@media (max-width: 768px) {
+  /* En móvil: sidebar como drawer off-canvas */
+  .topbar-hamburger { display: inline-flex; }
+
+  .sidebar {
+    width: 260px !important;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 200;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+    overflow-y: auto;
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+
+  /* Restaurar contenido completo del sidebar dentro del drawer */
+  .sidebar-logo-text,
+  .sidebar-section,
+  .nav-item span,
+  .sidebar-user-info { display: block; }
+  .sidebar-logo { justify-content: flex-start; padding: 0 20px; }
+  .nav-item { justify-content: flex-start; padding: 10px 18px; }
+  .sidebar-footer { justify-content: flex-start; padding: 12px 18px; }
+
   .main-area { margin-left: 0; }
   .topbar { padding: 0 14px; }
   .page-content { padding: 14px; gap: 16px; }

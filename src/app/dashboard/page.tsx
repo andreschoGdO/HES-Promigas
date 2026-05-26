@@ -384,24 +384,28 @@ export default function DashboardPage() {
     setDevices((data ?? []) as DeviceOption[]);
   };
 
-  // Trigger manual del cron: corre dispositivos + casas + cierres + consumo + pre-cómputo casa metrics
+  // Trigger manual rápido (≤ 60s): devices + casas + casa_metrics + alertas.
+  // El sync pesado (cierres + consumo de Metrum) corre por el cron diario a las 06:00 UTC
+  // y por GitHub Actions cada 15 min. No bloquea al usuario.
   const handleSyncAll = async () => {
     setSyncing(true);
     setSyncMsg(null);
     try {
-      const res = await fetch('/api/cron/sync', { headers: { 'x-trigger': 'manual' } });
+      const res = await fetch('/api/cron/sync?quick=1', { headers: { 'x-trigger': 'manual' } });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       const s = json.steps ?? {};
       const parts = [
         s.devices !== undefined && `devices: ${s.devices}`,
         s.houses !== undefined && `casas: ${s.houses}`,
-        s.cierres && `cierres: ${s.cierres.inserted}/${s.cierres.total}`,
-        s.consumo && `consumo: ${s.consumo.inserted}`,
         s.casa_metrics && `métricas: ${s.casa_metrics.upserted}`,
+        s.alerts && `alertas: ${s.alerts.fired ?? 0}`,
       ].filter(Boolean);
       const kind = json.status === 'success' ? 'success' : 'error';
-      setSyncMsg({ kind, text: `Sync ${json.status} · ${parts.join(' · ')}${json.errors?.length ? ` · errores: ${json.errors.join(', ')}` : ''}` });
+      setSyncMsg({
+        kind,
+        text: `Sincronización rápida ${json.status} · ${parts.join(' · ')}. Cierres y consumo se actualizan automáticamente cada día por el cron.${json.errors?.length ? ` · errores: ${json.errors.join(', ')}` : ''}`,
+      });
       await loadDevices();
     } catch (e) {
       setSyncMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Error' });

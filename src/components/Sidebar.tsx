@@ -10,6 +10,24 @@ export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<{ email: string; initial: string } | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Escuchar el botón hamburguesa del topbar
+  useEffect(() => {
+    const handler = () => setMobileOpen((v) => !v);
+    window.addEventListener('toggle-sidebar', handler);
+    return () => window.removeEventListener('toggle-sidebar', handler);
+  }, []);
+
+  // Cerrar al navegar (cambio de ruta)
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
+  // Bloquear scroll del body cuando el drawer está abierto en móvil
+  useEffect(() => {
+    if (mobileOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileOpen]);
 
   useEffect(() => {
     const supabase = createBrowserClient(
@@ -48,7 +66,14 @@ export function Sidebar() {
   ];
 
   return (
-    <aside className="sidebar">
+    <>
+      {/* Backdrop visible solo cuando el menú está abierto en móvil */}
+      <div
+        className={`sidebar-backdrop ${mobileOpen ? 'open' : ''}`}
+        onClick={() => setMobileOpen(false)}
+        aria-hidden="true"
+      />
+      <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-logo">
         <div className="sidebar-logo-mark" style={{ background: 'transparent', color: 'var(--accent)' }}>
           <Sun size={26} strokeWidth={2.5} fill="currentColor" />
@@ -113,5 +138,6 @@ export function Sidebar() {
         </button>
       </Link>
     </aside>
+    </>
   );
 }

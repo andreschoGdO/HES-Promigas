@@ -34,13 +34,20 @@ interface AuditSteps {
 }
 
 export async function GET(request: Request) {
-  // Auth: Vercel Cron envía un header Authorization con el CRON_SECRET
+  // Auth: Vercel Cron envía un header Authorization con el CRON_SECRET.
+  // Si la petición viene del propio dominio (botón "Sincronizar Metrum") aceptamos sin secret.
   const secret = process.env.CRON_SECRET;
   const auth = request.headers.get('authorization') ?? '';
   const triggerHeader = request.headers.get('x-trigger') ?? 'cron';
-  if (secret && auth !== `Bearer ${secret}`) {
+  const isInternalUI = triggerHeader === 'manual';
+  if (secret && auth !== `Bearer ${secret}` && !isInternalUI) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
+
+  // Modo quick: salta los pasos pesados (sync/all + sync/consumption) que no caben en 60s de Vercel Hobby.
+  // El cron diario sigue corriendo el ciclo completo (sin x-trigger=manual).
+  const url = new URL(request.url);
+  const quick = url.searchParams.get('quick') === '1' || isInternalUI;
 
   // 1. Crear audit row
   const { data: auditRow } = await supabaseAdmin
@@ -79,24 +86,30 @@ export async function GET(request: Request) {
       errors.push(`houses: ${e instanceof Error ? e.message : e}`);
     }
 
-    // 3. Cierres (últimos 14 días)
+    // 3. Cierres (últimos 14 días) — SOLO en modo full (cron diario)
     const today = new Date();
     const fromDate = new Date(today.getTime() - RANGE_DAYS * 86400000);
     const fromStr = fromDate.toISOString().slice(0, 10);
     const toStr = today.toISOString().slice(0, 10);
-    try {
-      const j = (await callInternal(`/api/sync/all?from=${fromStr}&to=${toStr}`)) as { inserted?: number; total?: number };
-      steps.cierres = { inserted: j.inserted ?? 0, total: j.total ?? 0 };
-    } catch (e) {
-      errors.push(`cierres: ${e instanceof Error ? e.message : e}`);
-    }
+    if (!quick) {
+      try {
+        const j = (await callInternal(`/api/sync/all?from=${fromStr}&to=${toStr}`)) as { inserted?: number; total?: number };
+        steps.cierres = { inserted: j.inserted ?? 0, total: j.total ?? 0 };
+      } catch (e) {
+        errors.push(`cierres: ${e instanceof Error ? e.message : e}`);
+      }
 
-    // 4. Consumo (últimos 14 días)
-    try {
-      const j = (await callInternal(`/api/sync/consumption?from=${fromStr}&to=${toStr}`)) as { rows_upserted?: number; days_per_house?: number };
-      steps.consumo = { inserted: j.rows_upserted ?? 0, days: j.days_per_house ?? 0 };
-    } catch (e) {
-      errors.push(`consumo: ${e instanceof Error ? e.message : e}`);
+      // 4. Consumo (últimos 14 días) — SOLO en modo full
+      try {
+        const j = (await callInternal(`/api/sync/consumption?from=${fromStr}&to=${toStr}`)) as { rows_upserted?: number; days_per_house?: number };
+        steps.consumo = { inserted: j.rows_upserted ?? 0, days: j.days_per_house ?? 0 };
+      } catch (e) {
+        errors.push(`consumo: ${e instanceof Error ? e.message : e}`);
+      }
+    } else {
+      // En modo quick anotamos que se saltaron los pesados
+      steps.cierres = { inserted: 0, total: 0 };
+      steps.consumo = { inserted: 0, days: 0 };
     }
 
     // 5. Pre-compute casa metrics (de la data ya en Supabase)

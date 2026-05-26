@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Menu } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
 const TITLES: Record<string, string> = {
@@ -32,10 +32,20 @@ export function Topbar() {
 
   return (
     <header className="topbar">
-      <div className="topbar-breadcrumb">
-        <span>HES SUNNY</span>
-        <ChevronRight size={14} />
-        <strong>{title}</strong>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          type="button"
+          className="topbar-hamburger"
+          aria-label="Abrir menú"
+          onClick={() => window.dispatchEvent(new Event('toggle-sidebar'))}
+        >
+          <Menu size={20} />
+        </button>
+        <div className="topbar-breadcrumb">
+          <span>HES SUNNY</span>
+          <ChevronRight size={14} />
+          <strong>{title}</strong>
+        </div>
       </div>
       <div className="topbar-actions">
         <span className="topbar-user">{email || '—'}</span>

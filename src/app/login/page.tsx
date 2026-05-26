@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
-import { Sun, Mail, AlertCircle, CheckCircle2, ArrowLeft, KeyRound } from 'lucide-react';
+import { Sun, LogIn, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 const ALLOWED_DOMAINS = ['@gdo.com.co', '@promigas.com'];
 const isAllowedEmail = (email: string) => ALLOWED_DOMAINS.some((d) => email.toLowerCase().endsWith(d));
@@ -12,85 +12,56 @@ const ALLOWED_DOMAINS_LABEL = ALLOWED_DOMAINS.join(' o ');
 function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [sending, setSending] = useState(false);
-  const [verifying, setVerifying] = useState(false);
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const codeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (params.get('error') === 'domain') {
-      setMsg({ kind: 'error', text: `Solo se permite acceso a correos ${ALLOWED_DOMAINS_LABEL}.` });
-    } else if (params.get('error') === 'exchange-failed') {
-      setMsg({ kind: 'error', text: 'El enlace expiró o ya fue usado. Solicita un nuevo código.' });
-    }
+    const err = params.get('error');
+    if (err === 'domain') setMsg({ kind: 'error', text: `Solo se permite acceso a correos ${ALLOWED_DOMAINS_LABEL}.` });
+    else if (err === 'exchange-failed') setMsg({ kind: 'error', text: 'La sesión expiró. Vuelve a iniciar sesión.' });
   }, [params]);
 
-  const supabase = () => createBrowserClient(
+  const supa = () => createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   );
 
-  const handleSendCode = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
-    const trimmed = email.trim().toLowerCase();
-    if (!isAllowedEmail(trimmed)) {
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!isAllowedEmail(trimmedEmail)) {
       setMsg({ kind: 'error', text: `El correo debe terminar en ${ALLOWED_DOMAINS_LABEL}` });
       return;
     }
-    setSending(true);
-    const { error } = await supabase().auth.signInWithOtp({
-      email: trimmed,
-      options: { shouldCreateUser: true },
-    });
-    setSending(false);
-    if (error) {
-      setMsg({ kind: 'error', text: error.message });
+    if (password.length < 6) {
+      setMsg({ kind: 'error', text: 'La contraseña debe tener al menos 6 caracteres' });
       return;
     }
-    setEmail(trimmed);
-    setStep('code');
-    setMsg({ kind: 'info', text: `Te enviamos un código a ${trimmed}. Revisa tu Outlook (incluida la carpeta Spam).` });
-    setTimeout(() => codeInputRef.current?.focus(), 100);
-  };
-
-  const handleVerifyCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMsg(null);
-    const cleanCode = code.trim().replace(/\s/g, '');
-    if (!/^\d{6,8}$/.test(cleanCode)) {
-      setMsg({ kind: 'error', text: 'El código debe tener entre 6 y 8 dígitos.' });
-      return;
-    }
-    setVerifying(true);
-    const { data, error } = await supabase().auth.verifyOtp({
-      email,
-      token: cleanCode,
-      type: 'email',
-    });
-    setVerifying(false);
+    setSubmitting(true);
+    const { data, error } = await supa().auth.signInWithPassword({ email: trimmedEmail, password });
+    setSubmitting(false);
     if (error) {
-      setMsg({ kind: 'error', text: 'Código inválido o expirado. Solicita uno nuevo.' });
+      const friendlyMsg = error.message.toLowerCase().includes('invalid login')
+        ? 'Correo o contraseña incorrectos. Si no tienes cuenta aún, pídele al administrador que te cree una.'
+        : error.message.toLowerCase().includes('email not confirmed')
+          ? 'Tu cuenta aún no está confirmada. Contacta al administrador.'
+          : error.message;
+      setMsg({ kind: 'error', text: friendlyMsg });
       return;
     }
     if (!isAllowedEmail(data.user?.email ?? '')) {
-      await supabase().auth.signOut();
+      await supa().auth.signOut();
       setMsg({ kind: 'error', text: `Solo se permite acceso a correos ${ALLOWED_DOMAINS_LABEL}.` });
       return;
     }
-    setMsg({ kind: 'success', text: 'Acceso autorizado, redirigiendo...' });
+    setMsg({ kind: 'success', text: '✓ Acceso autorizado, redirigiendo...' });
     const next = params.get('next') ?? '/dashboard';
     router.push(next);
     router.refresh();
-  };
-
-  const handleBack = () => {
-    setStep('email');
-    setCode('');
-    setMsg(null);
   };
 
   return (
@@ -106,59 +77,49 @@ function LoginInner() {
           </p>
         </div>
 
-        {step === 'email' ? (
-          <form onSubmit={handleSendCode} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div className="input-group" style={{ marginBottom: 0 }}>
-              <label className="input-label">Correo corporativo</label>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="input-group" style={{ marginBottom: 0 }}>
+            <label className="input-label">Correo corporativo</label>
+            <input
+              type="email"
+              required
+              autoFocus
+              autoComplete="email"
+              placeholder={`tu.nombre${ALLOWED_DOMAINS[0]}`}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={submitting}
+              style={{ minHeight: 44 }}
+            />
+          </div>
+
+          <div className="input-group" style={{ marginBottom: 0 }}>
+            <label className="input-label">Contraseña</label>
+            <div style={{ position: 'relative' }}>
               <input
-                type="email"
+                type={showPassword ? 'text' : 'password'}
                 required
-                autoFocus
-                placeholder={`tu.nombre${ALLOWED_DOMAINS[0]}`}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={sending}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={submitting}
+                style={{ width: '100%', minHeight: 44, paddingRight: 42 }}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6 }}
+                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
-            <button className="primary-btn" type="submit" disabled={sending} style={{ width: '100%', justifyContent: 'center', padding: '10px' }}>
-              <Mail size={14} /> {sending ? 'Enviando código...' : 'Enviar código'}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerifyCode} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center', marginBottom: 4 }}>
-              Código enviado a <strong>{email}</strong>
-            </div>
-            <div className="input-group" style={{ marginBottom: 0 }}>
-              <label className="input-label">Código de acceso</label>
-              <input
-                ref={codeInputRef}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                maxLength={8}
-                required
-                autoComplete="one-time-code"
-                placeholder="00000000"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                disabled={verifying}
-                style={{ textAlign: 'center', fontSize: '1.3rem', letterSpacing: '0.35em', fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}
-              />
-            </div>
-            <button className="primary-btn" type="submit" disabled={verifying || code.length < 6} style={{ width: '100%', justifyContent: 'center', padding: '10px' }}>
-              <KeyRound size={14} /> {verifying ? 'Verificando...' : 'Verificar y entrar'}
-            </button>
-            <button
-              type="button"
-              onClick={handleBack}
-              disabled={verifying}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'center', padding: 6 }}
-            >
-              <ArrowLeft size={12} /> Cambiar correo
-            </button>
-          </form>
-        )}
+          </div>
+
+          <button className="primary-btn" type="submit" disabled={submitting} style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '0.95rem', fontWeight: 600 }}>
+            <LogIn size={16} /> {submitting ? 'Entrando...' : 'Entrar'}
+          </button>
+        </form>
 
         {msg && (
           <div className={msg.kind === 'success' ? 'alert-success' : msg.kind === 'error' ? 'alert-error' : 'alert-warning'} style={{ marginTop: 16, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -169,9 +130,7 @@ function LoginInner() {
 
         <p style={{ marginTop: 20, fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5 }}>
           Acceso restringido a usuarios <strong>{ALLOWED_DOMAINS_LABEL}</strong>.<br />
-          {step === 'email'
-            ? 'Recibirás un código de un solo uso en tu Outlook.'
-            : 'El código expira en 60 minutos. Si no llega, revisa Spam o vuelve a solicitarlo.'}
+          ¿No tienes cuenta? Pídele al administrador que la cree.
         </p>
       </div>
     </div>

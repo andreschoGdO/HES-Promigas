@@ -41,7 +41,42 @@ supabase_phase2_casa_metrics.sql
 Esto crea `daily_casa_metrics` (métricas pre-computadas) y `cron_runs` (auditoría).
 Sin esto, el dashboard usa fallback en vivo (más lento, sin imax pre-computado).
 
-## 4. Email Auth con código OTP (sin Azure)
+## 4. Auth: Email + Password (simplificado)
+
+> **Cambio reciente**: la app ahora usa **email + password** en vez de magic link OTP.
+> Más simple, sin dependencia de SMTP, sin rate limits de Supabase free tier.
+
+### Cómo crear usuarios
+
+1. Supabase Dashboard → **Authentication** → **Users** → **Add user** → **Create new user**
+2. Llenar:
+   - **Email**: `nombre@gdo.com.co` (o `@promigas.com`)
+   - **Password**: contraseña temporal (mín 6 caracteres)
+   - **Auto Confirm User**: ✅ marcado (importante — si no, el usuario no puede entrar)
+3. **Create user**
+4. Pasarle al usuario su email + password por canal seguro
+5. (Opcional) Usuario cambia su password después en Supabase o vía un menú futuro de "Mi perfil"
+
+### Configuración en Supabase
+
+1. **Authentication → Providers → Email** → debe estar habilitado (default)
+2. **Authentication → Sign in / Up** → desactiva **"Enable email signups"** si NO quieres que cualquiera con email pueda registrarse (recomendado: OFF, tú creas las cuentas a mano)
+3. **Authentication → URL Configuration**:
+   - Site URL: `https://sunnyhes.vercel.app`
+   - Redirect URLs: `https://sunnyhes.vercel.app/**`
+
+### Restricción de dominio
+
+Ya implementada en 3 capas:
+- `src/middleware.ts` — rechaza sesiones de emails fuera de `@gdo.com.co` / `@promigas.com`
+- `src/app/login/page.tsx` — valida antes de enviar el login
+- `src/app/auth/callback/route.ts` — valida también en callbacks (por si vuelven con magic link)
+
+Para agregar dominios adicionales, edita la constante `ALLOWED_DOMAINS` en los 3 archivos.
+
+---
+
+## 4-bis. (Legacy) Email Auth con código OTP — solo si vuelves al magic link
 
 ### a) Habilitar Email Auth en Supabase
 

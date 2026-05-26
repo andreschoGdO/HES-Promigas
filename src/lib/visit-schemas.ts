@@ -2,6 +2,9 @@
  * Catálogo de campos por tipo de visita.
  * Cada tipo se descompone en SECCIONES → cada sección tiene FIELDS.
  * Los valores se guardan en `field_visits.form_data` como JSON keyed por field.key.
+ *
+ * El schema de "previa" sigue la plantilla oficial PROMIGAS:
+ * "Acta de Visita Previa y Prefactibilidad" — FO:Prefactibilidad
  */
 
 export type VisitType = 'previa' | 'instalacion' | 'emergencia' | 'normalizacion';
@@ -11,17 +14,16 @@ export interface VisitField {
   key: string;
   label: string;
   type: FieldType;
-  options?: string[];               // para select y radio
+  options?: string[];
   placeholder?: string;
   required?: boolean;
-  unit?: string;                    // mostrar después del input (m², kW, etc.)
+  unit?: string;
   inputMode?: 'numeric' | 'decimal' | 'tel' | 'email';
   help?: string;
 }
 
 export interface VisitSection {
   title: string;
-  icon?: string;
   fields: VisitField[];
 }
 
@@ -30,82 +32,106 @@ export interface VisitTypeSchema {
   label: string;
   shortLabel: string;
   description: string;
-  icon: string;
-  color: string;
+  color: string;          // acento de marca (sin emoji)
+  formCode: string;       // ej. FO:Prefactibilidad
   sections: VisitSection[];
 }
 
 export const VISIT_SCHEMAS: VisitTypeSchema[] = [
-  // ───────── VISITA PREVIA ─────────
+  // ───────── VISITA PREVIA Y PREFACTIBILIDAD ─────────
   {
     type: 'previa',
-    label: 'Visita Previa',
-    shortLabel: 'Previa',
-    description: 'Inspección del sitio antes de la instalación del sistema solar.',
-    icon: '🔍',
-    color: '#3b82f6',
+    label: 'Acta de Visita Previa y Prefactibilidad',
+    shortLabel: 'Visita Previa',
+    description: 'Inspección y diagnóstico del sitio previo a la instalación.',
+    color: '#07c5a8',
+    formCode: 'FO:Prefactibilidad',
     sections: [
       {
-        title: 'Datos de la casa',
-        icon: '🏠',
+        title: 'I. Información general',
         fields: [
-          { key: 'propietario', label: 'Nombre del propietario', type: 'text', required: true, placeholder: 'Nombre completo' },
-          { key: 'cedula', label: 'Cédula / documento', type: 'tel', inputMode: 'numeric', placeholder: '1.234.567.890' },
-          { key: 'telefono', label: 'Teléfono de contacto', type: 'tel', inputMode: 'tel', placeholder: '300 123 4567' },
-          { key: 'email', label: 'Email', type: 'email', inputMode: 'email', placeholder: 'correo@ejemplo.com' },
-          { key: 'direccion', label: 'Dirección completa', type: 'textarea', required: true, placeholder: 'Carrera X #Y-Z, Conjunto, Apartamento/Casa' },
-          { key: 'tipo_predio', label: 'Tipo de predio', type: 'select', options: ['Casa unifamiliar', 'Apartamento', 'Conjunto cerrado', 'Local comercial', 'Otro'] },
+          { key: 'nombre_conjunto', label: 'Nombre del conjunto', type: 'text', required: true },
+          { key: 'quien_recibe_visita', label: 'Quién recibe la visita', type: 'text', required: true },
+          { key: 'ciudad', label: 'Ciudad', type: 'text', required: true },
+          { key: 'direccion', label: 'Dirección', type: 'textarea', required: true },
+          { key: 'coordenadas', label: 'Coordenadas (lat, lng)', type: 'text', placeholder: '3.3197, -76.5443' },
+          { key: 'tipo_vivienda', label: 'Tipo de vivienda', type: 'select', options: ['Casa unifamiliar', 'Apartamento', 'Casa en conjunto cerrado', 'Local comercial', 'Otro'] },
+          { key: 'estrato_socioeconomico', label: 'Estrato socioeconómico', type: 'select', options: ['1', '2', '3', '4', '5', '6'] },
         ],
       },
       {
-        title: 'Datos eléctricos',
-        icon: '⚡',
+        title: 'II. Demanda de consumos del cliente e información técnica',
         fields: [
-          { key: 'comercializador', label: 'Comercializador actual', type: 'select', options: ['EMCALI', 'Energía Pacífico', 'CELSIA', 'ENEL Codensa', 'AIR-E', 'Afinia', 'Otro'] },
-          { key: 'nic', label: 'NIC / # cuenta contrato', type: 'text', placeholder: 'Tomado del recibo' },
-          { key: 'estrato', label: 'Estrato', type: 'select', options: ['1', '2', '3', '4', '5', '6'] },
-          { key: 'tipo_servicio', label: 'Tipo de servicio', type: 'select', options: ['Monofásico bifilar', 'Monofásico trifilar', 'Trifásico tetrafilar'] },
-          { key: 'tension_nominal', label: 'Tensión nominal', type: 'select', options: ['120V', '208V', '220V', '240V', '440V'] },
-          { key: 'capacidad_breaker', label: 'Capacidad del breaker principal', type: 'number', inputMode: 'numeric', unit: 'A', placeholder: '80' },
-          { key: 'medidor_actual', label: 'Tipo de medidor actual', type: 'select', options: ['Electromecánico', 'Electrónico simple', 'Bidireccional', 'Inteligente AMI', 'No identificado'] },
-          { key: 'consumo_mensual_kwh', label: 'Consumo mensual promedio', type: 'number', inputMode: 'decimal', unit: 'kWh', placeholder: 'De factura' },
-          { key: 'aire_acondicionados', label: '¿Cuántos aires acondicionados tiene?', type: 'number', inputMode: 'numeric', placeholder: '0' },
+          { key: 'consumo_mes_1', label: 'Consumo Mes 1', type: 'number', inputMode: 'decimal', unit: 'kWh' },
+          { key: 'consumo_mes_2', label: 'Consumo Mes 2', type: 'number', inputMode: 'decimal', unit: 'kWh' },
+          { key: 'consumo_mes_3', label: 'Consumo Mes 3', type: 'number', inputMode: 'decimal', unit: 'kWh' },
+          { key: 'consumo_mes_4', label: 'Consumo Mes 4', type: 'number', inputMode: 'decimal', unit: 'kWh' },
+          { key: 'consumo_mes_5', label: 'Consumo Mes 5', type: 'number', inputMode: 'decimal', unit: 'kWh' },
+          { key: 'consumo_mes_6', label: 'Consumo Mes 6', type: 'number', inputMode: 'decimal', unit: 'kWh' },
+          { key: 'operador_red', label: 'Operador de Red (OR)', type: 'select', options: ['EMCALI', 'CELSIA', 'ENEL Codensa', 'AIR-E', 'Afinia', 'Electricaribe', 'EPM', 'Otro'] },
+          { key: 'numero_contrato_or', label: 'Número de contrato (OR)', type: 'text' },
+          { key: 'capacidad_transformador_kva', label: 'Capacidad del transformador', type: 'number', inputMode: 'decimal', unit: 'kVA' },
+          { key: 'nivel_tension_v', label: 'Nivel de tensión', type: 'number', inputMode: 'decimal', unit: 'V' },
+          { key: 'numero_medidor', label: 'Número del medidor', type: 'text' },
+          { key: 'tipo_medidor', label: 'Tipo de medidor', type: 'radio', options: ['Monofásico', 'Bifásico', 'Trifásico'], required: true },
         ],
       },
       {
-        title: 'Datos del techo / espacio FV',
-        icon: '☀️',
+        title: 'III. Información general de la vivienda',
         fields: [
-          { key: 'tipo_techo', label: 'Tipo de cubierta', type: 'select', options: ['Teja barro', 'Teja eternit/asbesto', 'Teja metálica', 'Losa concreto', 'Membrana asfáltica', 'Otro'], required: true },
-          { key: 'orientacion', label: 'Orientación principal', type: 'select', options: ['Norte', 'Sur', 'Este', 'Oeste', 'NE', 'NO', 'SE', 'SO'] },
-          { key: 'pendiente_grados', label: 'Pendiente del techo', type: 'number', inputMode: 'decimal', unit: '°', placeholder: '15' },
-          { key: 'area_disponible_m2', label: 'Área disponible aproximada', type: 'number', inputMode: 'decimal', unit: 'm²', placeholder: '60' },
-          { key: 'sombras', label: 'Sombras detectadas', type: 'select', options: ['Sin sombras', 'Sombras de mañana', 'Sombras de tarde', 'Sombras parciales todo el día', 'Sombras significativas'] },
-          { key: 'fuente_sombra', label: '¿Qué genera la sombra?', type: 'text', placeholder: 'Árbol, edificio vecino, tanque agua...' },
-          { key: 'estado_techo', label: 'Estado estructural del techo', type: 'select', options: ['Excelente', 'Bueno', 'Regular (requiere refuerzo)', 'Malo (no apto)'] },
+          { key: 'tipo_cubierta', label: 'Tipo de cubierta', type: 'select', options: ['Teja barro', 'Teja eternit/asbesto', 'Teja metálica', 'Losa concreto', 'Membrana asfáltica', 'Otro'] },
+          { key: 'medio_acceso_cubierta', label: 'Medio de acceso a cubierta', type: 'select', options: ['Escalera fija', 'Escalera externa', 'Andamio', 'Acceso por interior', 'Otro'] },
+          { key: 'tipo_cerchas', label: 'Tipo de cerchas', type: 'text' },
+          { key: 'puntos_anclaje', label: 'Puntos de anclaje', type: 'radio', options: ['Sí', 'No'] },
+          { key: 'area_propuesta_cubierta_m2', label: 'Área propuesta en cubierta', type: 'number', inputMode: 'decimal', unit: 'm²' },
+          { key: 'presencia_sombras', label: 'Presencia de sombras', type: 'radio', options: ['Sí', 'No'] },
+          { key: 'orientacion_cardinal_cubierta', label: 'Orientación cardinal de la cubierta', type: 'select', options: ['Norte', 'Sur', 'Este', 'Oeste', 'NE', 'NO', 'SE', 'SO'] },
+          { key: 'vehiculo_electrico', label: 'Vehículo eléctrico', type: 'radio', options: ['Sí', 'No'] },
+          { key: 'distancia_cubierta_inversor', label: 'Distancia de cubierta al inversor', type: 'number', inputMode: 'decimal', unit: 'm' },
+          { key: 'sistema_puesta_tierra', label: 'Sistema de puesta a tierra', type: 'radio', options: ['Sí', 'No'] },
+          { key: 'distancia_tablero_inversor', label: 'Distancia tablero al inversor', type: 'number', inputMode: 'decimal', unit: 'm' },
+          { key: 'proyectan_aumentar_consumos', label: 'Proyectan aumentar consumos', type: 'radio', options: ['Sí', 'No'] },
+          { key: 'estado_tablero_principal', label: 'Estado del tablero principal', type: 'select', options: ['Excelente', 'Bueno', 'Regular', 'Malo'] },
+          { key: 'interconexion_tablero', label: 'Interconexión en tablero', type: 'radio', options: ['Sí', 'No'] },
+          { key: 'instalacion_equipos_ubicacion', label: 'Instalación de equipos: piso o cubierta', type: 'select', options: ['Piso', 'Cubierta', 'Mixto'] },
+          { key: 'operador_telefonia_mejor_senal', label: 'Operador de telefonía con mejor señal', type: 'select', options: ['Claro', 'Movistar', 'Tigo', 'WOM', 'Otro'] },
         ],
       },
       {
-        title: 'Acceso y logística',
-        icon: '🛠️',
+        title: 'IV. Mediciones eléctricas',
         fields: [
-          { key: 'acceso_techo', label: 'Acceso al techo', type: 'select', options: ['Fácil (escalera fija)', 'Medio (escalera externa)', 'Difícil (andamio requerido)'] },
-          { key: 'distancia_panel_inversor_m', label: 'Distancia paneles → ubicación inversor', type: 'number', inputMode: 'decimal', unit: 'm', placeholder: '10' },
-          { key: 'espacio_inversor', label: '¿Hay espacio adecuado para el inversor?', type: 'radio', options: ['Sí', 'No', 'Por confirmar'] },
-          { key: 'requiere_hoa', label: '¿Requiere permiso de copropiedad/HOA?', type: 'radio', options: ['Sí', 'No', 'No aplica'] },
-          { key: 'restricciones', label: 'Restricciones / comentarios', type: 'textarea', placeholder: 'Horarios permitidos, observaciones del administrador...' },
+          { key: 'tension_l1_n_v', label: 'Tensión L1–N', type: 'number', inputMode: 'decimal', unit: 'V' },
+          { key: 'corriente_i1', label: 'Corriente I1', type: 'number', inputMode: 'decimal', unit: 'A' },
+          { key: 'corriente_neutro', label: 'Corriente de neutro', type: 'number', inputMode: 'decimal', unit: 'A' },
+          { key: 'tension_l2_n_v', label: 'Tensión L2–N', type: 'number', inputMode: 'decimal', unit: 'V' },
+          { key: 'corriente_i2', label: 'Corriente I2', type: 'number', inputMode: 'decimal', unit: 'A' },
+          { key: 'corriente_tierra', label: 'Corriente de tierra', type: 'number', inputMode: 'decimal', unit: 'A' },
+          { key: 'tension_l3_n_v', label: 'Tensión L3–N', type: 'number', inputMode: 'decimal', unit: 'V' },
+          { key: 'corriente_i3', label: 'Corriente I3', type: 'number', inputMode: 'decimal', unit: 'A' },
+          { key: 'tension_n_pe_v', label: 'Tensión N–PE', type: 'number', inputMode: 'decimal', unit: 'V' },
+          { key: 'tension_l1_l2_v', label: 'Tensión L1–L2', type: 'number', inputMode: 'decimal', unit: 'V' },
+          { key: 'tension_l2_l3_v', label: 'Tensión L2–L3', type: 'number', inputMode: 'decimal', unit: 'V' },
+          { key: 'tension_l3_l1_v', label: 'Tensión L3–L1', type: 'number', inputMode: 'decimal', unit: 'V' },
         ],
       },
       {
-        title: 'Recomendación técnica',
-        icon: '✅',
+        title: 'V. Registro fotográfico',
         fields: [
-          { key: 'apto_para_instalacion', label: '¿Apto para instalación?', type: 'radio', options: ['Sí', 'Sí con ajustes', 'No'], required: true },
-          { key: 'capacidad_recomendada_kw', label: 'Capacidad recomendada', type: 'number', inputMode: 'decimal', unit: 'kWp', placeholder: '10' },
-          { key: 'numero_paneles_recomendado', label: 'N° paneles propuestos', type: 'number', inputMode: 'numeric', placeholder: '20' },
-          { key: 'tipo_inversor_recomendado', label: 'Tipo de inversor', type: 'select', options: ['Livoltek HP3', 'DEYE Híbrido', 'On-Grid simple', 'A definir'] },
-          { key: 'incluye_bateria', label: '¿Incluye batería?', type: 'radio', options: ['Sí', 'No', 'Opcional'] },
-          { key: 'observaciones', label: 'Observaciones finales', type: 'textarea' },
+          { key: 'foto_categorias_nota', label: 'Las fotos se suben abajo. Categorías esperadas', type: 'textarea', help: 'Medidor eléctrico · Tablero de distribución · Proyección ubicación de equipos · Tipo de cubierta · Cerchas identificadas · Vistas aéreas · Fachada de la casa. Al subir una foto, pon en su descripción la categoría a la que pertenece.' },
+        ],
+      },
+      {
+        title: 'VI. Observaciones',
+        fields: [
+          { key: 'observaciones', label: 'Observaciones', type: 'textarea' },
+        ],
+      },
+      {
+        title: 'Aprobación',
+        fields: [
+          { key: 'aprobado', label: 'Resultado', type: 'radio', options: ['Aprobado', 'No aprobado'], required: true },
+          { key: 'motivo_no_aprobado', label: 'Motivo (si no aprobado)', type: 'textarea' },
+          { key: 'quien_realiza_visita', label: 'Quien realiza la visita', type: 'text', required: true, help: 'Nombre del técnico que firma el acta.' },
         ],
       },
     ],
@@ -114,70 +140,64 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
   // ───────── VISITA DE INSTALACIÓN ─────────
   {
     type: 'instalacion',
-    label: 'Visita de Instalación',
+    label: 'Acta de Visita de Instalación',
     shortLabel: 'Instalación',
-    description: 'Acta de la instalación física del sistema solar.',
-    icon: '🔧',
+    description: 'Registro de la instalación física del sistema solar.',
     color: '#10b981',
+    formCode: 'FO:Instalacion',
     sections: [
       {
-        title: 'Identificación de la instalación',
-        icon: '📋',
+        title: 'I. Identificación de la instalación',
         fields: [
           { key: 'fecha_instalacion', label: 'Fecha de instalación', type: 'date', required: true },
           { key: 'hora_inicio', label: 'Hora inicio', type: 'time' },
           { key: 'hora_fin', label: 'Hora finalización', type: 'time' },
-          { key: 'cuadrilla', label: 'Cuadrilla / equipo', type: 'text', placeholder: 'Nombres de los técnicos' },
-          { key: 'cliente_presente', label: '¿Cliente presente?', type: 'radio', options: ['Sí', 'No'] },
+          { key: 'cuadrilla', label: 'Cuadrilla / equipo técnico', type: 'text' },
+          { key: 'cliente_presente', label: 'Cliente presente', type: 'radio', options: ['Sí', 'No'] },
         ],
       },
       {
-        title: 'Inversor instalado',
-        icon: '⚡',
+        title: 'II. Inversor instalado',
         fields: [
           { key: 'inv_marca', label: 'Marca del inversor', type: 'select', options: ['LIVOLTEK', 'DEYE', 'Huawei', 'Sungrow', 'Otra'], required: true },
-          { key: 'inv_modelo', label: 'Modelo', type: 'text', required: true, placeholder: 'HP3-10KL2 / SUN-15K-SG01HP3' },
-          { key: 'inv_serial', label: 'Número de serie', type: 'text', required: true, placeholder: 'HP310K2HWC290002' },
+          { key: 'inv_modelo', label: 'Modelo', type: 'text', required: true },
+          { key: 'inv_serial', label: 'Número de serie', type: 'text', required: true },
           { key: 'inv_potencia_kw', label: 'Potencia nominal', type: 'number', inputMode: 'decimal', unit: 'kW', required: true },
-          { key: 'inv_ubicacion', label: 'Ubicación física', type: 'text', placeholder: 'Cuarto técnico, pared norte, etc.' },
+          { key: 'inv_ubicacion', label: 'Ubicación física', type: 'text' },
         ],
       },
       {
-        title: 'Paneles solares',
-        icon: '☀️',
+        title: 'III. Paneles solares',
         fields: [
-          { key: 'panel_marca', label: 'Marca de paneles', type: 'text', placeholder: 'Jinko / Trina / Canadian Solar / etc.' },
+          { key: 'panel_marca', label: 'Marca de paneles', type: 'text' },
           { key: 'panel_modelo', label: 'Modelo', type: 'text' },
           { key: 'panel_cantidad', label: 'Cantidad instalada', type: 'number', inputMode: 'numeric', required: true },
-          { key: 'panel_potencia_wp', label: 'Potencia c/u', type: 'number', inputMode: 'numeric', unit: 'Wp', placeholder: '550' },
+          { key: 'panel_potencia_wp', label: 'Potencia c/u', type: 'number', inputMode: 'numeric', unit: 'Wp' },
           { key: 'panel_total_kwp', label: 'Total kWp instalados', type: 'number', inputMode: 'decimal', unit: 'kWp' },
-          { key: 'configuracion_strings', label: 'Configuración de strings', type: 'text', placeholder: '2 strings × 10 paneles' },
+          { key: 'configuracion_strings', label: 'Configuración de strings', type: 'text' },
         ],
       },
       {
-        title: 'Batería (si aplica)',
-        icon: '🔋',
+        title: 'IV. Batería (si aplica)',
         fields: [
-          { key: 'batt_presente', label: '¿Lleva batería?', type: 'radio', options: ['Sí', 'No'] },
-          { key: 'batt_marca', label: 'Marca batería', type: 'text', placeholder: 'BYD / DEYE / Pylontech' },
+          { key: 'batt_presente', label: 'Lleva batería', type: 'radio', options: ['Sí', 'No'] },
+          { key: 'batt_marca', label: 'Marca batería', type: 'text' },
           { key: 'batt_modelo', label: 'Modelo', type: 'text' },
           { key: 'batt_capacidad_kwh', label: 'Capacidad', type: 'number', inputMode: 'decimal', unit: 'kWh' },
           { key: 'batt_serial', label: 'Serial', type: 'text' },
         ],
       },
       {
-        title: 'Gateway Pulsar + Medidores',
-        icon: '📡',
+        title: 'V. Gateway Pulsar y medidores',
         fields: [
-          { key: 'gateway_serial', label: 'Serial del Pulsar', type: 'text', placeholder: 'IN42420XXX', required: true },
-          { key: 'gateway_simcard', label: '# SIM card 4G', type: 'text' },
-          { key: 'meter_solar_serial', label: 'Serial medidor solar', type: 'text', placeholder: '2223005XXX', required: true },
-          { key: 'meter_red_serial', label: 'Serial medidor de red', type: 'text', placeholder: '2223005XXX', required: true },
+          { key: 'gateway_serial', label: 'Serial del Pulsar', type: 'text', required: true },
+          { key: 'gateway_simcard', label: 'Número SIM card 4G', type: 'text' },
+          { key: 'meter_solar_serial', label: 'Serial medidor solar', type: 'text', required: true },
+          { key: 'meter_red_serial', label: 'Serial medidor de red', type: 'text', required: true },
         ],
       },
       {
-        title: 'Pruebas y puesta en marcha',
-        icon: '🧪',
+        title: 'VI. Pruebas y puesta en marcha',
         fields: [
           { key: 'cierre_electrico_ok', label: 'Cierre eléctrico verificado', type: 'checkbox' },
           { key: 'polaridad_dc_ok', label: 'Polaridad DC correcta', type: 'checkbox' },
@@ -190,12 +210,12 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         ],
       },
       {
-        title: 'Conformidad',
-        icon: '✍️',
+        title: 'VII. Conformidad',
         fields: [
           { key: 'cliente_recibio', label: 'Cliente recibió a satisfacción', type: 'radio', options: ['Sí', 'No', 'Con observaciones'], required: true },
           { key: 'observaciones_cliente', label: 'Observaciones del cliente', type: 'textarea' },
           { key: 'pendientes', label: 'Pendientes a cerrar', type: 'textarea' },
+          { key: 'quien_realiza_visita', label: 'Quien realiza la visita', type: 'text', required: true },
         ],
       },
     ],
@@ -204,17 +224,16 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
   // ───────── VISITA DE EMERGENCIA ─────────
   {
     type: 'emergencia',
-    label: 'Visita de Emergencia',
+    label: 'Acta de Visita de Emergencia',
     shortLabel: 'Emergencia',
-    description: 'Atención a fallas, paradas, alarmas o requerimientos urgentes.',
-    icon: '🚨',
+    description: 'Atención a fallas, paradas o requerimientos urgentes.',
     color: '#ef4444',
+    formCode: 'FO:Emergencia',
     sections: [
       {
-        title: 'Motivo del llamado',
-        icon: '📞',
+        title: 'I. Motivo del llamado',
         fields: [
-          { key: 'reportado_por', label: 'Reportado por', type: 'text', placeholder: 'Cliente / SAC / Monitoreo' },
+          { key: 'reportado_por', label: 'Reportado por', type: 'text' },
           { key: 'fecha_reporte', label: 'Fecha del reporte', type: 'date' },
           { key: 'hora_reporte', label: 'Hora del reporte', type: 'time' },
           { key: 'urgencia', label: 'Nivel de urgencia', type: 'select', options: ['Alta - sistema fuera', 'Media - operativo con falla', 'Baja - consulta'] },
@@ -222,34 +241,32 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         ],
       },
       {
-        title: 'Estado encontrado',
-        icon: '🔍',
+        title: 'II. Estado encontrado',
         fields: [
           { key: 'equipo_afectado', label: 'Equipo afectado', type: 'select', options: ['Inversor', 'Paneles', 'Medidor solar', 'Medidor red', 'Gateway Pulsar', 'Batería', 'Cableado', 'Breaker', 'Otro'] },
-          { key: 'codigo_falla', label: 'Código de falla (si aparece en pantalla/app)', type: 'text', placeholder: 'Ej: E040, ECEO, etc.' },
-          { key: 'led_estado', label: 'Estado de LEDs/pantalla', type: 'text' },
+          { key: 'codigo_falla', label: 'Código de falla', type: 'text' },
+          { key: 'led_estado', label: 'Estado de LEDs / pantalla', type: 'text' },
           { key: 'diagnostico_inicial', label: 'Diagnóstico inicial', type: 'textarea', required: true },
         ],
       },
       {
-        title: 'Acciones realizadas',
-        icon: '🔧',
+        title: 'III. Acciones realizadas',
         fields: [
-          { key: 'acciones', label: 'Acciones tomadas en sitio', type: 'textarea', required: true, placeholder: 'Reinicio, cambio de fusible, ajuste de torque, etc.' },
-          { key: 'repuestos_usados', label: 'Repuestos / consumibles usados', type: 'textarea' },
+          { key: 'acciones', label: 'Acciones tomadas en sitio', type: 'textarea', required: true },
+          { key: 'repuestos_usados', label: 'Repuestos y consumibles usados', type: 'textarea' },
           { key: 'duracion_min', label: 'Tiempo total de intervención', type: 'number', inputMode: 'numeric', unit: 'min' },
         ],
       },
       {
-        title: 'Resultado',
-        icon: '✅',
+        title: 'IV. Resultado',
         fields: [
-          { key: 'resuelto', label: '¿Quedó resuelto?', type: 'radio', options: ['Sí, totalmente', 'Parcial - requiere seguimiento', 'No - escala a fábrica'], required: true },
-          { key: 'requiere_repuesto', label: '¿Requiere repuesto/RMA?', type: 'radio', options: ['Sí', 'No'] },
+          { key: 'resuelto', label: 'Quedó resuelto', type: 'radio', options: ['Sí, totalmente', 'Parcial - requiere seguimiento', 'No - escala a fábrica'], required: true },
+          { key: 'requiere_repuesto', label: 'Requiere repuesto o RMA', type: 'radio', options: ['Sí', 'No'] },
           { key: 'descripcion_repuesto', label: 'Detalle del repuesto necesario', type: 'textarea' },
           { key: 'fecha_seguimiento', label: 'Fecha próximo seguimiento', type: 'date' },
-          { key: 'lectura_post_intervencion', label: 'Lectura/estado post-intervención', type: 'textarea' },
+          { key: 'lectura_post_intervencion', label: 'Lectura o estado post-intervención', type: 'textarea' },
           { key: 'firma_cliente', label: 'Cliente firmó conformidad', type: 'checkbox' },
+          { key: 'quien_realiza_visita', label: 'Quien realiza la visita', type: 'text', required: true },
         ],
       },
     ],
@@ -258,15 +275,14 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
   // ───────── VISITA DE NORMALIZACIÓN ─────────
   {
     type: 'normalizacion',
-    label: 'Visita de Normalización',
+    label: 'Acta de Visita de Normalización',
     shortLabel: 'Normalización',
     description: 'Revisión y ajustes para dejar el sistema en condiciones óptimas según norma.',
-    icon: '📐',
     color: '#f59e0b',
+    formCode: 'FO:Normalizacion',
     sections: [
       {
-        title: 'Razón de la normalización',
-        icon: '📋',
+        title: 'I. Razón de la normalización',
         fields: [
           { key: 'motivo', label: 'Motivo principal', type: 'select', options: ['Auditoría de calidad', 'Cumplimiento norma RETIE', 'Resolución CREG penalización', 'Cambio comercializador', 'Solicitud cliente', 'Otro'], required: true },
           { key: 'motivo_detalle', label: 'Detalle del motivo', type: 'textarea' },
@@ -274,11 +290,10 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         ],
       },
       {
-        title: 'Estado encontrado',
-        icon: '🔎',
+        title: 'II. Estado encontrado',
         fields: [
           { key: 'estado_general', label: 'Estado general del sistema', type: 'select', options: ['Excelente', 'Bueno', 'Regular', 'Malo'] },
-          { key: 'factor_potencia_medido', label: 'Factor de potencia medido', type: 'number', inputMode: 'decimal', placeholder: '0.92' },
+          { key: 'factor_potencia_medido', label: 'Factor de potencia medido', type: 'number', inputMode: 'decimal' },
           { key: 'temperatura_inversor_c', label: 'Temperatura inversor', type: 'number', inputMode: 'decimal', unit: '°C' },
           { key: 'apriete_borneras_ok', label: 'Apriete de borneras revisado', type: 'checkbox' },
           { key: 'limpieza_paneles_ok', label: 'Limpieza de paneles ejecutada', type: 'checkbox' },
@@ -288,22 +303,20 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         ],
       },
       {
-        title: 'Cambios aplicados',
-        icon: '🔧',
+        title: 'III. Cambios aplicados',
         fields: [
           { key: 'config_inversor_modificada', label: 'Configuración del inversor modificada', type: 'checkbox' },
-          { key: 'detalle_config', label: 'Detalle de cambios de config', type: 'textarea', placeholder: 'Ej: cos φ ajustado de 1.0 a 0.95, modo Self-consumption habilitado' },
+          { key: 'detalle_config', label: 'Detalle de cambios de configuración', type: 'textarea' },
           { key: 'firmware_actualizado', label: 'Firmware actualizado', type: 'checkbox' },
           { key: 'cambio_equipos', label: 'Equipos reemplazados', type: 'textarea' },
           { key: 'rotulado_aplicado', label: 'Rotulación añadida', type: 'textarea' },
         ],
       },
       {
-        title: 'Pruebas finales',
-        icon: '🧪',
+        title: 'IV. Pruebas finales',
         fields: [
           { key: 'prueba_generacion_kw', label: 'Potencia de generación medida', type: 'number', inputMode: 'decimal', unit: 'kW' },
-          { key: 'fp_final', label: 'Factor de potencia final', type: 'number', inputMode: 'decimal', placeholder: '0.96' },
+          { key: 'fp_final', label: 'Factor de potencia final', type: 'number', inputMode: 'decimal' },
           { key: 'lectura_final_solar', label: 'Lectura medidor solar', type: 'number', inputMode: 'decimal', unit: 'kWh' },
           { key: 'lectura_final_red', label: 'Lectura medidor red', type: 'number', inputMode: 'decimal', unit: 'kWh' },
           { key: 'pruebas_ok', label: 'Todas las pruebas pasaron', type: 'checkbox' },
@@ -311,13 +324,13 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         ],
       },
       {
-        title: 'Documentación',
-        icon: '📄',
+        title: 'V. Documentación',
         fields: [
           { key: 'acta_entregada', label: 'Acta entregada al cliente', type: 'checkbox' },
           { key: 'manual_entregado', label: 'Manual de operación entregado', type: 'checkbox' },
           { key: 'capacitacion_cliente', label: 'Capacitación al cliente realizada', type: 'checkbox' },
           { key: 'pendientes', label: 'Pendientes', type: 'textarea' },
+          { key: 'quien_realiza_visita', label: 'Quien realiza la visita', type: 'text', required: true },
         ],
       },
     ],

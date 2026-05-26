@@ -1,0 +1,43 @@
+name: Instant Check (15min control loop)
+
+# Lazo de control de 15 minutos:
+#   - Trae powerAI, powerRI y corriente del meter rojo
+#   - Trae SOC batería + estado on/off del inversor (DEYE)
+#   - Calcula cos φ instantáneo + desbalance de fases
+#   - Dispara alertas en vivo (fp < 0.9, breaker, batería baja, etc.)
+#
+# Vercel Hobby solo permite cron diario, así que disparamos desde GitHub Actions.
+# Para que esto funcione hay que configurar el secret CRON_SECRET en:
+#   Repo → Settings → Secrets and variables → Actions → New repository secret
+#   (debe coincidir con CRON_SECRET en las env vars de Vercel)
+
+on:
+  schedule:
+    # Cada 15 minutos. Cron de GitHub Actions tiene mínimo de 5 min en teoría,
+    # pero por load del scheduler suele ejecutar con ±2-5 min de drift.
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  instant-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /api/cron/instant-check
+        run: |
+          response=$(curl -sS -w "\n%{http_code}" \
+            --max-time 90 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "x-trigger: github-actions" \
+            https://sunnyhes.vercel.app/api/cron/instant-check)
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n1)
+          echo "HTTP $status"
+          echo "$body" | head -c 500
+          if [ "$status" -ge 400 ]; then
+            echo "::error::instant-check returned $status"
+            exit 1
+          fi

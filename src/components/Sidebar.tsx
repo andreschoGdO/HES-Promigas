@@ -90,16 +90,28 @@ export function Sidebar() {
         })}
       </div>
 
-      <div className="sidebar-footer">
-        <div className="sidebar-avatar">D</div>
-        <div className="sidebar-user-info">
-          <div className="sidebar-user-name">David Eraso</div>
-          <div className="sidebar-user-role">Admin</div>
+      <Link
+        href="/cuenta"
+        className={`sidebar-footer ${pathname === '/cuenta' ? 'active' : ''}`}
+        style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+        title="Mi cuenta"
+      >
+        <div className="sidebar-avatar">{user?.initial ?? '?'}</div>
+        <div className="sidebar-user-info" style={{ minWidth: 0, overflow: 'hidden' }}>
+          <div className="sidebar-user-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {user?.email?.split('@')[0] ?? 'Mi cuenta'}
+          </div>
+          <div className="sidebar-user-role">Configurar</div>
         </div>
-        <button className="icon-btn" title="Salir" aria-label="Salir">
+        <button
+          className="icon-btn"
+          title="Cerrar sesión"
+          aria-label="Cerrar sesión"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLogout(); }}
+        >
           <LogOut size={14} />
         </button>
-      </div>
+      </Link>
     </aside>
   );
 }

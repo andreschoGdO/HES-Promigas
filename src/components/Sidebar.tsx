@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BarChart3, Settings, LogOut, Sun, Bell } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
 export function Sidebar() {
@@ -38,6 +38,7 @@ export function Sidebar() {
   if (pathname.startsWith('/login') || pathname.startsWith('/auth')) return null;
 
   const navItems = [
+    { label: 'Visitas en Campo', path: '/visitas', icon: ClipboardCheck },
     { label: 'Dashboard', path: '/dashboard', icon: BarChart3 },
   ];
 

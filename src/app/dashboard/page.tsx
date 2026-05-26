@@ -1147,7 +1147,13 @@ const fmtCell = (v: unknown, format?: Col['format']): string => {
   return n.toLocaleString('es-CO');
 };
 
+// Variables numéricas del daily_consumption para graficar (excluye txt/bool)
+const NUMERIC_COLS = COLS.filter((c) => c.format !== 'txt' && c.format !== 'bool');
+
+const SERIES_COLORS = ['#07c5a8', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#10b981', '#ec4899', '#0ea5e9', '#a855f7', '#14b8a6'];
+
 function ConsumosTab() {
+  const [subTab, setSubTab] = useState<'tabla' | 'graficas'>('tabla');
   const [houses, setHouses] = useState<HouseRow[]>([]);
   const [selectedHouse, setSelectedHouse] = useState<string>('');
   const [startDate, setStartDate] = useState<string>(dateStr(weekAgo()));
@@ -1156,21 +1162,22 @@ function ConsumosTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Para Gráficas: multi-select casas + multi-select variables
+  const [chartCasas, setChartCasas] = useState<Set<string>>(new Set());
+  const [chartVars, setChartVars] = useState<Set<string>>(new Set(['generacion_solar_inverter']));
+  const [chartRows, setChartRows] = useState<ConsumptionRow[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+
   const loadHouses = async () => {
     const { data, error } = await supabase
       .from('client_houses')
       .select('id, casa, cliente_id, location, city')
       .order('casa', { ascending: true });
-    if (error) {
-      console.error(error);
-      return;
-    }
+    if (error) { console.error(error); return; }
     setHouses((data ?? []) as HouseRow[]);
   };
 
-  useEffect(() => {
-    loadHouses();
-  }, []);
+  useEffect(() => { loadHouses(); }, []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -1186,7 +1193,6 @@ function ConsumosTab() {
       if (endDate) query = query.lte('dia_consumo', endDate);
       const { data, error } = await query;
       if (error) throw error;
-      // Filtra filas vacías (sin lecturas válidas — típicamente el día actual, cuyo cierre sale al día siguiente)
       const filtered = (data ?? []).filter((r: ConsumptionRow) =>
         r.lectura_eai_meter_solar !== null ||
         r.lectura_eai_meter_red !== null ||
@@ -1200,25 +1206,70 @@ function ConsumosTab() {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedHouse, startDate, endDate]);
+  useEffect(() => { fetchData(); /* eslint-disable-next-line */ }, [selectedHouse, startDate, endDate]);
+
+  // Cargar chartRows independientemente (ignora selectedHouse, usa chartCasas)
+  const fetchChartData = async () => {
+    if (chartCasas.size === 0 || chartVars.size === 0) { setChartRows([]); return; }
+    setChartLoading(true);
+    try {
+      let q = supabase
+        .from('daily_consumption')
+        .select('*, client_houses(casa, cliente_id)')
+        .order('dia_consumo', { ascending: true })
+        .limit(2000);
+      const ids = houses.filter((h) => chartCasas.has(h.casa)).map((h) => h.id);
+      if (ids.length > 0) q = q.in('house_id', ids);
+      if (startDate) q = q.gte('dia_consumo', startDate);
+      if (endDate) q = q.lte('dia_consumo', endDate);
+      const { data } = await q;
+      setChartRows((data ?? []) as unknown as ConsumptionRow[]);
+    } finally {
+      setChartLoading(false);
+    }
+  };
+
+  useEffect(() => { if (subTab === 'graficas') fetchChartData(); /* eslint-disable-next-line */ }, [subTab, chartCasas, chartVars, startDate, endDate, houses.length]);
 
   // Group headers
   const groups: Array<{ name: string; span: number }> = [];
   let prev = '';
   for (const c of COLS) {
-    if (c.group !== prev) {
-      groups.push({ name: c.group, span: 1 });
-      prev = c.group;
-    } else {
-      groups[groups.length - 1].span++;
-    }
+    if (c.group !== prev) { groups.push({ name: c.group, span: 1 }); prev = c.group; }
+    else { groups[groups.length - 1].span++; }
   }
+
+  // Construir chartData: [{ dia_consumo, 'Casa 2 · eai_meter_solar': 123, ... }]
+  const chartSeries = useMemo(() => {
+    const series: Array<{ key: string; casa: string; variable: string; label: string }> = [];
+    for (const casa of chartCasas) {
+      for (const v of chartVars) {
+        const meta = COLS.find((c) => c.key === v);
+        series.push({ key: `${casa}__${v}`, casa, variable: v, label: `${casa} · ${meta?.label ?? v}` });
+      }
+    }
+    return series;
+  }, [chartCasas, chartVars]);
+
+  const chartData = useMemo(() => {
+    const byDate = new Map<string, Record<string, number | string | null>>();
+    for (const r of chartRows) {
+      const casa = r.client_houses?.casa;
+      if (!casa || !chartCasas.has(casa)) continue;
+      const d = r.dia_consumo;
+      if (!byDate.has(d)) byDate.set(d, { dia_consumo: d });
+      const row = byDate.get(d)!;
+      for (const v of chartVars) {
+        const val = r[v as keyof ConsumptionRow];
+        row[`${casa}__${v}`] = typeof val === 'number' ? val : null;
+      }
+    }
+    return Array.from(byDate.values()).sort((a, b) => String(a.dia_consumo).localeCompare(String(b.dia_consumo)));
+  }, [chartRows, chartCasas, chartVars]);
 
   return (
     <>
+      {/* ───── Filtros compartidos ───── */}
       <div className="glass-panel">
         <div className="card-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1226,15 +1277,13 @@ function ConsumosTab() {
             <h2 className="card-title">Filtros</h2>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '14px', alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '14px', alignItems: 'end' }}>
           <div className="input-group" style={{ marginBottom: 0 }}>
-            <label className="input-label">Casa / Cliente</label>
+            <label className="input-label">Casa / Cliente (solo aplica a la Tabla)</label>
             <select value={selectedHouse} onChange={(e) => setSelectedHouse(e.target.value)}>
               <option value="">Todas las casas ({houses.length})</option>
               {houses.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.casa}{h.location ? ` — ${h.location}` : ''}{h.city ? ` (${h.city})` : ''}
-                </option>
+                <option key={h.id} value={h.id}>{h.casa}{h.location ? ` — ${h.location}` : ''}{h.city ? ` (${h.city})` : ''}</option>
               ))}
             </select>
           </div>
@@ -1251,112 +1300,189 @@ function ConsumosTab() {
 
       {error && <div className="alert-error">{error}</div>}
 
-      {!loading && rows.length === 0 && (
-        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
-          <strong>Sin consumo cargado.</strong> Usa <em>Sincronizar Metrum</em> en el header para traer la telemetría diaria.
-        </div>
-      )}
+      {/* Sub-tabs */}
+      <div className="tabs">
+        <button onClick={() => setSubTab('tabla')} className={`tab ${subTab === 'tabla' ? 'active' : ''}`}>Tabla</button>
+        <button onClick={() => setSubTab('graficas')} className={`tab ${subTab === 'graficas' ? 'active' : ''}`}>Gráficas</button>
+      </div>
 
-      {rows.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-          <span>{rows.length} filas (las filas sin lecturas se omiten — el cierre de cada día aparece al día siguiente a las 00:00 COT)</span>
-          <button
-            className="secondary-btn"
-            onClick={() => {
-              const headers = ['casa', 'cliente_id', ...COLS.map((c) => c.label)];
-              const csvRows = rows.map((r) => [
-                r.client_houses?.casa ?? '',
-                r.client_houses?.cliente_id ?? '',
-                ...COLS.map((c) => {
-                  const v = r[c.key];
-                  if (v === null || v === undefined) return '';
-                  if (c.format === 'bool') return v ? 'true' : 'false';
-                  return v as string | number;
-                }),
-              ]);
-              downloadCSV(`consumo-por-dispositivo-${startDate}_${endDate}.csv`, headers, csvRows);
-            }}
-            style={{ fontSize: '0.8rem' }}
-          >
-            <Download size={14} /> CSV
-          </button>
-        </div>
-      )}
+      {/* ═══════ SUB-TAB: TABLA ═══════ */}
+      {subTab === 'tabla' && (
+        <>
+          {!loading && rows.length === 0 && (
+            <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+              <strong>Sin consumo cargado.</strong> Usa <em>Sincronizar Metrum</em> en el header para traer la telemetría diaria.
+            </div>
+          )}
 
-      <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto', maxHeight: '70vh' }}>
-          <table style={{ minWidth: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.78rem' }}>
-            <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
-              <tr>
-                <th style={{ position: 'sticky', left: 0, zIndex: 3, background: 'var(--bg-elevated)' }}>casa</th>
-                <th style={{ background: 'var(--bg-elevated)' }}>cliente_id</th>
-                {groups.map((g) => (
-                  <th
-                    key={g.name}
-                    colSpan={g.span}
-                    style={{
-                      background: GROUP_COLORS[g.name],
-                      textAlign: 'center',
-                      borderLeft: '1px solid var(--border)',
-                      fontWeight: 700,
-                      letterSpacing: '0.04em',
-                    }}
-                  >
-                    {g.name}
-                  </th>
-                ))}
-              </tr>
-              <tr>
-                <th style={{ position: 'sticky', left: 0, zIndex: 3, background: 'var(--bg-elevated)' }}>&nbsp;</th>
-                <th style={{ background: 'var(--bg-elevated)' }}>&nbsp;</th>
-                {COLS.map((c, i) => (
-                  <th
-                    key={c.key as string}
-                    style={{
-                      background: GROUP_COLORS[c.group],
-                      whiteSpace: 'nowrap',
-                      fontSize: '0.7rem',
-                      borderLeft: i === 0 || COLS[i - 1].group !== c.group ? '1px solid var(--border)' : 'none',
-                    }}
-                  >
-                    {c.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={COLS.length + 2} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>Cargando...</td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={COLS.length + 2} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>—</td></tr>
-              ) : (
-                rows.map((r) => (
-                  <tr key={r.id}>
-                    <td style={{ position: 'sticky', left: 0, background: 'var(--bg-surface)', fontWeight: 600 }}>
-                      {r.client_houses?.casa ?? '—'}
-                    </td>
-                    <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                      {r.client_houses?.cliente_id?.slice(0, 8) ?? '—'}…
-                    </td>
-                    {COLS.map((c, i) => (
-                      <td
-                        key={c.key as string}
-                        style={{
-                          whiteSpace: 'nowrap',
-                          textAlign: c.format === 'txt' || c.format === 'bool' ? 'left' : 'right',
-                          borderLeft: i === 0 || COLS[i - 1].group !== c.group ? '1px solid var(--border)' : 'none',
-                        }}
-                      >
-                        {fmtCell(r[c.key], c.format)}
-                      </td>
+          {rows.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', flexWrap: 'wrap', gap: 8 }}>
+              <span>{rows.length} filas · scroll horizontal para ver todas las columnas</span>
+              <button
+                className="secondary-btn"
+                onClick={() => {
+                  const headers = ['casa', 'cliente_id', ...COLS.map((c) => c.label)];
+                  const csvRows = rows.map((r) => [
+                    r.client_houses?.casa ?? '',
+                    r.client_houses?.cliente_id ?? '',
+                    ...COLS.map((c) => {
+                      const v = r[c.key];
+                      if (v === null || v === undefined) return '';
+                      if (c.format === 'bool') return v ? 'true' : 'false';
+                      return v as string | number;
+                    }),
+                  ]);
+                  downloadCSV(`consumo-por-dispositivo-${startDate}_${endDate}.csv`, headers, csvRows);
+                }}
+                style={{ fontSize: '0.8rem' }}
+              >
+                <Download size={14} /> CSV
+              </button>
+            </div>
+          )}
+
+          <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 280px)', minHeight: 500 }}>
+              <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: '0.78rem', width: 'max-content' }}>
+                <thead>
+                  <tr>
+                    <th style={{ position: 'sticky', top: 0, left: 0, zIndex: 30, background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)', borderRight: '2px solid var(--border)', minWidth: 120 }}>Casa</th>
+                    <th style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)', borderRight: '2px solid var(--border)' }}>cliente_id</th>
+                    {groups.map((g) => (
+                      <th key={g.name} colSpan={g.span}
+                        style={{ position: 'sticky', top: 0, zIndex: 20, background: GROUP_COLORS[g.name], textAlign: 'center', borderLeft: '1px solid var(--border)', borderBottom: '1px solid var(--border)', fontWeight: 700, letterSpacing: '0.04em' }}>
+                        {g.name}
+                      </th>
                     ))}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  <tr>
+                    <th style={{ position: 'sticky', top: 32, left: 0, zIndex: 30, background: 'var(--bg-elevated)', borderRight: '2px solid var(--border)', borderBottom: '1px solid var(--border)' }}>&nbsp;</th>
+                    <th style={{ position: 'sticky', top: 32, zIndex: 20, background: 'var(--bg-elevated)', borderRight: '2px solid var(--border)', borderBottom: '1px solid var(--border)' }}>&nbsp;</th>
+                    {COLS.map((c, i) => (
+                      <th key={c.key as string}
+                        style={{ position: 'sticky', top: 32, zIndex: 20, background: GROUP_COLORS[c.group], whiteSpace: 'nowrap', fontSize: '0.7rem', borderLeft: i === 0 || COLS[i - 1].group !== c.group ? '1px solid var(--border)' : 'none', borderBottom: '1px solid var(--border)', padding: '6px 10px' }}>
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr><td colSpan={COLS.length + 2} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>Cargando...</td></tr>
+                  ) : rows.length === 0 ? (
+                    <tr><td colSpan={COLS.length + 2} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>—</td></tr>
+                  ) : (
+                    rows.map((r) => (
+                      <tr key={r.id}>
+                        <td style={{ position: 'sticky', left: 0, zIndex: 10, background: 'var(--bg-surface)', fontWeight: 600, borderRight: '2px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '6px 10px', minWidth: 120 }}>
+                          {r.client_houses?.casa ?? '—'}
+                        </td>
+                        <td style={{ background: 'var(--bg-surface)', fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem', color: 'var(--text-muted)', borderRight: '2px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '6px 10px' }}>
+                          {r.client_houses?.cliente_id?.slice(0, 12) ?? '—'}…
+                        </td>
+                        {COLS.map((c, i) => (
+                          <td key={c.key as string}
+                            style={{ whiteSpace: 'nowrap', textAlign: c.format === 'txt' || c.format === 'bool' ? 'left' : 'right', borderLeft: i === 0 || COLS[i - 1].group !== c.group ? '1px solid var(--border)' : 'none', borderBottom: '1px solid var(--border)', padding: '6px 10px' }}>
+                            {fmtCell(r[c.key], c.format)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ═══════ SUB-TAB: GRÁFICAS ═══════ */}
+      {subTab === 'graficas' && (
+        <>
+          <div className="glass-panel">
+            <div style={{ marginBottom: 14 }}>
+              <label className="input-label" style={{ display: 'block', marginBottom: 8 }}>
+                Casas a comparar <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({chartCasas.size} seleccionadas — máx 6 recomendado)</span>
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 100, overflowY: 'auto' }}>
+                {houses.map((h) => (
+                  <button key={h.id}
+                    onClick={() => {
+                      setChartCasas((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(h.casa)) next.delete(h.casa); else next.add(h.casa);
+                        return next;
+                      });
+                    }}
+                    className={`chip ${chartCasas.has(h.casa) ? 'active' : ''}`}
+                    style={{ fontSize: '0.75rem' }}>
+                    {h.casa}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="input-label" style={{ display: 'block', marginBottom: 8 }}>
+                Variables a graficar <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({chartVars.size} seleccionada{chartVars.size !== 1 ? 's' : ''})</span>
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 110, overflowY: 'auto' }}>
+                {NUMERIC_COLS.map((c) => (
+                  <button key={c.key as string}
+                    onClick={() => {
+                      setChartVars((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(c.key as string)) next.delete(c.key as string); else next.add(c.key as string);
+                        return next;
+                      });
+                    }}
+                    className={`chip ${chartVars.has(c.key as string) ? 'active' : ''}`}
+                    style={{ fontSize: '0.7rem', borderLeft: `3px solid ${GROUP_COLORS[c.group]?.replace('0.08', '0.6') ?? 'var(--accent)'}` }}
+                    title={`Grupo: ${c.group}`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-panel">
+            {chartCasas.size === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+                Selecciona al menos una <strong>casa</strong> arriba para empezar.
+              </div>
+            ) : chartVars.size === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+                Selecciona al menos una <strong>variable</strong> arriba.
+              </div>
+            ) : chartLoading ? (
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Cargando datos...</div>
+            ) : chartData.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Sin datos para las casas y variables seleccionadas en el rango.</div>
+            ) : (
+              <>
+                <div style={{ marginBottom: 10, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  {chartSeries.length} serie{chartSeries.length !== 1 ? 's' : ''} · {chartData.length} días
+                </div>
+                <div style={{ width: '100%', height: 500 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={chartData} margin={{ top: 10, right: 20, bottom: 20, left: 20 }}>
+                      <CartesianGrid stroke="rgba(0,0,0,0.06)" />
+                      <XAxis dataKey="dia_consumo" stroke="var(--text-muted)" fontSize={11} angle={-30} textAnchor="end" height={60} />
+                      <YAxis stroke="var(--text-muted)" fontSize={11} />
+                      <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.78rem' }} />
+                      <Legend wrapperStyle={{ fontSize: '0.72rem' }} />
+                      {chartSeries.map((s, i) => (
+                        <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={SERIES_COLORS[i % SERIES_COLORS.length]} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -1418,6 +1544,18 @@ interface CasaMonth {
 
 const THRESHOLD_RATIO = 0.5;  // 50% — equivalente a fp 0.9 según CREG
 
+// Variables que se pueden graficar en el ReactivaTab (todas son monthly aggregates)
+const REACTIVA_CHART_VARS: Array<{ key: string; label: string; color: string; unit: string }> = [
+  { key: 'ea_kwh',           label: 'Energía Activa Importada (kWh)', color: '#3b82f6', unit: 'kWh' },
+  { key: 'eri_kvarh',        label: 'Reactiva Inductiva ERI (kvarh)', color: '#ef4444', unit: 'kvarh' },
+  { key: 'ere_kvarh',        label: 'Reactiva Capacitiva ERE (kvarh)', color: '#8b5cf6', unit: 'kvarh' },
+  { key: 'ratio_pct',        label: 'Ratio ERI/EA (%)',                color: '#f59e0b', unit: '%' },
+  { key: 'cos_phi',          label: 'Factor de potencia (cos φ)',       color: '#10b981', unit: '' },
+  { key: 'excedente_kvarh',  label: 'Excedente reactivo (kvarh)',       color: '#ec4899', unit: 'kvarh' },
+  { key: 'cop',              label: 'Penalización estimada (COP)',      color: '#dc2626', unit: 'COP' },
+  { key: 'generacion_kwh',   label: 'Generación solar mensual (kWh)',  color: '#07c5a8', unit: 'kWh' },
+];
+
 function ReactivaTab() {
   const [closures, setClosures] = useState<ReactivaClosure[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1429,7 +1567,12 @@ function ReactivaTab() {
     return d.toISOString().slice(0, 10);
   });
   const [endDate, setEndDate] = useState<string>(dateStr(today()));
-  const [tarifaCOP, setTarifaCOP] = useState<number>(130); // COP por kvarh excedente
+  const [tarifaCOP, setTarifaCOP] = useState<number>(130);
+
+  // Gráficas custom
+  const [genByCasaMonth, setGenByCasaMonth] = useState<Map<string, number>>(new Map()); // "Casa|YYYY-MM" → Wh
+  const [chartCasas, setChartCasas] = useState<Set<string>>(new Set());
+  const [chartVars, setChartVars] = useState<Set<string>>(new Set(['eri_kvarh', 'generacion_kwh']));
 
   const fetchData = async () => {
     setLoading(true);
@@ -1459,6 +1602,26 @@ function ReactivaTab() {
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate]);
+
+  // Cargar generación mensual por casa (agregado del daily_casa_metrics)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('daily_casa_metrics')
+        .select('casa, record_date, generacion_wh')
+        .gte('record_date', startDate)
+        .lte('record_date', endDate)
+        .limit(10000);
+      const m = new Map<string, number>();
+      for (const r of data ?? []) {
+        if (!r.casa || r.generacion_wh === null) continue;
+        const month = r.record_date.slice(0, 7);
+        const key = `${r.casa}|${month}`;
+        m.set(key, (m.get(key) ?? 0) + Number(r.generacion_wh));
+      }
+      setGenByCasaMonth(m);
+    })();
   }, [startDate, endDate]);
 
   // Calcular per casa per mes a partir de los closures
@@ -1705,6 +1868,9 @@ function ReactivaTab() {
         </div>
       </div>
 
+      {/* ═══════ GRÁFICAS COMPARATIVAS ═══════ */}
+      <ReactivaChart casaMonths={casaMonths} genByCasaMonth={genByCasaMonth} chartCasas={chartCasas} setChartCasas={setChartCasas} chartVars={chartVars} setChartVars={setChartVars} />
+
       {/* Nota explicativa */}
       <div className="alert-warning" style={{ fontSize: '0.78rem', lineHeight: 1.6 }}>
         <strong>📘 Cómo se calcula:</strong> La <strong>Resolución CREG 015 de 2018</strong> exige que el factor de potencia (cos φ)
@@ -1716,6 +1882,193 @@ function ReactivaTab() {
         referencial — la tarifa real está en tu factura.
       </div>
     </>
+  );
+}
+
+/* ─────────────── Sub-componente: gráficas comparativas del ReactivaTab ─────────────── */
+function ReactivaChart({
+  casaMonths, genByCasaMonth, chartCasas, setChartCasas, chartVars, setChartVars,
+}: {
+  casaMonths: CasaMonth[];
+  genByCasaMonth: Map<string, number>;
+  chartCasas: Set<string>;
+  setChartCasas: React.Dispatch<React.SetStateAction<Set<string>>>;
+  chartVars: Set<string>;
+  setChartVars: React.Dispatch<React.SetStateAction<Set<string>>>;
+}) {
+  // Casas disponibles (de las que tienen al menos un mes con data)
+  const availableCasas = useMemo(() => Array.from(new Set(casaMonths.map((m) => m.casa))).sort(), [casaMonths]);
+
+  // Aplicar un preset
+  const applyPreset = (preset: 'gen_vs_reactiva' | 'gen_vs_cosphi' | 'reactiva_vs_demanda') => {
+    // Preseleccionar las 4 casas con mayor ratio si no hay nada
+    if (chartCasas.size === 0) {
+      const ranked = casaMonths
+        .filter((m) => m.ratio !== null)
+        .sort((a, b) => (b.ratio ?? 0) - (a.ratio ?? 0))
+        .map((m) => m.casa);
+      setChartCasas(new Set(Array.from(new Set(ranked)).slice(0, 4)));
+    }
+    if (preset === 'gen_vs_reactiva') setChartVars(new Set(['generacion_kwh', 'eri_kvarh']));
+    else if (preset === 'gen_vs_cosphi') setChartVars(new Set(['generacion_kwh', 'cos_phi']));
+    else if (preset === 'reactiva_vs_demanda') setChartVars(new Set(['ea_kwh', 'eri_kvarh', 'ratio_pct']));
+  };
+
+  // Variables que necesitan eje secundario (escala 0-1 o 0-100)
+  const NEEDS_RIGHT_AXIS = new Set(['ratio_pct', 'cos_phi']);
+  const hasRightAxis = Array.from(chartVars).some((v) => NEEDS_RIGHT_AXIS.has(v));
+
+  // Helper: obtener valor de la variable para una fila CasaMonth + month
+  const getValue = (m: CasaMonth, v: string): number | null => {
+    switch (v) {
+      case 'ea_kwh':          return m.ea_wh / 1000;
+      case 'eri_kvarh':       return m.eri_varh / 1000;
+      case 'ere_kvarh':       return m.ere_varh / 1000;
+      case 'ratio_pct':       return m.ratio !== null ? m.ratio * 100 : null;
+      case 'cos_phi':         return m.cos_phi_approx;
+      case 'excedente_kvarh': return m.excedente_varh / 1000;
+      case 'cop':             return m.estimacion_cop;
+      case 'generacion_kwh': {
+        const gen = genByCasaMonth.get(`${m.casa}|${m.month}`);
+        return gen !== undefined ? gen / 1000 : null;
+      }
+      default: return null;
+    }
+  };
+
+  // Construir series y data
+  const chartSeries = useMemo(() => {
+    const series: Array<{ key: string; casa: string; variable: string; label: string; color: string; right: boolean }> = [];
+    let idx = 0;
+    for (const casa of chartCasas) {
+      for (const v of chartVars) {
+        const meta = REACTIVA_CHART_VARS.find((x) => x.key === v);
+        series.push({
+          key: `${casa}__${v}`,
+          casa, variable: v,
+          label: `${casa} · ${meta?.label ?? v}`,
+          color: SERIES_COLORS[idx % SERIES_COLORS.length],
+          right: NEEDS_RIGHT_AXIS.has(v),
+        });
+        idx++;
+      }
+    }
+    return series;
+  }, [chartCasas, chartVars]);
+
+  const chartData = useMemo(() => {
+    // Map por mes
+    const byMonth = new Map<string, Record<string, number | string | null>>();
+    for (const m of casaMonths) {
+      if (!chartCasas.has(m.casa)) continue;
+      if (!byMonth.has(m.month)) byMonth.set(m.month, { month: m.month });
+      const row = byMonth.get(m.month)!;
+      for (const v of chartVars) {
+        row[`${m.casa}__${v}`] = getValue(m, v);
+      }
+    }
+    return Array.from(byMonth.values()).sort((a, b) => String(a.month).localeCompare(String(b.month)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [casaMonths, chartCasas, chartVars, genByCasaMonth]);
+
+  return (
+    <div className="glass-panel">
+      <h3 style={{ margin: 0, marginBottom: 14, fontSize: '1rem' }}>📈 Gráficas comparativas</h3>
+
+      {/* Presets */}
+      <div style={{ marginBottom: 12 }}>
+        <label className="input-label" style={{ display: 'block', marginBottom: 6 }}>Análisis pre-configurados</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <button className="chip" onClick={() => applyPreset('gen_vs_reactiva')}>☀️ Generación vs ⚡ Reactiva</button>
+          <button className="chip" onClick={() => applyPreset('gen_vs_cosphi')}>☀️ Generación vs cos φ</button>
+          <button className="chip" onClick={() => applyPreset('reactiva_vs_demanda')}>🔌 Demanda vs Reactiva vs Ratio</button>
+          <button className="chip" onClick={() => { setChartCasas(new Set()); setChartVars(new Set()); }} style={{ color: 'var(--text-muted)' }}>Limpiar</button>
+        </div>
+      </div>
+
+      {/* Selección de casas */}
+      <div style={{ marginBottom: 12 }}>
+        <label className="input-label" style={{ display: 'block', marginBottom: 6 }}>
+          Casas a comparar <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({chartCasas.size} de {availableCasas.length})</span>
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 90, overflowY: 'auto' }}>
+          {availableCasas.map((casa) => (
+            <button key={casa}
+              onClick={() => {
+                setChartCasas((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(casa)) next.delete(casa); else next.add(casa);
+                  return next;
+                });
+              }}
+              className={`chip ${chartCasas.has(casa) ? 'active' : ''}`}
+              style={{ fontSize: '0.74rem' }}>
+              {casa}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Selección de variables */}
+      <div style={{ marginBottom: 12 }}>
+        <label className="input-label" style={{ display: 'block', marginBottom: 6 }}>
+          Variables a graficar <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({chartVars.size})</span>
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {REACTIVA_CHART_VARS.map((v) => (
+            <button key={v.key}
+              onClick={() => {
+                setChartVars((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(v.key)) next.delete(v.key); else next.add(v.key);
+                  return next;
+                });
+              }}
+              className={`chip ${chartVars.has(v.key) ? 'active' : ''}`}
+              style={{ fontSize: '0.74rem', borderLeft: `3px solid ${v.color}` }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chart */}
+      {chartCasas.size === 0 || chartVars.size === 0 ? (
+        <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+          Selecciona casas + variables o usa un preset para empezar
+        </div>
+      ) : chartData.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+          Sin datos. Amplía el rango de fechas arriba.
+        </div>
+      ) : (
+        <div style={{ width: '100%', height: 420 }}>
+          <ResponsiveContainer>
+            <LineChart data={chartData} margin={{ top: 10, right: hasRightAxis ? 40 : 20, bottom: 20, left: 20 }}>
+              <CartesianGrid stroke="rgba(0,0,0,0.06)" />
+              <XAxis dataKey="month" stroke="var(--text-muted)" fontSize={11} />
+              <YAxis yAxisId="left" stroke="var(--text-muted)" fontSize={11} />
+              {hasRightAxis && (
+                <YAxis yAxisId="right" orientation="right" stroke="var(--text-muted)" fontSize={11}
+                  label={{ value: 'ratio % / cos φ', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: 'var(--text-muted)' } }} />
+              )}
+              <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.78rem' }} />
+              <Legend wrapperStyle={{ fontSize: '0.72rem' }} />
+              {chartSeries.map((s) => (
+                <Line key={s.key} yAxisId={s.right ? 'right' : 'left'}
+                  type="monotone" dataKey={s.key} name={s.label} stroke={s.color}
+                  strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+          {hasRightAxis && (
+            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: 6 }}>
+              💡 Ratio % y cos φ usan el <strong>eje derecho</strong> (escala distinta a kWh / kvarh)
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

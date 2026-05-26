@@ -6,12 +6,27 @@ const ALLOWED_VARIABLES = [
   'generacion_wh', 'importacion_wh', 'excedentes_wh', 'demanda_wh',
   'gen_dem_pct', 'exc_gen_pct', 'imp_dem_pct',
   'yield_real', 'desempeno_pct', 'potencia_kw', 'imax_a',
-  // Métricas mensuales de reactiva (CREG 015-2018 — calculadas month-to-date)
-  'eri_ratio_pct_mtd',        // Ratio ERI/EA mes-en-curso (%)
-  'excedente_kvarh_mtd',      // Excedente sobre umbral 50% mes-en-curso (kvarh)
-  'cos_phi_mtd',              // Factor de potencia aproximado mes-en-curso
-  'penalizacion_cop_mtd',     // Estimación COP penalización mes-en-curso
+  // Batería diaria (de daily_casa_metrics, alimentadas por daily_consumption)
+  'batt_soh_pct', 'batt_energy_delivered_wh', 'batt_delivery_time_s',
+  // Reactiva mensual CREG 015-2018 (month-to-date)
+  'eri_ratio_pct_mtd', 'excedente_kvarh_mtd', 'cos_phi_mtd', 'penalizacion_cop_mtd',
+  // Lazo 15 min (de instant_metrics)
+  'current_a_max', 'power_active_w', 'power_active_kw', 'power_reactive_var',
+  'cos_phi_now', 'fase_imbalance_pct', 'batt_soc_pct', 'gateway_offline_min',
 ];
+
+// Variables tipo alarma `alarm_*` (mapean a una key dentro de devices.alarm_flags)
+const ALARM_FLAG_KEYS = [
+  'FSVER', 'FSCER', 'FBVER',
+  'FFT', 'ETA',
+  'FFDC',
+  'FEM', 'FFB', 'FFCT', 'FAFER',
+  'EMayor', 'EMenor', 'EAM', 'ECEO', 'EPSR', 'ESSI',
+  'UIcolorRojo', 'UIcolorAmarillo', 'UIcolorNaranja',
+  'TLinvstate_off',
+];
+const isAllowedVariable = (v: string) =>
+  ALLOWED_VARIABLES.includes(v) || (v.startsWith('alarm_') && ALARM_FLAG_KEYS.includes(v.slice(6)));
 const ALLOWED_OPERATORS = ['gt', 'lt', 'eq', 'gte', 'lte'];
 const ALLOWED_SEVERITIES = ['high', 'medium', 'low'];
 
@@ -29,7 +44,7 @@ interface RuleInput {
 
 const validate = (r: RuleInput) => {
   if (!r.name) return 'name requerido';
-  if (!r.variable || !ALLOWED_VARIABLES.includes(r.variable)) return `variable inválida (debe ser uno de: ${ALLOWED_VARIABLES.join(', ')})`;
+  if (!r.variable || !isAllowedVariable(r.variable)) return `variable inválida`;
   if (!r.operator || !ALLOWED_OPERATORS.includes(r.operator)) return `operator inválido (${ALLOWED_OPERATORS.join('|')})`;
   if (typeof r.threshold !== 'number' || !Number.isFinite(r.threshold)) return 'threshold debe ser número';
   if (!r.severity || !ALLOWED_SEVERITIES.includes(r.severity)) return `severity inválida (${ALLOWED_SEVERITIES.join('|')})`;

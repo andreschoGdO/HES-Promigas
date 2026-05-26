@@ -93,6 +93,33 @@ export async function GET() {
         const potRaw = pick(e, ['invcap', 'potencia_kw', 'potencia', 'power', 'powerKw']);
         const potencia = potRaw !== null && Number.isFinite(Number(potRaw)) ? Number(potRaw) : null;
 
+        // Capturar TODAS las flags de alarma + estado del inversor (Livoltek y DEYE).
+        // Se guardan como JSONB en devices.alarm_flags para que el evaluador las consulte.
+        const FLAG_KEYS = [
+          'flagFSVER', 'flagFSCER', 'flagFBVER',
+          'flagFFT', 'flagETA',
+          'flagFFDC',
+          'flagFEM', 'flagFFB', 'flagFFCT', 'flagFAFER',
+          'flagEMayor', 'flagEMenor', 'flagEAM', 'flagECEO', 'flagEPSR', 'flagESSI',
+          'UIcolorRojo', 'UIcolorAmarillo', 'UIcolorNaranja',
+        ];
+        const alarmFlags: Record<string, number | string | null> = {};
+        for (const k of FLAG_KEYS) {
+          const v = pick(e, [k]);
+          if (v === null) continue;
+          const n = Number(v);
+          alarmFlags[k] = Number.isFinite(n) ? n : v;
+        }
+        const tlInvState = pick(e, ['TLinvstate']);
+        if (tlInvState !== null) {
+          alarmFlags['TLinvstate'] = tlInvState.toLowerCase();
+          alarmFlags['TLinvstate_off'] = tlInvState.toLowerCase() === 'off' ? 1 : 0;
+        }
+        const tlBattSoc = pick(e, ['TLBattSOC']);
+        if (tlBattSoc !== null && Number.isFinite(Number(tlBattSoc))) {
+          alarmFlags['TLBattSOC'] = Number(tlBattSoc);
+        }
+
         return {
           metrum_id: metrumId,
           name,
@@ -106,6 +133,7 @@ export async function GET() {
           marca,
           modelo,
           potencia_kw: potencia,
+          alarm_flags: alarmFlags,
         };
       })
       .filter((d): d is NonNullable<typeof d> => d !== null);

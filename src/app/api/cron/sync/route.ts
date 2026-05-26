@@ -290,6 +290,23 @@ async function computeAndStoreCasaMetrics(fromStr: string, toStr: string) {
     }
   }
 
+  // Traer datos de batería de daily_consumption (alimentado por sync/consumption)
+  const { data: consumoRows } = await supabaseAdmin
+    .from('daily_consumption')
+    .select('house_id, dia_consumo, energia_entregada_bateria, estado_salud_bateria, tiempo_entrega_bateria, client_houses(casa)')
+    .gte('dia_consumo', fromStr)
+    .lte('dia_consumo', toStr);
+  const battByKey = new Map<string, { soh: number | null; energy: number | null; time: number | null }>();
+  for (const r of consumoRows ?? []) {
+    const casa = (r as unknown as { client_houses?: { casa?: string } }).client_houses?.casa;
+    if (!casa) continue;
+    battByKey.set(`${casa}|${r.dia_consumo}`, {
+      soh: r.estado_salud_bateria,
+      energy: r.energia_entregada_bateria,
+      time: r.tiempo_entrega_bateria,
+    });
+  }
+
   // Construir filas para upsert (filtrar a partir de fromStr)
   const payload: Array<Record<string, unknown>> = [];
   for (const a of byKey.values()) {
@@ -302,6 +319,7 @@ async function computeAndStoreCasaMetrics(fromStr: string, toStr: string) {
     const dem = (gen ?? 0) + (imp ?? 0) - (exc ?? 0);
     const yieldReal = gen !== null && a.potencia_kw && a.potencia_kw > 0
       ? (gen / 1000) / a.potencia_kw : null;
+    const batt = battByKey.get(`${a.casa}|${a.date}`);
     payload.push({
       house_id: houseId,
       casa: a.casa,
@@ -317,6 +335,9 @@ async function computeAndStoreCasaMetrics(fromStr: string, toStr: string) {
       desempeno_pct: yieldReal !== null ? (yieldReal / YIELD_TEORICO_REF) * 100 : null,
       potencia_kw: a.potencia_kw,
       imax_a: imaxByKey.get(`${a.casa}|${a.date}`) ?? null,
+      batt_soh_pct: batt?.soh ?? null,
+      batt_energy_delivered_wh: batt?.energy ?? null,
+      batt_delivery_time_s: batt?.time ?? null,
       updated_at: new Date().toISOString(),
     });
   }

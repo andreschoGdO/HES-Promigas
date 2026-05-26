@@ -70,6 +70,13 @@ export async function getDevices(token: string) {
     'address', 'mapCategory',
     'numero_serie', 'numeroSerie', 'serial', 'serialNumber',
     'service_point', 'punto_servicio', 'puntoServicio',
+    // Flags de alarma inversor (Livoltek + DEYE) — capturadas en devices.alarm_flags
+    'flagFSVER', 'flagFSCER', 'flagFBVER',
+    'flagFFT', 'flagETA',
+    'flagFFDC',
+    'flagFEM', 'flagFFB', 'flagFFCT', 'flagFAFER',
+    'flagEMayor', 'flagEMenor', 'flagEAM', 'flagECEO', 'flagEPSR', 'flagESSI',
+    'UIcolorRojo', 'UIcolorAmarillo', 'UIcolorNaranja',
   ];
   const body = {
     entityFilter: { type: 'entityType', entityType: 'DEVICE' },

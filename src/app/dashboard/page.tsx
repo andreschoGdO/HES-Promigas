@@ -365,53 +365,18 @@ const BRAND_COLORS: Record<string, string> = {
 export default function DashboardPage() {
   const [tab, setTab] = useState<Tab>('cierres');
   const [devices, setDevices] = useState<DeviceOption[]>([]);
-  const [reloading, setReloading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [syncMsg, setSyncMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   const loadDevices = async () => {
-    setReloading(true);
     const { data, error } = await supabase
       .from('devices')
       .select('id, metrum_id, name, type, client, casa, cliente_id, location, city, marca, modelo, potencia_kw, is_active, last_seen_at')
       .order('client', { ascending: true })
       .order('name', { ascending: true });
-    setReloading(false);
     if (error) {
       console.error('Error fetching devices', error);
       return;
     }
     setDevices((data ?? []) as DeviceOption[]);
-  };
-
-  // Trigger manual rápido (≤ 60s): devices + casas + casa_metrics + alertas.
-  // El sync pesado (cierres + consumo de Metrum) corre por el cron diario a las 06:00 UTC
-  // y por GitHub Actions cada 15 min. No bloquea al usuario.
-  const handleSyncAll = async () => {
-    setSyncing(true);
-    setSyncMsg(null);
-    try {
-      const res = await fetch('/api/cron/sync?quick=1', { headers: { 'x-trigger': 'manual' } });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      const s = json.steps ?? {};
-      const parts = [
-        s.devices !== undefined && `devices: ${s.devices}`,
-        s.houses !== undefined && `casas: ${s.houses}`,
-        s.casa_metrics && `métricas: ${s.casa_metrics.upserted}`,
-        s.alerts && `alertas: ${s.alerts.fired ?? 0}`,
-      ].filter(Boolean);
-      const kind = json.status === 'success' ? 'success' : 'error';
-      setSyncMsg({
-        kind,
-        text: `Sincronización rápida ${json.status} · ${parts.join(' · ')}. Cierres y consumo se actualizan automáticamente cada día por el cron.${json.errors?.length ? ` · errores: ${json.errors.join(', ')}` : ''}`,
-      });
-      await loadDevices();
-    } catch (e) {
-      setSyncMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Error' });
-    } finally {
-      setSyncing(false);
-    }
   };
 
   // Breakdown medidores: solar vs red
@@ -461,26 +426,12 @@ export default function DashboardPage() {
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-        <div>
-          <h1>Dashboard</h1>
-          <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {devices.length} dispositivos registrados en Supabase.
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <button className="secondary-btn" onClick={loadDevices} disabled={reloading || syncing} title="Recarga los datos desde Supabase">
-            <RefreshCw size={14} /> {reloading ? 'Recargando...' : 'Recargar'}
-          </button>
-          <button className="primary-btn" onClick={handleSyncAll} disabled={syncing} title="Sincroniza dispositivos + cierres + consumo desde Metrum">
-            <Download size={14} /> {syncing ? 'Sincronizando...' : 'Sincronizar Metrum'}
-          </button>
-        </div>
+      <div>
+        <h1>Dashboard</h1>
+        <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
+          {devices.length} dispositivos registrados en Supabase.
+        </p>
       </div>
-
-      {syncMsg && (
-        <div className={syncMsg.kind === 'success' ? 'alert-success' : 'alert-error'}>{syncMsg.text}</div>
-      )}
 
       <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
         <BreakdownCard title="Módems" slices={gatewaySlices} />

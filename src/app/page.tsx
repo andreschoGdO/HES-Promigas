@@ -34,5 +34,5 @@ export const classifyDevice = (d: {
 };
 
 export default function Home() {
-  redirect('/dashboard');
+  redirect('/inicio');
 }

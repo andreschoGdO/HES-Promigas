@@ -7,9 +7,12 @@ import { createBrowserClient } from '@supabase/ssr';
 
 const TITLES: Record<string, string> = {
   '/': 'Inicio',
+  '/inicio': 'Inicio',
   '/dashboard': 'Dashboard',
   '/configuracion': 'Configuración',
   '/alertas': 'Configuración Alertas',
+  '/visitas': 'Visitas en Campo',
+  '/cuenta': 'Mi cuenta',
 };
 
 export function Topbar() {

@@ -134,8 +134,7 @@ function VisitTypeView({ type, userEmail, onOpen }: { type: VisitType; userEmail
     <>
       <div className="glass-panel" style={{ padding: 22, borderLeft: `4px solid ${schema.color}` }}>
         <h2 style={{ margin: 0, fontSize: '1.15rem' }}>{schema.label}</h2>
-        <p style={{ margin: '6px 0 0', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{schema.description}</p>
-        <p style={{ margin: '6px 0 14px', color: 'var(--text-muted)', fontSize: '0.72rem', fontFamily: 'ui-monospace, monospace' }}>{schema.formCode}</p>
+        <p style={{ margin: '6px 0 14px', color: 'var(--text-secondary)', fontSize: '0.88rem' }}>{schema.description}</p>
         <button onClick={createNew} disabled={creating} className="primary-btn"
           style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '0.95rem', fontWeight: 600 }}>
           <Plus size={18} /> {creating ? 'Creando…' : `Nueva ${schema.shortLabel.toLowerCase()}`}
@@ -185,6 +184,18 @@ function HistorialTable({ onOpen }: { onOpen: (id: string) => void }) {
       await generateVisitPDF(j.visit as VisitPDFData, (j.photos ?? []) as VisitPhoto[]);
     } catch (e) {
       alert('Error generando PDF: ' + (e instanceof Error ? e.message : 'desconocido'));
+    }
+  };
+
+  const handleDelete = async (item: VisitListItem) => {
+    const label = `${findSchema(item.visit_type)?.shortLabel ?? item.visit_type}${item.casa ? ' · ' + item.casa : ''}`;
+    if (!confirm(`¿Eliminar el acta "${label}" del ${item.visit_date}?\n\nEsto borra también todas sus fotos. NO se puede deshacer.`)) return;
+    const r = await fetch(`/api/visits/${item.id}`, { method: 'DELETE' });
+    if (r.ok) {
+      setItems((prev) => prev.filter((v) => v.id !== item.id));
+    } else {
+      const j = await r.json().catch(() => ({}));
+      alert('Error eliminando: ' + (j.error ?? 'desconocido'));
     }
   };
 
@@ -264,6 +275,10 @@ function HistorialTable({ onOpen }: { onOpen: (id: string) => void }) {
                           <button onClick={() => onOpen(it.id)} title="Ver / Editar"
                             style={{ padding: 6, background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', borderRadius: 4 }}>
                             <Pencil size={16} />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(it); }} title="Eliminar"
+                            style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
+                            <Trash2 size={16} />
                           </button>
                         </td>
                       </tr>
@@ -503,7 +518,6 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={{ margin: 0, fontSize: '1.05rem' }}>{schema.label}</h2>
             <div style={{ marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace' }}>{schema.formCode}</span>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace' }}>ID {visit.id.slice(0, 8).toUpperCase()}</span>
               <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 10, background: statusColor + '20', color: statusColor, fontWeight: 700 }}>{statusLabel}</span>
             </div>
@@ -641,8 +655,8 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
         )}
       </CollapsibleSection>
 
-      {/* Botones de acción sticky */}
-      <div style={{ position: 'sticky', bottom: 0, zIndex: 10, background: 'var(--bg-base)', padding: '14px 0 4px', marginTop: 20, borderTop: '1px solid var(--border)' }}>
+      {/* Botones de acción al final del formulario (no sticky para no montarse sobre el contenido) */}
+      <div style={{ padding: '18px 0 4px', marginTop: 18, borderTop: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={onBack} className="secondary-btn" style={{ minWidth: 120, justifyContent: 'center', padding: '12px' }}>
             <ArrowLeft size={14} /> Volver
@@ -656,7 +670,7 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
             </button>
           )}
         </div>
-        <button onClick={deleteVisit} style={{ marginTop: 8, width: '100%', background: 'transparent', color: '#ef4444', border: '1px solid #ef444440', borderRadius: 8, padding: 10, cursor: 'pointer', fontSize: '0.8rem' }}>
+        <button onClick={deleteVisit} style={{ marginTop: 10, width: '100%', background: 'transparent', color: '#ef4444', border: '1px solid #ef444440', borderRadius: 8, padding: 10, cursor: 'pointer', fontSize: '0.85rem' }}>
           <Trash2 size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Eliminar acta
         </button>
       </div>

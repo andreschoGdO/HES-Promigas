@@ -57,7 +57,6 @@ export async function GET(request: Request) {
     .single();
   const auditId = auditRow?.id as string | undefined;
 
-  const url = new URL(request.url);
   const base = `${url.protocol}//${url.host}`;
   const steps: AuditSteps = {};
   const errors: string[] = [];

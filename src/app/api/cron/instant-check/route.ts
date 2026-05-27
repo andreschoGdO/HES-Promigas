@@ -95,10 +95,18 @@ export async function GET(request: Request) {
       let invCurrentMax: number | null = null;
       let battSoc: number | null = null;
       let invState: string | null = null;
+      let voltageA: number | null = null;
+      let voltageB: number | null = null;
+      let voltageC: number | null = null;
+      let voltageMin: number | null = null;
+      let voltageMax: number | null = null;
+      let voltageImbalance: number | null = null;
+      let frequencyHz: number | null = null;
 
-      // 1. Meter rojo: potencia activa + reactiva + corrientes
+      // 1. Meter rojo: potencia activa + reactiva + corrientes + voltajes + frecuencia
       if (meterRed) {
         try {
+          // Fetch principal: potencias y corrientes (siempre disponibles en Eastron)
           const data = await getTimeseries(token, meterRed.metrum_id, ['powerAI', 'powerRI', 'currentA', 'currentB', 'currentC'], windowStart, now + 60_000, { agg: 'NONE', limit: 50 }) as Record<string, Array<{ ts: number; value: string | number }>>;
           powerAI = latestVal(data['powerAI']);
           powerRI = latestVal(data['powerRI']);
@@ -114,6 +122,28 @@ export async function GET(request: Request) {
         } catch (e) {
           failed++;
           console.error('meter_red fetch error', house.casa, e instanceof Error ? e.message : e);
+        }
+
+        // Fetch separado de voltajes + frecuencia. Probamos varias keys porque Eastron
+        // puede exponerlas con nombres distintos según firmware (voltageA / UAI / voltageL1N).
+        // Si ninguna existe en Metrum, las columnas quedan null y las reglas no disparan.
+        try {
+          const vData = await getTimeseries(token, meterRed.metrum_id,
+            ['voltageA', 'voltageB', 'voltageC', 'frequency', 'UAI', 'UBI', 'UCI', 'voltageL1N', 'voltageL2N', 'voltageL3N'],
+            windowStart, now + 60_000, { agg: 'NONE', limit: 30 }) as Record<string, Array<{ ts: number; value: string | number }>>;
+          voltageA = latestVal(vData['voltageA']) ?? latestVal(vData['UAI']) ?? latestVal(vData['voltageL1N']);
+          voltageB = latestVal(vData['voltageB']) ?? latestVal(vData['UBI']) ?? latestVal(vData['voltageL2N']);
+          voltageC = latestVal(vData['voltageC']) ?? latestVal(vData['UCI']) ?? latestVal(vData['voltageL3N']);
+          frequencyHz = latestVal(vData['frequency']);
+          const voltages = [voltageA, voltageB, voltageC].filter((x): x is number => x !== null && Number.isFinite(x) && x > 0);
+          if (voltages.length > 0) {
+            voltageMin = Math.min(...voltages);
+            voltageMax = Math.max(...voltages);
+            voltageImbalance = voltageMax > 0 ? ((voltageMax - voltageMin) / voltageMax) * 100 : 0;
+          }
+        } catch (e) {
+          // No es crítico: si Metrum no expone estos keys, simplemente quedan null
+          console.warn('voltage fetch warning', house.casa, e instanceof Error ? e.message : e);
         }
       }
 
@@ -161,6 +191,13 @@ export async function GET(request: Request) {
         batt_soc_pct: battSoc,
         gateway_online: gatewayOnline,
         gateway_last_seen: gatewayLastSeen,
+        voltage_a_v: voltageA,
+        voltage_b_v: voltageB,
+        voltage_c_v: voltageC,
+        voltage_min_v: voltageMin,
+        voltage_max_v: voltageMax,
+        voltage_imbalance_pct: voltageImbalance,
+        frequency_hz: frequencyHz,
       });
       processed++;
     }

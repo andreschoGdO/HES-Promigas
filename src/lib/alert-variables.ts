@@ -74,6 +74,22 @@ export const ALERT_VARIABLES: AlertVariableMeta[] = [
   { key: 'fase_imbalance_pct', label: 'Desbalance entre fases', unit: '%', category: 'demanda', frequency: '15min', format: 'pct',
     description: '|fase mayor − fase menor| / fase mayor × 100. > 30% daña neutros y dispara breakers monofásicos.' },
 
+  // ───── Calidad de red eléctrica / Tensión ─────
+  { key: 'voltage_a_v', label: 'Voltaje fase A−N', unit: 'V', category: 'demanda', frequency: '15min', format: 'num',
+    description: 'Voltaje fase A respecto a neutro. Nominal 127 V en sistemas 127/220. Bajo voltaje = falla en la red o transformador sobrecargado.' },
+  { key: 'voltage_b_v', label: 'Voltaje fase B−N', unit: 'V', category: 'demanda', frequency: '15min', format: 'num',
+    description: 'Voltaje fase B respecto a neutro. Si cae solo una fase = problema en esa rama (cable, breaker, conexión).' },
+  { key: 'voltage_c_v', label: 'Voltaje fase C−N', unit: 'V', category: 'demanda', frequency: '15min', format: 'num',
+    description: 'Voltaje fase C respecto a neutro. Comparar con A y B para detectar pérdida o desbalance.' },
+  { key: 'voltage_min_v', label: 'Voltaje mínimo entre fases', unit: 'V', category: 'demanda', frequency: '15min', format: 'num',
+    description: 'min(A, B, C). Si baja del 90% del nominal (~114 V) hay caída crítica — riesgo para equipos sensibles (PC, refrigeración, inversor en isla).' },
+  { key: 'voltage_max_v', label: 'Voltaje máximo entre fases', unit: 'V', category: 'demanda', frequency: '15min', format: 'num',
+    description: 'max(A, B, C). Si sube del 110% del nominal (~140 V) hay sobre-voltaje — riesgo de quemar equipos. Suele venir de exportación solar sin grid-following correcto.' },
+  { key: 'voltage_imbalance_pct', label: 'Desbalance de voltaje', unit: '%', category: 'demanda', frequency: '15min', format: 'pct',
+    description: '|Vmax − Vmin| / Vmax × 100. NEMA recomienda < 3%. Sobre 5% = cargas trifásicas (motores, AA) se calientan y pierden vida útil.' },
+  { key: 'frequency_hz', label: 'Frecuencia de red', unit: 'Hz', category: 'demanda', frequency: '15min', format: 'num',
+    description: 'Frecuencia del operador de red. Colombia nominal 60 Hz ± 0.5. Si baja de 59 Hz hay falla mayor del operador (riesgo de blackout regional).' },
+
   // ───── Batería ─────
   { key: 'batt_soh_pct', label: 'Salud batería (SOH)', unit: '%', category: 'bateria', frequency: 'diario', format: 'pct',
     description: 'State of Health — % de capacidad original que conserva la batería. < 80% indica degradación importante.' },

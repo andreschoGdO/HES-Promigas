@@ -30,6 +30,14 @@ const INSTANT_VARS = new Set([
   'fase_imbalance_pct',
   'batt_soc_pct',
   'gateway_offline_min',
+  // Calidad de red (voltajes y frecuencia)
+  'voltage_a_v',
+  'voltage_b_v',
+  'voltage_c_v',
+  'voltage_min_v',
+  'voltage_max_v',
+  'voltage_imbalance_pct',
+  'frequency_hz',
 ]);
 
 const TARIFA_DEFAULT_COP = 130;

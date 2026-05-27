@@ -43,6 +43,58 @@ export async function linkVisitToInventory(opts: {
   const form = opts.formData ?? {};
 
   if (opts.visitType === 'instalacion') {
+    // Camino preferido: si hay una reserva CONFIRMADA vinculada a esta visita,
+    // los items ya están como 'reserved'; los pasamos a 'installed' en bloque.
+    const { data: confirmedResv } = await supabaseAdmin
+      .from('inventory_reservations')
+      .select('id, title, inventory_reservation_items(item_id, inventory_items(serial_number, status))')
+      .eq('visit_id', opts.visitId)
+      .eq('status', 'confirmed')
+      .maybeSingle();
+    if (confirmedResv) {
+      type RawItem = { serial_number: string; status: string };
+      type RawLine = { item_id: string; inventory_items?: RawItem | RawItem[] | null };
+      const rawLines = (confirmedResv as unknown as { inventory_reservation_items?: RawLine[] }).inventory_reservation_items ?? [];
+      const lines = rawLines.map((l) => {
+        const itm = Array.isArray(l.inventory_items) ? l.inventory_items[0] : l.inventory_items;
+        return { item_id: l.item_id, inventory_items: itm ?? null };
+      });
+      const reservedItemIds = lines
+        .filter((l) => l.inventory_items?.status === 'reserved')
+        .map((l) => l.item_id);
+
+      if (reservedItemIds.length > 0) {
+        await supabaseAdmin
+          .from('inventory_items')
+          .update({ status: 'installed', current_location: 'house', current_house_id: opts.houseId })
+          .in('id', reservedItemIds)
+          .eq('status', 'reserved');
+        await supabaseAdmin.from('inventory_movements').insert(
+          reservedItemIds.map((id) => ({
+            item_id: id,
+            type: 'install',
+            from_status: 'reserved',
+            to_status: 'installed',
+            to_location: 'house',
+            to_house_id: opts.houseId,
+            related_visit_id: opts.visitId,
+            responsible_email: opts.technicianEmail,
+            notes: `Instalado vía reserva "${confirmedResv.title}"`,
+          })),
+        );
+        for (const line of lines) {
+          if (line.inventory_items?.status === 'reserved') {
+            linked.push(`${line.inventory_items.serial_number} (desde reserva)`);
+          }
+        }
+      }
+      // Marcar la reserva como fulfilled
+      await supabaseAdmin
+        .from('inventory_reservations')
+        .update({ status: 'fulfilled', fulfilled_at: new Date().toISOString() })
+        .eq('id', confirmedResv.id);
+    }
+
     for (const { key, label } of INSTALL_SERIAL_KEYS) {
       const raw = form[key];
       if (!raw || typeof raw !== 'string') continue;

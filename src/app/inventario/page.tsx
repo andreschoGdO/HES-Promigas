@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { Package, Plus, Upload, ScanLine, Search, Trash2, Pencil, History, AlertTriangle, Boxes, Tags, Cpu, Battery, Sun, Cable } from 'lucide-react';
+import { Package, Plus, Upload, ScanLine, Search, Trash2, Pencil, History, AlertTriangle, Boxes, Tags, Cpu, Battery, Sun, Cable, MapPin, ClipboardList, CheckCircle2, XCircle, Truck, Building2, Wrench, ArrowRight } from 'lucide-react';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 
 const supa = () => createBrowserClient(
@@ -10,7 +10,7 @@ const supa = () => createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-type Tab = 'resumen' | 'equipos' | 'consumibles' | 'movimientos' | 'categorias';
+type Tab = 'resumen' | 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias';
 
 interface Category {
   id: string;
@@ -92,11 +92,23 @@ const FAMILY_LABELS: Record<string, string> = {
 };
 
 const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu; description: string }> = {
-  resumen:     { label: 'Resumen',     color: '#07c5a8', Icon: Boxes,    description: 'Indicadores y atención requerida del inventario.' },
-  equipos:     { label: 'Equipos',     color: '#3b82f6', Icon: Cpu,      description: 'Catálogo de equipos serializados por número de fabricante.' },
-  consumibles: { label: 'Consumibles', color: '#8b5cf6', Icon: Cable,    description: 'Cantidad disponible, umbrales de stock mínimo y ajustes.' },
-  movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History,  description: 'Audit log de cada cambio: recepción, instalación, reparación, RMA.' },
-  categorias:  { label: 'Categorías',  color: '#10b981', Icon: Tags,     description: 'Catálogo de modelos con valores por defecto (marca, capacidad, garantía).' },
+  resumen:     { label: 'Resumen',     color: '#07c5a8', Icon: Boxes,          description: 'Indicadores y atención requerida del inventario.' },
+  equipos:     { label: 'Equipos',     color: '#3b82f6', Icon: Cpu,            description: 'Catálogo de equipos serializados por número de fabricante.' },
+  consumibles: { label: 'Consumibles', color: '#8b5cf6', Icon: Cable,          description: 'Cantidad disponible, umbrales de stock mínimo y ajustes.' },
+  ubicaciones: { label: 'Ubicaciones', color: '#0ea5e9', Icon: MapPin,         description: 'Bodegas, talleres, vehículos de cuadrilla y RMA proveedor. Donde físicamente vive cada equipo.' },
+  reservas:    { label: 'Reservas',    color: '#ec4899', Icon: ClipboardList,  description: 'Aparta equipos serializados para una visita planeada. Al completar la visita, los items pasan a instalados.' },
+  movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History,        description: 'Audit log de cada cambio: recepción, instalación, reparación, RMA.' },
+  categorias:  { label: 'Categorías',  color: '#10b981', Icon: Tags,           description: 'Catálogo de modelos con valores por defecto (marca, capacidad, garantía).' },
+};
+
+const LOCATION_TYPE_META: Record<string, { label: string; color: string; Icon: typeof Cpu }> = {
+  warehouse:    { label: 'Bodega',        color: '#0ea5e9', Icon: Building2 },
+  workshop:     { label: 'Taller',        color: '#f59e0b', Icon: Wrench },
+  vehicle:      { label: 'Vehículo',      color: '#8b5cf6', Icon: Truck },
+  site:         { label: 'Sitio cliente', color: '#10b981', Icon: MapPin },
+  supplier_rma: { label: 'RMA proveedor', color: '#ec4899', Icon: ArrowRight },
+  in_transit:   { label: 'En tránsito',   color: '#94a3b8', Icon: Truck },
+  other:        { label: 'Otro',          color: '#64748b', Icon: Package },
 };
 
 export default function InventarioPage() {
@@ -149,6 +161,8 @@ export default function InventarioPage() {
       {tab === 'resumen' && <ResumenTab onJump={setTab} />}
       {tab === 'equipos' && <EquiposTab userEmail={userEmail} />}
       {tab === 'consumibles' && <ConsumiblesTab userEmail={userEmail} />}
+      {tab === 'ubicaciones' && <UbicacionesTab />}
+      {tab === 'reservas' && <ReservasTab userEmail={userEmail} />}
       {tab === 'movimientos' && <MovimientosTab />}
       {tab === 'categorias' && <CategoriasTab />}
     </div>
@@ -1299,6 +1313,535 @@ function ItemHistoryModal({ item, onClose }: { item: InvItem; onClose: () => voi
       )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
         <button onClick={onClose} className="secondary-btn">Cerrar</button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ═════════════ UBICACIONES ═════════════ */
+interface InvLocation {
+  id: string;
+  code: string;
+  name: string;
+  type: keyof typeof LOCATION_TYPE_META;
+  parent_id: string | null;
+  address: string | null;
+  contact_email: string | null;
+  notes: string | null;
+  is_active: boolean;
+  item_count: number;
+}
+
+function UbicacionesTab() {
+  const [locations, setLocations] = useState<InvLocation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const r = await fetch('/api/inventory/locations');
+    const j = await r.json();
+    setLocations(j.locations ?? []);
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  const remove = async (id: string, hasItems: boolean) => {
+    const msg = hasItems
+      ? '¿Desactivar esta ubicación? Tiene items asignados — quedarán huérfanos pero el histórico se preserva.'
+      : '¿Desactivar esta ubicación?';
+    if (!confirm(msg)) return;
+    await fetch(`/api/inventory/locations?id=${id}`, { method: 'DELETE' });
+    load();
+  };
+
+  const byType = useMemo(() => {
+    const groups: Record<string, InvLocation[]> = {};
+    for (const l of locations) {
+      (groups[l.type] ??= []).push(l);
+    }
+    return groups;
+  }, [locations]);
+
+  if (loading) return <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
+
+  return (
+    <>
+      <div className="glass-panel" style={{ marginBottom: 14, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <button onClick={() => setShowAdd(true)} className="primary-btn"><Plus size={14} /> Nueva ubicación</button>
+        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+          {locations.length} ubicación{locations.length === 1 ? '' : 'es'} activas
+        </div>
+      </div>
+
+      {locations.length === 0 ? (
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+          No hay ubicaciones. Las ubicaciones permiten saber dónde físicamente vive cada equipo: bodega central, taller, camioneta de cuadrilla, etc.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {(Object.keys(LOCATION_TYPE_META) as Array<keyof typeof LOCATION_TYPE_META>).map((type) => {
+            const list = byType[type] ?? [];
+            if (list.length === 0) return null;
+            const meta = LOCATION_TYPE_META[type];
+            return (
+              <div key={type} className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 18px', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
+                  <meta.Icon size={18} style={{ color: meta.color }} />
+                  <h3 style={{ margin: 0, fontSize: '0.92rem' }}>{meta.label}</h3>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                    {list.length} {list.length === 1 ? 'ubicación' : 'ubicaciones'}
+                  </span>
+                </div>
+                <table style={{ width: '100%', fontSize: '0.82rem' }}>
+                  <thead>
+                    <tr>
+                      <th>Código</th>
+                      <th>Nombre</th>
+                      <th>Dirección / Notas</th>
+                      <th style={{ textAlign: 'right' }}>Items</th>
+                      <th style={{ textAlign: 'right' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((l) => (
+                      <tr key={l.id}>
+                        <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.76rem', fontWeight: 600 }}>{l.code}</td>
+                        <td style={{ fontWeight: 500 }}>{l.name}</td>
+                        <td style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+                          {l.address ?? l.notes ?? '—'}
+                        </td>
+                        <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 700, color: l.item_count > 0 ? meta.color : 'var(--text-muted)' }}>
+                          {l.item_count}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button onClick={() => remove(l.id, l.item_count > 0)} title="Desactivar"
+                            style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showAdd && <NewLocationModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} />}
+    </>
+  );
+}
+
+function NewLocationModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [type, setType] = useState<keyof typeof LOCATION_TYPE_META>('warehouse');
+  const [address, setAddress] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [notes, setNotes] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setErr(null);
+    if (!code.trim() || !name.trim()) { setErr('Código y nombre son obligatorios'); return; }
+    setSaving(true);
+    const r = await fetch('/api/inventory/locations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, name, type, address: address || null, contact_email: contactEmail || null, notes: notes || null }),
+    });
+    setSaving(false);
+    const j = await r.json();
+    if (!r.ok) { setErr(j.error ?? 'Error'); return; }
+    onSaved();
+  };
+
+  return (
+    <ModalShell onClose={onClose} title="Nueva ubicación">
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+      <FieldsGrid>
+        <Field label="Código" required>
+          <input type="text" value={code} onChange={(e) => setCode(e.target.value)} placeholder="VEHICLE_CUAD_3" style={{ fontFamily: 'ui-monospace, monospace' }} />
+        </Field>
+        <Field label="Tipo" required>
+          <select value={type} onChange={(e) => setType(e.target.value as keyof typeof LOCATION_TYPE_META)}>
+            {Object.entries(LOCATION_TYPE_META).map(([k, m]) => <option key={k} value={k}>{m.label}</option>)}
+          </select>
+        </Field>
+        <Field label="Nombre" required fullWidth>
+          <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Camioneta Cuadrilla 3" />
+        </Field>
+        <Field label="Dirección" fullWidth>
+          <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} />
+        </Field>
+        <Field label="Email contacto">
+          <input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
+        </Field>
+        <Field label="Notas" fullWidth>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        </Field>
+      </FieldsGrid>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={save} className="primary-btn" disabled={saving}>{saving ? 'Guardando…' : 'Crear ubicación'}</button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ═════════════ RESERVAS ═════════════ */
+interface Reservation {
+  id: string;
+  visit_id: string | null;
+  status: 'draft' | 'confirmed' | 'fulfilled' | 'cancelled';
+  title: string;
+  requested_by: string | null;
+  notes: string | null;
+  created_at: string;
+  confirmed_at: string | null;
+  fulfilled_at: string | null;
+  cancelled_at: string | null;
+  field_visits?: { visit_type: string; casa: string | null; visit_date: string } | null;
+  inventory_reservation_items?: Array<{
+    id: string;
+    picked_at: string | null;
+    inventory_items: {
+      id: string;
+      serial_number: string;
+      brand: string | null;
+      model: string | null;
+      status: string;
+      inventory_categories?: { name: string; family: string } | null;
+    } | null;
+  }>;
+}
+
+const RESV_STATUS_META: Record<string, { label: string; color: string; Icon: typeof Cpu }> = {
+  draft:     { label: 'Borrador',  color: '#94a3b8', Icon: Pencil },
+  confirmed: { label: 'Confirmada', color: '#3b82f6', Icon: CheckCircle2 },
+  fulfilled: { label: 'Cumplida',   color: '#10b981', Icon: CheckCircle2 },
+  cancelled: { label: 'Cancelada',  color: '#ef4444', Icon: XCircle },
+};
+
+function ReservasTab({ userEmail }: { userEmail: string }) {
+  const [items, setItems] = useState<Reservation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [showAdd, setShowAdd] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (filterStatus !== 'all') params.set('status', filterStatus);
+    const r = await fetch(`/api/inventory/reservations?${params}`);
+    const j = await r.json();
+    setItems(j.reservations ?? []);
+    setLoading(false);
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterStatus]);
+
+  const doAction = async (id: string, action: 'confirm' | 'fulfill' | 'cancel' | 'reopen') => {
+    const r = await fetch('/api/inventory/reservations', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action, responsible_email: userEmail }),
+    });
+    const j = await r.json();
+    if (!r.ok) { alert(j.error ?? 'Error'); return; }
+    if (j.not_available && j.not_available > 0) {
+      alert(`Confirmada con advertencia: ${j.not_available} item(s) no estaban en stock y fueron omitidos. Revisa la reserva.`);
+    }
+    load();
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm('¿Eliminar esta reserva? (solo para draft/cancelled)')) return;
+    const r = await fetch(`/api/inventory/reservations?id=${id}`, { method: 'DELETE' });
+    if (!r.ok) { const j = await r.json(); alert(j.error ?? 'Error'); return; }
+    load();
+  };
+
+  return (
+    <>
+      <div className="glass-panel" style={{ marginBottom: 14, padding: 14 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          <button onClick={() => setShowAdd(true)} className="primary-btn"><Plus size={14} /> Nueva reserva</button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className={`chip ${filterStatus === 'all' ? 'active' : ''}`} onClick={() => setFilterStatus('all')}>Todas</button>
+          {(Object.keys(RESV_STATUS_META) as Array<keyof typeof RESV_STATUS_META>).map((k) => (
+            <button key={k} className={`chip ${filterStatus === k ? 'active' : ''}`} onClick={() => setFilterStatus(k)} style={{ borderLeft: `3px solid ${RESV_STATUS_META[k].color}` }}>
+              {RESV_STATUS_META[k].label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
+      ) : items.length === 0 ? (
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+          Sin reservas. Crea una para apartar equipos serializados antes de una visita planeada — así los items quedan bloqueados con status reservado y nadie más los puede tomar.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {items.map((r) => {
+            const meta = RESV_STATUS_META[r.status];
+            const lines = r.inventory_reservation_items ?? [];
+            return (
+              <div key={r.id} className="glass-panel" style={{ padding: 14, borderLeft: `4px solid ${meta.color}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <h3 style={{ margin: 0, fontSize: '0.98rem' }}>{r.title}</h3>
+                      <span style={{ padding: '2px 10px', borderRadius: 10, background: meta.color + '20', color: meta.color, fontSize: '0.7rem', fontWeight: 700 }}>{meta.label}</span>
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                      {r.field_visits ? (
+                        <>Visita: <strong>{r.field_visits.visit_type}</strong> · {r.field_visits.casa ?? 'sin casa'} · {r.field_visits.visit_date}</>
+                      ) : (
+                        <em>sin visita vinculada</em>
+                      )}
+                      {r.requested_by && <> · solicitada por {r.requested_by}</>}
+                      <> · creada {new Date(r.created_at).toLocaleDateString('es-CO')}</>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {r.status === 'draft' && (
+                      <>
+                        <button onClick={() => setEditId(r.id)} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px' }}>
+                          <Pencil size={12} /> Editar items
+                        </button>
+                        <button onClick={() => doAction(r.id, 'confirm')} className="primary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px' }} disabled={lines.length === 0}>
+                          Confirmar
+                        </button>
+                      </>
+                    )}
+                    {r.status === 'confirmed' && (
+                      <>
+                        <button onClick={() => doAction(r.id, 'fulfill')} className="primary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px' }}>
+                          Marcar cumplida
+                        </button>
+                        <button onClick={() => doAction(r.id, 'cancel')} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px', color: '#ef4444' }}>
+                          Cancelar
+                        </button>
+                      </>
+                    )}
+                    {(r.status === 'cancelled') && (
+                      <button onClick={() => doAction(r.id, 'reopen')} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px' }}>
+                        Reabrir
+                      </button>
+                    )}
+                    {(r.status === 'draft' || r.status === 'cancelled') && (
+                      <button onClick={() => remove(r.id)} title="Eliminar"
+                        style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {lines.length === 0 ? (
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin items asignados.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {lines.map((line) => {
+                      const it = line.inventory_items;
+                      if (!it) return null;
+                      const itemMeta = STATUS_META[it.status];
+                      return (
+                        <div key={line.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: '0.74rem', borderLeft: `3px solid ${itemMeta?.color ?? '#94a3b8'}` }}>
+                          <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{it.serial_number}</span>
+                          <span style={{ color: 'var(--text-muted)' }}>·</span>
+                          <span>{it.inventory_categories?.name ?? [it.brand, it.model].filter(Boolean).join(' ')}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showAdd && <NewReservationModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} userEmail={userEmail} />}
+      {editId && <EditReservationItemsModal reservationId={editId} onClose={() => setEditId(null)} onSaved={() => { setEditId(null); load(); }} />}
+    </>
+  );
+}
+
+interface VisitOption { id: string; visit_type: string; casa: string | null; visit_date: string; status: string }
+
+function NewReservationModal({ onClose, onSaved, userEmail }: { onClose: () => void; onSaved: () => void; userEmail: string }) {
+  const [title, setTitle] = useState('');
+  const [visits, setVisits] = useState<VisitOption[]>([]);
+  const [visitId, setVisitId] = useState('');
+  const [notes, setNotes] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    // Cargar últimas 50 visitas (draft o completed) para vincular
+    fetch('/api/visits?limit=50').then((r) => r.json()).then((j) => setVisits((j.visits ?? []) as VisitOption[]));
+  }, []);
+
+  const save = async () => {
+    setErr(null);
+    if (!title.trim()) { setErr('Título es obligatorio'); return; }
+    setSaving(true);
+    const r = await fetch('/api/inventory/reservations', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, visit_id: visitId || null, requested_by: userEmail, notes: notes || null }),
+    });
+    setSaving(false);
+    const j = await r.json();
+    if (!r.ok) { setErr(j.error ?? 'Error'); return; }
+    onSaved();
+  };
+
+  return (
+    <ModalShell onClose={onClose} title="Nueva reserva">
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+      <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 12 }}>
+        Crea la reserva primero (vacía, en draft). Después le agregas los items específicos desde "Editar items".
+      </p>
+      <FieldsGrid>
+        <Field label="Título" required fullWidth>
+          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Instalación Casa 30 — viernes" />
+        </Field>
+        <Field label="Visita vinculada (opcional)" fullWidth>
+          <select value={visitId} onChange={(e) => setVisitId(e.target.value)}>
+            <option value="">— Sin visita —</option>
+            {visits.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.visit_date} · {v.visit_type} · {v.casa ?? 'sin casa'} ({v.status})
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Notas" fullWidth>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        </Field>
+      </FieldsGrid>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={save} className="primary-btn" disabled={saving}>{saving ? 'Guardando…' : 'Crear reserva'}</button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function EditReservationItemsModal({ reservationId, onClose, onSaved }: { reservationId: string; onClose: () => void; onSaved: () => void }) {
+  const [availableItems, setAvailableItems] = useState<InvItem[]>([]);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [existingIds, setExistingIds] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      // Cargar items en stock + los ya en la reserva
+      const [stockR, resvR] = await Promise.all([
+        fetch('/api/inventory/items?status=in_stock&limit=500').then((r) => r.json()),
+        fetch(`/api/inventory/reservations?status=draft&limit=200`).then((r) => r.json()),
+      ]);
+      const thisResv: Reservation | undefined = (resvR.reservations ?? []).find((r: Reservation) => r.id === reservationId);
+      const resvLines = thisResv?.inventory_reservation_items ?? [];
+      const alreadyIn = new Set<string>(resvLines.map((l) => l.inventory_items?.id ?? '').filter(Boolean));
+      // Combinar: in_stock + los que ya están en esta reserva (aunque ya no estén in_stock)
+      const inStock: InvItem[] = stockR.items ?? [];
+      const alreadyInItems: InvItem[] = resvLines
+        .map((l) => l.inventory_items)
+        .filter((x): x is NonNullable<typeof x> => Boolean(x))
+        .map((x) => ({ ...x } as unknown as InvItem));
+      const dedup = new Map<string, InvItem>();
+      for (const it of [...inStock, ...alreadyInItems]) dedup.set(it.id, it);
+      setAvailableItems(Array.from(dedup.values()));
+      setSelectedIds(new Set(alreadyIn));
+      setExistingIds(new Set(alreadyIn));
+      setLoading(false);
+    })();
+  }, [reservationId]);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return availableItems;
+    return availableItems.filter((it) =>
+      it.serial_number.toLowerCase().includes(q) ||
+      (it.brand ?? '').toLowerCase().includes(q) ||
+      (it.model ?? '').toLowerCase().includes(q) ||
+      (it.inventory_categories?.name ?? '').toLowerCase().includes(q),
+    );
+  }, [availableItems, search]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const toAdd = Array.from(selectedIds).filter((id) => !existingIds.has(id));
+      const toRemove = Array.from(existingIds).filter((id) => !selectedIds.has(id));
+      if (toAdd.length > 0) {
+        await fetch(`/api/inventory/reservations/${reservationId}/items`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_ids: toAdd }),
+        });
+      }
+      for (const id of toRemove) {
+        await fetch(`/api/inventory/reservations/${reservationId}/items?item_id=${id}`, { method: 'DELETE' });
+      }
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <ModalShell onClose={onClose} title="Editar items de la reserva">
+      <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: 10 }}>
+        Selecciona equipos en stock para apartar. {selectedIds.size} item{selectedIds.size === 1 ? '' : 's'} seleccionado{selectedIds.size === 1 ? '' : 's'}.
+      </p>
+      <div style={{ position: 'relative', marginBottom: 12 }}>
+        <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+        <input type="text" placeholder="Buscar por serial, marca, modelo, categoría…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: '100%', paddingLeft: 32 }} />
+      </div>
+
+      {loading ? (
+        <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>Cargando…</div>
+      ) : filtered.length === 0 ? (
+        <div className="alert-warning" style={{ fontSize: '0.82rem' }}>No hay items disponibles con esos filtros.</div>
+      ) : (
+        <div style={{ maxHeight: 350, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+          {filtered.map((it) => {
+            const selected = selectedIds.has(it.id);
+            return (
+              <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: selected ? 'var(--bg-elevated)' : 'transparent' }}>
+                <input type="checkbox" checked={selected} onChange={() => toggle(it.id)} style={{ width: 16, height: 16 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem', fontWeight: 600 }}>{it.serial_number}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    {it.inventory_categories?.name ?? '—'} · {[it.brand, it.model].filter(Boolean).join(' ') || '—'}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={save} className="primary-btn" disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</button>
       </div>
     </ModalShell>
   );

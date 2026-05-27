@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Home, BarChart3, ClipboardCheck, Bell, Settings, ArrowRight, Server, Database, Cloud, Cpu, Sun, FileText, AlertOctagon, Wrench, Settings2, Package, ScanLine } from 'lucide-react';
+import { Home, BarChart3, ClipboardCheck, Bell, Settings, ArrowRight, Server, Database, Cloud, Cpu, Sun, FileText, AlertOctagon, Wrench, Settings2, Package, ScanLine, ChevronRight, ChevronDown, Clock, Lock, HardDrive } from 'lucide-react';
 
 interface Module {
   href: string;
@@ -197,80 +197,201 @@ export default function InicioPage() {
 
 /* ═══════════════ Diagrama de arquitectura ═══════════════ */
 function ArchitectureDiagram() {
-  const box = {
-    padding: '14px 18px',
-    border: '1px solid var(--border)',
-    borderRadius: 10,
-    background: 'var(--bg-surface)',
-    minWidth: 140,
-    textAlign: 'center' as const,
-  };
-  const label = { fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: 6 };
-  const title = { fontSize: '0.95rem', fontWeight: 600 };
-  const arrow = {
-    width: 0, height: 0, borderTop: '6px solid transparent', borderBottom: '6px solid transparent',
-    borderLeft: '10px solid var(--text-muted)', alignSelf: 'center',
-  };
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: 12, minWidth: 800, padding: '8px 0' }}>
-        {/* Capa fuente */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-          <div style={label}>Fuente de datos</div>
-          <div style={{ ...box, borderColor: '#3b82f6', minWidth: 180 }}>
-            <div style={{ color: '#3b82f6', marginBottom: 4 }}><Cloud size={20} /></div>
-            <div style={title}>Metrum</div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>ThingsBoard · 112 devices · 28 casas</div>
-          </div>
-        </div>
-        <div style={arrow} />
-        {/* Capa ingesta */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-          <div style={label}>Ingesta y sync</div>
-          <div style={{ ...box, borderColor: '#07c5a8', minWidth: 200 }}>
-            <div style={{ color: '#07c5a8', marginBottom: 4 }}><Server size={20} /></div>
-            <div style={title}>Next.js API Routes</div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>devices/sync · sync/all · sync/consumption · cron/sync · cron/instant-check</div>
-          </div>
-          <div style={{ ...box, borderColor: '#94a3b8', fontSize: '0.78rem' }}>
-            <div style={{ color: 'var(--text-muted)', marginBottom: 2 }}><Cpu size={16} /></div>
-            <div>Vercel Cron diario</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>06:00 UTC</div>
-          </div>
-          <div style={{ ...box, borderColor: '#94a3b8', fontSize: '0.78rem' }}>
-            <div>GitHub Actions 15 min</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>*/15 * * * *</div>
-          </div>
-        </div>
-        <div style={arrow} />
-        {/* Capa almacenamiento */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-          <div style={label}>Almacenamiento</div>
-          <div style={{ ...box, borderColor: '#10b981', minWidth: 180 }}>
-            <div style={{ color: '#10b981', marginBottom: 4 }}><Database size={20} /></div>
-            <div style={title}>Supabase Postgres</div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>devices · houses · closures · consumption · casa_metrics · instant_metrics · alert_rules · alert_events · field_visits · inventory_items · inventory_consumables · inventory_movements · inventory_categories</div>
-          </div>
-          <div style={{ ...box, borderColor: '#94a3b8', fontSize: '0.78rem' }}>
-            <div>Supabase Storage</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>visit-photos bucket</div>
-          </div>
-        </div>
-        <div style={arrow} />
-        {/* Capa presentación */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center' }}>
-          <div style={label}>UI</div>
-          <div style={{ ...box, borderColor: '#f59e0b', minWidth: 180 }}>
-            <div style={{ color: '#f59e0b', marginBottom: 4 }}><Sun size={20} /></div>
-            <div style={title}>SUNNY APP</div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>Next.js 16 · React 19 · Recharts · Mobile-first</div>
-          </div>
-          <div style={{ ...box, borderColor: '#8b5cf6', fontSize: '0.78rem' }}>
-            <div>Auth Supabase</div>
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Email + password · bcrypt · dominio @gdo.com.co / @promigas.com</div>
-          </div>
+    <div className="arch">
+      {/* Capa 1 — Fuente */}
+      <ArchLayer label="Fuente de datos" color="#3b82f6">
+        <ArchCard color="#3b82f6" Icon={Cloud} title="Metrum" subtitle="ThingsBoard">
+          <ArchPill>112 devices</ArchPill>
+          <ArchPill>28 casas</ArchPill>
+        </ArchCard>
+      </ArchLayer>
+
+      <ArchArrow />
+
+      {/* Capa 2 — Ingesta */}
+      <ArchLayer label="Ingesta y sync" color="#07c5a8">
+        <ArchCard color="#07c5a8" Icon={Server} title="Next.js API Routes" subtitle="Service role admin">
+          <ArchPill>devices/sync</ArchPill>
+          <ArchPill>sync/all</ArchPill>
+          <ArchPill>sync/consumption</ArchPill>
+        </ArchCard>
+        <ArchCardSmall color="#94a3b8" Icon={Clock} title="Vercel Cron" hint="06:00 UTC · diario" />
+        <ArchCardSmall color="#94a3b8" Icon={Clock} title="GitHub Actions" hint="*/15 min · instant-check" />
+      </ArchLayer>
+
+      <ArchArrow />
+
+      {/* Capa 3 — Almacenamiento */}
+      <ArchLayer label="Almacenamiento" color="#10b981">
+        <ArchCard color="#10b981" Icon={Database} title="Supabase Postgres" subtitle="13 tablas + auth schema">
+          <ArchTableGroup label="Operación" tables={['devices', 'client_houses', 'daily_energy_closures', 'daily_consumption', 'daily_casa_metrics', 'instant_metrics']} />
+          <ArchTableGroup label="Alertas" tables={['alert_rules', 'alert_events']} />
+          <ArchTableGroup label="Visitas" tables={['field_visits', 'field_visit_photos']} />
+          <ArchTableGroup label="Inventario" tables={['inventory_categories', 'inventory_items', 'inventory_consumables', 'inventory_movements']} />
+        </ArchCard>
+        <ArchCardSmall color="#94a3b8" Icon={HardDrive} title="Supabase Storage" hint="visit-photos · signed URLs" />
+      </ArchLayer>
+
+      <ArchArrow />
+
+      {/* Capa 4 — UI */}
+      <ArchLayer label="Presentación" color="#f59e0b">
+        <ArchCard color="#f59e0b" Icon={Sun} title="SUNNY APP" subtitle="Mobile-first">
+          <ArchPill>Next.js 16</ArchPill>
+          <ArchPill>React 19</ArchPill>
+          <ArchPill>Recharts</ArchPill>
+        </ArchCard>
+        <ArchCardSmall color="#8b5cf6" Icon={Lock} title="Auth Supabase" hint="Email + password · @gdo.com.co · @promigas.com" />
+      </ArchLayer>
+
+      <style jsx>{`
+        .arch {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+          align-items: stretch;
+          gap: 14px;
+        }
+        @media (max-width: 900px) {
+          .arch {
+            grid-template-columns: 1fr;
+            gap: 8px;
+          }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function ArchLayer({ label, color, children }: { label: string; color: string; children: React.ReactNode }) {
+  return (
+    <div className="arch-layer">
+      <div className="arch-layer-label" style={{ color }}>{label}</div>
+      <div className="arch-layer-stack">{children}</div>
+      <style jsx>{`
+        .arch-layer {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 0;
+        }
+        .arch-layer-label {
+          font-size: 0.7rem;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          font-weight: 700;
+          padding-bottom: 6px;
+          border-bottom: 2px solid currentColor;
+          opacity: 0.9;
+        }
+        .arch-layer-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          flex: 1;
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function ArchCard({ color, Icon, title, subtitle, children }: {
+  color: string; Icon: typeof Sun; title: string; subtitle?: string; children?: React.ReactNode;
+}) {
+  return (
+    <div style={{
+      borderRadius: 10,
+      border: '1px solid var(--border)',
+      borderLeft: `3px solid ${color}`,
+      background: 'var(--bg-surface)',
+      padding: 12,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: subtitle || children ? 8 : 0 }}>
+        <Icon size={18} style={{ color, flexShrink: 0 }} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: '0.88rem', fontWeight: 600, lineHeight: 1.2 }}>{title}</div>
+          {subtitle && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>{subtitle}</div>}
         </div>
       </div>
+      {children && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{children}</div>}
+    </div>
+  );
+}
+
+function ArchCardSmall({ color, Icon, title, hint }: { color: string; Icon: typeof Sun; title: string; hint: string }) {
+  return (
+    <div style={{
+      borderRadius: 8,
+      border: '1px solid var(--border)',
+      borderLeft: `3px solid ${color}`,
+      background: 'var(--bg-elevated)',
+      padding: '10px 12px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+    }}>
+      <Icon size={14} style={{ color, flexShrink: 0 }} />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: '0.78rem', fontWeight: 600, lineHeight: 1.2 }}>{title}</div>
+        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: 2 }}>{hint}</div>
+      </div>
+    </div>
+  );
+}
+
+function ArchPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span style={{
+      fontSize: '0.65rem',
+      padding: '2px 7px',
+      borderRadius: 10,
+      background: 'var(--bg-elevated)',
+      color: 'var(--text-secondary)',
+      fontFamily: 'ui-monospace, monospace',
+      whiteSpace: 'nowrap',
+    }}>{children}</span>
+  );
+}
+
+function ArchTableGroup({ label, tables }: { label: string; tables: string[] }) {
+  return (
+    <div style={{ width: '100%', marginTop: 4 }}>
+      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700, marginBottom: 3 }}>{label}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        {tables.map((t) => (
+          <span key={t} style={{
+            fontSize: '0.62rem',
+            padding: '1px 6px',
+            borderRadius: 8,
+            background: 'var(--bg-elevated)',
+            color: 'var(--text-secondary)',
+            fontFamily: 'ui-monospace, monospace',
+          }}>{t}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ArchArrow() {
+  return (
+    <div className="arch-arrow">
+      <ChevronRight size={20} className="h" />
+      <ChevronDown size={20} className="v" />
+      <style jsx>{`
+        .arch-arrow {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--text-muted);
+          opacity: 0.5;
+        }
+        .arch-arrow :global(.v) { display: none; }
+        @media (max-width: 900px) {
+          .arch-arrow :global(.h) { display: none; }
+          .arch-arrow :global(.v) { display: block; }
+        }
+      `}</style>
     </div>
   );
 }

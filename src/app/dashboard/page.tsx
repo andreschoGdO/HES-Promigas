@@ -1553,6 +1553,7 @@ function ReactivaTab() {
   const [closures, setClosures] = useState<ReactivaClosure[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<'graficas' | 'tablas'>('graficas');
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(1);
@@ -1757,31 +1758,52 @@ function ReactivaTab() {
         </div>
       </div>
 
-      {/* Chart último mes */}
-      {chartData.length > 0 && (
-        <div className="glass-panel">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-            <h3 style={{ margin: 0, fontSize: '0.95rem' }}>
-              Ratio ERI / EA por casa — <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{lastMonthLabel}</span>
-            </h3>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>línea roja = umbral 50%</span>
-          </div>
-          <div style={{ width: '100%', height: 280 }}>
-            <ResponsiveContainer>
-              <LineChart data={chartData}>
-                <CartesianGrid stroke="rgba(0,0,0,0.06)" />
-                <XAxis dataKey="casa" stroke="var(--text-muted)" fontSize={10} angle={-30} textAnchor="end" height={60} interval={0} />
-                <YAxis stroke="var(--text-muted)" fontSize={11} label={{ value: 'ERI / EA (%)', angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'var(--text-muted)' } }} />
-                <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8 }} formatter={(v) => `${v}%`} />
-                <Line type="monotone" dataKey="ratio_pct" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} name="Ratio %" />
-                <Line type="monotone" dataKey={() => 50} stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} dot={false} name="Umbral CREG (50%)" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      {/* Sub-tabs: Gráficas | Tablas */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <button onClick={() => setSubTab('graficas')} className={`chip ${subTab === 'graficas' ? 'active' : ''}`}
+          style={{ fontSize: '0.85rem', padding: '8px 14px', borderLeft: '4px solid #f59e0b' }}>
+          Gráficas
+        </button>
+        <button onClick={() => setSubTab('tablas')} className={`chip ${subTab === 'tablas' ? 'active' : ''}`}
+          style={{ fontSize: '0.85rem', padding: '8px 14px', borderLeft: '4px solid #3b82f6' }}>
+          Tablas
+        </button>
+      </div>
+
+      {/* ═══════════ SUB-TAB: GRÁFICAS ═══════════ */}
+      {subTab === 'graficas' && (
+        <>
+          {/* Gráficas comparativas — arriba */}
+          <ReactivaChart casaMonths={casaMonths} genByCasaMonth={genByCasaMonth} chartCasas={chartCasas} setChartCasas={setChartCasas} chartVars={chartVars} setChartVars={setChartVars} />
+
+          {/* Chart ratio por casa (último mes) */}
+          {chartData.length > 0 && (
+            <div className="glass-panel">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                <h3 style={{ margin: 0, fontSize: '0.95rem' }}>
+                  Ratio ERI / EA por casa — <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>{lastMonthLabel}</span>
+                </h3>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>línea roja = umbral 50%</span>
+              </div>
+              <div style={{ width: '100%', height: 280 }}>
+                <ResponsiveContainer>
+                  <LineChart data={chartData}>
+                    <CartesianGrid stroke="rgba(0,0,0,0.06)" />
+                    <XAxis dataKey="casa" stroke="var(--text-muted)" fontSize={10} angle={-30} textAnchor="end" height={60} interval={0} />
+                    <YAxis stroke="var(--text-muted)" fontSize={11} label={{ value: 'ERI / EA (%)', angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'var(--text-muted)' } }} />
+                    <Tooltip contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8 }} formatter={(v) => `${v}%`} />
+                    <Line type="monotone" dataKey="ratio_pct" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} name="Ratio %" />
+                    <Line type="monotone" dataKey={() => 50} stroke="#ef4444" strokeDasharray="5 5" strokeWidth={1.5} dot={false} name="Umbral CREG (50%)" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Tabla per casa per mes */}
+      {/* ═══════════ SUB-TAB: TABLAS ═══════════ */}
+      {subTab === 'tablas' && (
       <div className="glass-panel" style={{ padding: 0 }}>
         <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h3 style={{ margin: 0, fontSize: '0.95rem' }}>Detalle mensual ({casaMonths.length} filas)</h3>
@@ -1860,9 +1882,7 @@ function ReactivaTab() {
           </table>
         </div>
       </div>
-
-      {/* ═══════ GRÁFICAS COMPARATIVAS ═══════ */}
-      <ReactivaChart casaMonths={casaMonths} genByCasaMonth={genByCasaMonth} chartCasas={chartCasas} setChartCasas={setChartCasas} chartVars={chartVars} setChartVars={setChartVars} />
+      )}
 
       {/* Nota explicativa */}
       <div className="alert-warning" style={{ fontSize: '0.78rem', lineHeight: 1.6 }}>

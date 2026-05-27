@@ -423,13 +423,19 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           visit_date: visit.visit_date, visit_time: visit.visit_time,
           form_data: visit.form_data, notes: visit.notes,
           lat: visit.lat, lng: visit.lng,
-          status: finalize ? 'completed' : 'draft',
+          status: finalize ? 'completed' : visit.status,
         }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? 'Error');
       setVisit(j.visit);
-      setMsg({ kind: 'success', text: finalize ? 'Acta marcada como completada' : 'Guardado' });
+      const linked = j.inventoryLink?.linked ?? [];
+      const okMsg = finalize
+        ? linked.length > 0
+          ? `Acta completada · ${linked.length} equipo${linked.length === 1 ? '' : 's'} enlazado${linked.length === 1 ? '' : 's'} al inventario`
+          : 'Acta marcada como completada'
+        : 'Guardado';
+      setMsg({ kind: 'success', text: okMsg });
     } catch (e) {
       setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Error al guardar' });
     } finally { setSaving(false); }
@@ -465,9 +471,14 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
   };
 
   const updatePhotoDescription = async (photoId: string, newDescription: string) => {
+    const prevPhoto = photos.find((p) => p.id === photoId);
+    if (prevPhoto?.description === newDescription) return;
     setPhotos((prev) => prev.map((p) => p.id === photoId ? { ...p, description: newDescription } : p));
-    // No tenemos endpoint PATCH para foto, persistir via direct supabase update
-    await supa().from('field_visit_photos').update({ description: newDescription }).eq('id', photoId);
+    const { error } = await supa().from('field_visit_photos').update({ description: newDescription }).eq('id', photoId);
+    if (error) {
+      setPhotos((prev) => prev.map((p) => p.id === photoId ? { ...p, description: prevPhoto?.description ?? null } : p));
+      setMsg({ kind: 'error', text: 'No se pudo guardar la descripción de la foto' });
+    }
   };
 
   const deletePhoto = async (photoId: string) => {
@@ -645,10 +656,7 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
                     <X size={12} />
                   </button>
                 </div>
-                <input type="text" value={p.description ?? ''}
-                  onChange={(e) => updatePhotoDescription(p.id, e.target.value)}
-                  placeholder="Título / categoría"
-                  style={{ width: '100%', border: 'none', padding: '6px 8px', fontSize: '0.72rem', background: 'transparent', borderTop: '1px solid var(--border)' }} />
+                <PhotoDescriptionInput photo={p} onCommit={(val) => updatePhotoDescription(p.id, val)} />
               </div>
             ))}
           </div>
@@ -675,6 +683,19 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
         </button>
       </div>
     </>
+  );
+}
+
+/* ───────────── Input de descripción de foto (local state + onBlur) ───────────── */
+function PhotoDescriptionInput({ photo, onCommit }: { photo: Photo; onCommit: (val: string) => void }) {
+  const [value, setValue] = useState(photo.description ?? '');
+  useEffect(() => { setValue(photo.description ?? ''); }, [photo.id, photo.description]);
+  return (
+    <input type="text" value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => onCommit(value.trim())}
+      placeholder="Título / categoría"
+      style={{ width: '100%', border: 'none', padding: '6px 8px', fontSize: '0.72rem', background: 'transparent', borderTop: '1px solid var(--border)' }} />
   );
 }
 

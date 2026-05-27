@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     .order('created_at', { ascending: false })
     .limit(limit);
   if (type) q = q.eq('visit_type', type);
-  if (casa) q = q.eq('casa', casa);
+  if (casa) q = q.ilike('casa', `%${casa}%`);
   if (status) q = q.eq('status', status);
   if (from) q = q.gte('visit_date', from);
   if (to) q = q.lte('visit_date', to);

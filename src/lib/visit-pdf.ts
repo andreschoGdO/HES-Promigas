@@ -262,7 +262,7 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
     y = drawSectionTitle(doc, y, obsSection.title);
     const obsText = String(visit.form_data?.observaciones ?? visit.notes ?? '');
     const obsLines = doc.splitTextToSize(obsText || '—', doc.internal.pageSize.getWidth() - margin * 2 - 4);
-    const boxHeight = Math.max(40, obsLines.length * 4 + 4);
+    const boxHeight = Math.max(14, obsLines.length * 4 + 4);
     doc.setDrawColor(BORDER);
     doc.rect(margin, y, doc.internal.pageSize.getWidth() - margin * 2, boxHeight);
     doc.setFontSize(8);

@@ -650,12 +650,6 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
         </CollapsibleSection>
       ))}
 
-      {/* Notas adicionales */}
-      <CollapsibleSection title="Notas adicionales" open={openSections['__notas'] ?? false} onToggle={() => toggleSection('__notas')}>
-        <textarea value={visit.notes ?? ''} onChange={(e) => setVisit((v) => v ? { ...v, notes: e.target.value } : v)}
-          rows={4} style={{ width: '100%' }} placeholder="Cualquier observación que no quepa en los campos anteriores…" />
-      </CollapsibleSection>
-
       {/* Fotos */}
       <CollapsibleSection title={`Registro fotográfico (${photos.length})`} open={openSections['__fotos'] ?? true} onToggle={() => toggleSection('__fotos')}>
         {/* Checklist visual de categorías esperadas */}

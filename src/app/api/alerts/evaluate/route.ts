@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { notifyTeams, type AlertNotification } from '@/lib/teams-notifier';
 
 /**
  * GET /api/alerts/evaluate
@@ -143,7 +144,19 @@ export async function GET() {
       !r.variable.startsWith('alarm_') && !MTD_VARS.has(r.variable) && !INSTANT_VARS.has(r.variable)
     );
 
-    const events: Array<Record<string, unknown>> = [];
+    interface AlertEventInsert {
+      rule_id: string;
+      house_id: string | null;
+      casa: string;
+      record_date: string;
+      variable: string;
+      value: number;
+      threshold: number;
+      operator: string;
+      severity: 'high' | 'medium' | 'low';
+      message: string;
+    }
+    const events: AlertEventInsert[] = [];
 
     // ─── 1. DAILY contra daily_casa_metrics ───
     if (dailyRules.length > 0) {
@@ -217,11 +230,12 @@ export async function GET() {
           }
           if (value === null || value === undefined) continue;
           if (!compare(Number(value), rule.operator, Number(rule.threshold))) continue;
+          const mRow = m as { house_id: string | null; casa: string };
           events.push({
-            rule_id: rule.id, house_id: m.house_id, casa: m.casa, record_date: dateToday,
+            rule_id: rule.id, house_id: mRow.house_id, casa: mRow.casa, record_date: dateToday,
             variable: rule.variable, value: Number(value), threshold: Number(rule.threshold),
             operator: rule.operator, severity: rule.severity,
-            message: `${rule.name} — ${m.casa} (en vivo)`,
+            message: `${rule.name} — ${mRow.casa} (en vivo)`,
           });
         }
       }
@@ -256,14 +270,52 @@ export async function GET() {
     }
 
     if (events.length === 0) {
-      return NextResponse.json({ success: true, evaluated: rules.length, fired: 0 });
+      return NextResponse.json({ success: true, evaluated: rules.length, fired: 0, notified: 0 });
     }
+
+    // Detectar eventos NUEVOS (no existían hoy) para notificar solo esos a Teams.
+    // Reduce ruido: si la regla se re-evalúa al día siguiente y sigue disparada, ya fue notificada hoy.
+    const keys = events.map((e) => ({ rule_id: e.rule_id, house_id: e.house_id, record_date: e.record_date }));
+    const ruleIds = Array.from(new Set(keys.map((k) => k.rule_id)));
+    const houseIds = Array.from(new Set(keys.map((k) => k.house_id))).filter(Boolean) as string[];
+    const dates = Array.from(new Set(keys.map((k) => k.record_date)));
+    const { data: existing } = await supabaseAdmin
+      .from('alert_events')
+      .select('rule_id, house_id, record_date')
+      .in('rule_id', ruleIds)
+      .in('house_id', houseIds)
+      .in('record_date', dates);
+    const existingSet = new Set((existing ?? []).map((e) => `${e.rule_id}|${e.house_id}|${e.record_date}`));
+    const newEvents = events.filter((e) => !existingSet.has(`${e.rule_id}|${e.house_id}|${e.record_date}`));
+
     const { error: insErr } = await supabaseAdmin
       .from('alert_events')
       .upsert(events, { onConflict: 'rule_id,house_id,record_date', ignoreDuplicates: false });
     if (insErr) throw insErr;
 
-    return NextResponse.json({ success: true, evaluated: rules.length, fired: events.length });
+    // Notificar a Teams las alertas que recién se disparan hoy (no las re-evaluadas del mismo día)
+    let notified = 0;
+    if (newEvents.length > 0) {
+      const notifications: AlertNotification[] = newEvents.map((e) => {
+        const rule = rules.find((r) => r.id === e.rule_id);
+        return {
+          rule_name: rule?.name ?? e.message ?? 'Alerta',
+          casa: e.casa,
+          severity: e.severity as 'high' | 'medium' | 'low',
+          variable: e.variable,
+          value: e.value,
+          threshold: e.threshold,
+          operator: e.operator,
+          message: e.message,
+          record_date: e.record_date,
+        };
+      });
+      // Fire-and-forget: no bloqueamos la respuesta del evaluador si Teams tarda
+      notifyTeams(notifications).catch((err) => console.error('[evaluate] notifyTeams falló:', err));
+      notified = notifications.length;
+    }
+
+    return NextResponse.json({ success: true, evaluated: rules.length, fired: events.length, notified });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
   }

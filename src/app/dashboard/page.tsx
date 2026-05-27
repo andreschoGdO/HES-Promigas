@@ -2065,10 +2065,26 @@ function ReactivaChart({
   );
 }
 
+interface TopAlertRow {
+  rule_id: string;
+  casa: string;
+  rule_name: string;
+  variable: string | null;
+  severity: 'high' | 'medium' | 'low';
+  count: number;
+  last_fired_at: string;
+  first_fired_at: string;
+}
+
 function AlertasCasaTab() {
   const [events, setEvents] = useState<AlertEventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterAck, setFilterAck] = useState<'all' | 'pending'>('pending');
+
+  // Estado para la tabla de "Alertas más frecuentes"
+  const [topAlerts, setTopAlerts] = useState<TopAlertRow[]>([]);
+  const [topLoading, setTopLoading] = useState(true);
+  const [topDays, setTopDays] = useState<1 | 7 | 30>(7);
 
   const load = async () => {
     setLoading(true);
@@ -2079,7 +2095,16 @@ function AlertasCasaTab() {
     setLoading(false);
   };
 
+  const loadTop = async () => {
+    setTopLoading(true);
+    const r = await fetch(`/api/alerts/top?days=${topDays}&limit=50`);
+    const j = await r.json();
+    setTopAlerts(j.items ?? []);
+    setTopLoading(false);
+  };
+
   useEffect(() => { load(); }, [filterAck]);
+  useEffect(() => { loadTop(); }, [topDays]);
 
   // Agrupar por casa
   const byCasa = useMemo(() => {
@@ -2119,6 +2144,76 @@ function AlertasCasaTab() {
           <button className={`chip ${filterAck === 'pending' ? 'active' : ''}`} onClick={() => setFilterAck('pending')}>Pendientes</button>
           <button className={`chip ${filterAck === 'all' ? 'active' : ''}`} onClick={() => setFilterAck('all')}>Todas</button>
         </div>
+      </div>
+
+      {/* Tabla de alertas más frecuentes — agrupa por (regla, casa) y muestra conteo */}
+      <div className="glass-panel" style={{ padding: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1rem' }}>Alertas más frecuentes</h3>
+            <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+              Conteo por regla y casa. Los primeros son los que más se están repitiendo — probablemente requieren ajuste de umbral o intervención en sitio.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className={`chip ${topDays === 1 ? 'active' : ''}`} onClick={() => setTopDays(1)}>24 h</button>
+            <button className={`chip ${topDays === 7 ? 'active' : ''}`} onClick={() => setTopDays(7)}>7 días</button>
+            <button className={`chip ${topDays === 30 ? 'active' : ''}`} onClick={() => setTopDays(30)}>30 días</button>
+          </div>
+        </div>
+        {topLoading ? (
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 16, fontSize: '0.85rem' }}>Cargando…</div>
+        ) : topAlerts.length === 0 ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '8px 0' }}>
+            Ninguna alerta disparada en los últimos {topDays === 1 ? '24 h' : `${topDays} días`}.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '0.82rem' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <th style={{ padding: '6px 8px', width: 60 }}>Severidad</th>
+                  <th style={{ padding: '6px 8px' }}>Casa</th>
+                  <th style={{ padding: '6px 8px' }}>Regla</th>
+                  <th style={{ padding: '6px 8px', textAlign: 'right' }}>Eventos</th>
+                  <th style={{ padding: '6px 8px' }}>Primera</th>
+                  <th style={{ padding: '6px 8px' }}>Última</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topAlerts.map((row) => {
+                  const sev = SEV_META[row.severity];
+                  const isRepeating = row.count >= 3;
+                  return (
+                    <tr key={`${row.rule_id}|${row.casa}`}
+                      style={{ borderTop: '1px solid var(--border)', background: isRepeating ? sev.color + '08' : undefined }}>
+                      <td style={{ padding: '6px 8px' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: 8, background: sev.color + '20', color: sev.color, fontSize: '0.7rem', fontWeight: 700 }}>{sev.label}</span>
+                      </td>
+                      <td style={{ padding: '6px 8px', fontWeight: 600 }}>{row.casa}</td>
+                      <td style={{ padding: '6px 8px' }}>
+                        {row.rule_name}
+                        {row.variable && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace' }}>{row.variable}</span>}
+                      </td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 700, color: isRepeating ? sev.color : 'var(--text-primary)' }}>
+                        {row.count}{isRepeating && '×'}
+                      </td>
+                      <td style={{ padding: '6px 8px', fontSize: '0.74rem', color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace' }}>
+                        {new Date(row.first_fired_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                      </td>
+                      <td style={{ padding: '6px 8px', fontSize: '0.74rem', color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace' }}>
+                        {new Date(row.last_fired_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p style={{ marginTop: 10, fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              Filas con <strong>3 o más eventos</strong> aparecen resaltadas — son las que vale la pena revisar primero (probablemente requieren ajuste de umbral, calibración o visita técnica).
+            </p>
+          </div>
+        )}
       </div>
 
       {loading ? (

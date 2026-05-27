@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Home, BarChart3, ClipboardCheck, Bell, Settings, ArrowRight, Server, Database, Cloud, Cpu, Sun, FileText, AlertOctagon, Wrench, Settings2, Package, ScanLine, ChevronRight, ChevronDown, Clock, Lock, HardDrive } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Home, BarChart3, ClipboardCheck, Bell, Settings, ArrowRight, Server, Database, Cloud, Cpu, Sun, FileText, AlertOctagon, Wrench, Settings2, Package, ScanLine, ChevronRight, ChevronDown, Clock, Lock, HardDrive, RefreshCw, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 
 interface Module {
   href: string;
@@ -114,6 +115,15 @@ export default function InicioPage() {
           actas de visitas técnicas en campo, inventario serializado con trazabilidad de equipos, y eventualmente control
           de los inversores vía API del fabricante.
         </p>
+      </div>
+
+      {/* Estado del sistema — sync en vivo */}
+      <div className="glass-panel">
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+          <h2 className="card-title" style={{ margin: 0 }}>Estado del sistema</h2>
+          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.78rem' }}>Última escritura por cada cron</p>
+        </div>
+        <SyncStatusWidget />
       </div>
 
       {/* Diagrama de arquitectura */}
@@ -549,5 +559,171 @@ function TechStack() {
         ))}
       </tbody>
     </table>
+  );
+}
+
+/* ═══════════════ Sync status widget ═══════════════ */
+interface SyncStatus {
+  instant_metrics: { last_at: string | null };
+  casa_metrics: { last_date: string | null };
+  closures: { last_date: string | null };
+  devices: { last_seen_max: string | null; total: number | null };
+  now: string;
+}
+
+function SyncStatusWidget() {
+  const [data, setData] = useState<SyncStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await fetch('/api/sync/status', { cache: 'no-store' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      setData(j as SyncStatus);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  if (loading && !data) return <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: 8 }}>Cargando estado…</div>;
+  if (err) return <div className="alert-error" style={{ fontSize: '0.85rem' }}>No se pudo cargar el estado: {err}</div>;
+  if (!data) return null;
+
+  const nowMs = new Date(data.now).getTime();
+  const minutesSince = (iso: string | null): number | null => iso ? Math.floor((nowMs - new Date(iso).getTime()) / 60000) : null;
+  const daysSince = (dateStr: string | null): number | null => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr + 'T00:00:00Z').getTime();
+    return Math.floor((nowMs - d) / 86400000);
+  };
+
+  return (
+    <>
+      <div className="status-grid" style={{ marginTop: 14 }}>
+        <StatusCard
+          label="Lazo de 15 min"
+          source="instant_metrics"
+          schedule="GitHub Actions */15 min"
+          minutes={minutesSince(data.instant_metrics.last_at)}
+          freshUnder={30}
+          warnUnder={120}
+          stamp={data.instant_metrics.last_at}
+          unit="min"
+        />
+        <StatusCard
+          label="Cierre diario"
+          source="daily_energy_closures"
+          schedule="Vercel Cron 06:00 UTC"
+          days={daysSince(data.closures.last_date)}
+          freshUnder={1.5}
+          warnUnder={3}
+          stamp={data.closures.last_date}
+          unit="día"
+        />
+        <StatusCard
+          label="Métricas por casa"
+          source="daily_casa_metrics"
+          schedule="Vercel Cron 06:00 UTC"
+          days={daysSince(data.casa_metrics.last_date)}
+          freshUnder={1.5}
+          warnUnder={3}
+          stamp={data.casa_metrics.last_date}
+          unit="día"
+        />
+        <StatusCard
+          label="Devices (Metrum)"
+          source={`${data.devices.total ?? 0} devices`}
+          schedule="Vercel Cron 06:00 UTC"
+          minutes={minutesSince(data.devices.last_seen_max)}
+          freshUnder={60}
+          warnUnder={360}
+          stamp={data.devices.last_seen_max}
+          unit="min"
+        />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+        <button onClick={load} disabled={loading} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 10px' }}>
+          <RefreshCw size={12} /> {loading ? 'Actualizando…' : 'Actualizar'}
+        </button>
+      </div>
+
+      <style jsx>{`
+        .status-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        @media (max-width: 900px) { .status-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 500px) { .status-grid { grid-template-columns: 1fr; } }
+      `}</style>
+    </>
+  );
+}
+
+function StatusCard({ label, source, schedule, minutes, days, freshUnder, warnUnder, stamp, unit }: {
+  label: string;
+  source: string;
+  schedule: string;
+  minutes?: number | null;
+  days?: number | null;
+  freshUnder: number;
+  warnUnder: number;
+  stamp: string | null;
+  unit: 'min' | 'día';
+}) {
+  const value = minutes !== undefined ? minutes : days ?? null;
+  let color = '#94a3b8';
+  let Icon = XCircle;
+  let statusText = 'sin datos';
+
+  if (value === null || stamp === null) {
+    color = '#94a3b8';
+    Icon = XCircle;
+    statusText = 'sin datos';
+  } else if (value < freshUnder) {
+    color = '#10b981';
+    Icon = CheckCircle2;
+    statusText = 'OK';
+  } else if (value < warnUnder) {
+    color = '#f59e0b';
+    Icon = AlertTriangle;
+    statusText = 'lento';
+  } else {
+    color = '#ef4444';
+    Icon = XCircle;
+    statusText = 'caído';
+  }
+
+  const relText = value === null
+    ? '—'
+    : value < 1 && unit === 'min'
+      ? 'ahora'
+      : `hace ${value} ${unit}${value === 1 ? '' : unit === 'min' ? '' : 's'}`;
+
+  const stampShort = stamp
+    ? unit === 'min'
+      ? new Date(stamp).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })
+      : stamp
+    : '—';
+
+  return (
+    <div style={{ padding: 12, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderLeft: `4px solid ${color}`, borderRadius: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6, marginBottom: 8 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: '0.78rem', fontWeight: 600, lineHeight: 1.2 }}>{label}</div>
+          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: 2 }}>{source}</div>
+        </div>
+        <Icon size={16} style={{ color, flexShrink: 0 }} />
+      </div>
+      <div style={{ fontSize: '1.05rem', fontWeight: 700, color, lineHeight: 1.1 }}>{relText}</div>
+      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: 4, fontFamily: 'ui-monospace, monospace' }}>{stampShort}</div>
+      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)', marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        <span style={{ color }}>{statusText}</span> · {schedule}
+      </div>
+    </div>
   );
 }

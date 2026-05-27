@@ -498,8 +498,17 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     if (!navigator.geolocation) { setMsg({ kind: 'error', text: 'GPS no disponible' }); return; }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setVisit((v) => v ? { ...v, lat: pos.coords.latitude, lng: pos.coords.longitude } : v);
-        setMsg({ kind: 'success', text: `GPS guardado (${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)})` });
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const coordStr = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        setVisit((v) => v ? {
+          ...v,
+          lat,
+          lng,
+          // Autocompleta el campo de form_data "coordenadas" si existe en el schema actual
+          form_data: { ...v.form_data, coordenadas: coordStr },
+        } : v);
+        setMsg({ kind: 'success', text: `GPS guardado (${coordStr})` });
       },
       (err) => setMsg({ kind: 'error', text: `GPS error: ${err.message}` }),
       { enableHighAccuracy: true, timeout: 10000 }

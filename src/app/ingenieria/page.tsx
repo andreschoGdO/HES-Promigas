@@ -21,12 +21,18 @@ function QuickSizer() {
   const panelKwp = (Number(panelWp) || 550) / 1000;
   const autosufN = Number(autosuf) || 70;
 
+  // 1. Demanda diaria a cubrir según objetivo de autosuficiencia
   const kwhDiaPromedio = kwhMesN / 30;
   const demandaCubrir = kwhDiaPromedio * (autosufN / 100);
-  const kwpSugeridos = demandaCubrir / yieldDia;
-  const paneles = Math.ceil(kwpSugeridos / panelKwp);
-  const generacionMensual = kwpSugeridos * yieldDia * 30;
-  const inversorRange = kwpSugeridos < 6 ? 'DEYE 6K' : kwpSugeridos < 12 ? 'Livoltek 10K' : 'DEYE 15K / Livoltek 15K';
+  // 2. kWp teóricos requeridos (no redondeados)
+  const kwpTeoricos = demandaCubrir / yieldDia;
+  // 3. Cantidad real de paneles (redondea hacia arriba) y kWp instalados resultantes
+  const paneles = Math.ceil(kwpTeoricos / panelKwp);
+  const kwpInstalados = paneles * panelKwp;
+  // 4. Generación esperada con los paneles reales instalados (no la cobertura objetivo)
+  const generacionMensual = kwpInstalados * yieldDia * 30;
+  // 5. Recomendación de inversor según kWp REALES instalados (no teóricos)
+  const inversorRange = kwpInstalados < 6 ? 'DEYE 6K' : kwpInstalados < 12 ? 'Livoltek 10K' : 'DEYE 15K / Livoltek 15K';
 
   return (
     <div className="glass-panel" style={{ padding: 16, marginBottom: 14 }}>
@@ -35,7 +41,7 @@ function QuickSizer() {
         <h3 style={{ margin: 0, fontSize: '0.98rem' }}>Calculadora rápida de dimensionamiento</h3>
       </div>
       <p style={{ margin: '0 0 12px', fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
-        Sugerencia inicial basada en yield Cali. Ajusta y luego registra los valores definitivos al avanzar el proyecto a "Pendiente aprobación".
+        Sugerencia inicial basada en yield Cali. Ajusta y luego registra los valores definitivos al avanzar el proyecto a {'"Pendiente aprobación"'}.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 12 }}>
         <div>
@@ -57,7 +63,7 @@ function QuickSizer() {
       </div>
       {kwhMesN > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-          <ResultCard label="kWp sugeridos" value={kwpSugeridos.toFixed(2)} unit="kWp" color="#8b5cf6" />
+          <ResultCard label="kWp instalados" value={kwpInstalados.toFixed(2)} unit={`kWp (teórico ${kwpTeoricos.toFixed(2)})`} color="#8b5cf6" />
           <ResultCard label="Paneles" value={paneles.toString()} unit={`× ${panelWp} Wp`} color="#3b82f6" />
           <ResultCard label="Generación esperada" value={generacionMensual.toFixed(0)} unit="kWh/mes" color="#10b981" />
           <ResultCard label="Inversor categoría" value={inversorRange} unit="" color="#f59e0b" />

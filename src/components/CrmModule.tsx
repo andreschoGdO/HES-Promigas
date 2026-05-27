@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, X, ArrowRight, Calculator, ExternalLink, ClipboardList, ChevronDown, ChevronUp, History } from 'lucide-react';
+import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History } from 'lucide-react';
 import {
   type CrmModule, type StageMeta, type TransitionDef,
   SALES_STAGES, ENGINEERING_STAGES, OPERATIONS_STAGES,
-  TRANSITIONS, transitionsFrom,
+  transitionsFrom,
 } from '@/lib/crm-stages';
 
 interface CrmProject {
@@ -141,7 +141,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
         <TableView projects={projects} stages={stages} module={module} onOpen={setActiveProject} onAdvance={setTransition} />
       )}
 
-      {activeProject && <ProjectDetailModal project={activeProject} onClose={() => setActiveProject(null)} onChanged={() => { setActiveProject(null); load(); }} userEmail={userEmail} module={module} onAdvance={setTransition} />}
+      {activeProject && <ProjectDetailModal project={activeProject} onClose={() => setActiveProject(null)} onChanged={() => { setActiveProject(null); load(); }} userEmail={userEmail} module={module} onAdvance={(t) => { setActiveProject(null); setTransition(t); }} />}
       {transition && <TransitionModal project={transition.project} def={transition.def} userEmail={userEmail} onClose={() => setTransition(null)} onDone={() => { setTransition(null); load(); }} />}
       {showCreate && <CreateProjectModal userEmail={userEmail} onClose={() => setShowCreate(false)} onCreated={(p) => { setShowCreate(false); load(); setActiveProject(p); }} />}
     </div>

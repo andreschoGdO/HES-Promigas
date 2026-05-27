@@ -75,6 +75,10 @@ export interface TransitionDef {
   }>;
   /** Lo que aparece como `notes` en el evento al ejecutarse */
   noteTemplate?: string;
+  /** Si true, NO marca el stage del fromModule como 'completado' al salir.
+   *  Útil cuando el módulo está pausado esperando que otro módulo le devuelva
+   *  el control (ej: engineering solicita previa a ops y se queda en 'pending'). */
+  keepSourceStage?: boolean;
 }
 
 const f = (
@@ -150,6 +154,8 @@ export const TRANSITIONS: TransitionDef[] = [
       f('notes', 'Instrucciones para Operaciones', 'textarea', false, { placeholder: 'Detalles sobre acceso, contacto en sitio, etc.' }),
     ],
     noteTemplate: 'Ingeniería solicita visita previa. Operaciones debe levantar acta en /visitas y vincular al proyecto.',
+    // Engineering queda en 'pending' (esperando), no en 'completado'. El control vuelve después.
+    keepSourceStage: true,
   },
   // (operations completa visita_previa → vuelve a engineering con stage prefactibilidad_ok automáticamente)
   {
@@ -192,6 +198,8 @@ export const TRANSITIONS: TransitionDef[] = [
       f('visita_previa_id', 'ID visita previa (de /visitas)', 'text', false, { help: 'Pega el UUID de la visita previa completada en /visitas, o déjalo vacío si la enlazaste por otro medio.' }),
     ],
     noteTemplate: 'Visita previa completada. Vuelve a Ingeniería para dimensionar.',
+    // Operations va a volver (a 'alistamiento') más adelante, no se completa aún
+    keepSourceStage: true,
   },
   {
     action: 'operations_to_instalacion',

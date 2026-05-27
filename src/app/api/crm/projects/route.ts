@@ -9,7 +9,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const module = url.searchParams.get('module');
+  const moduleParam = url.searchParams.get('module');
   const stage = url.searchParams.get('stage');
   const q = url.searchParams.get('q');
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 500), 1000);
@@ -20,12 +20,19 @@ export async function GET(request: Request) {
     .order('updated_at', { ascending: false })
     .limit(limit);
 
-  if (module) query = query.eq('current_module', module);
-  if (stage && module) {
-    const col = module === 'sales' ? 'sales_stage' : module === 'engineering' ? 'engineering_stage' : 'operations_stage';
+  if (moduleParam) query = query.eq('current_module', moduleParam);
+  if (stage && moduleParam) {
+    const col = moduleParam === 'sales' ? 'sales_stage' : moduleParam === 'engineering' ? 'engineering_stage' : 'operations_stage';
     query = query.eq(col, stage);
   }
-  if (q) query = query.or(`title.ilike.%${q}%,client_name.ilike.%${q}%,code.ilike.%${q}%,client_email.ilike.%${q}%`);
+  if (q) {
+    // Sanitizar: PostgREST.or() es un DSL — comas, paréntesis, asteriscos rompen sintaxis
+    // y podrían usarse para inyectar filtros adicionales. Eliminarlos del input.
+    const safe = q.replace(/[,()*"\\]/g, ' ').trim();
+    if (safe) {
+      query = query.or(`title.ilike.%${safe}%,client_name.ilike.%${safe}%,code.ilike.%${safe}%,client_email.ilike.%${safe}%`);
+    }
+  }
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

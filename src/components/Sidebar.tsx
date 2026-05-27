@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat, TrendingUp } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
 export function Sidebar() {
@@ -61,6 +61,7 @@ export function Sidebar() {
     { label: 'CRM Ventas', path: '/ventas', icon: ShoppingCart },
     { label: 'Ingeniería', path: '/ingenieria', icon: Ruler },
     { label: 'Operaciones', path: '/operaciones', icon: HardHat },
+    { label: 'Funnel', path: '/funnel', icon: TrendingUp },
     { label: 'Visitas en Campo', path: '/visitas', icon: ClipboardCheck },
     { label: 'Inventario', path: '/inventario', icon: Package },
   ];

@@ -12,6 +12,7 @@ const TITLES: Record<string, string> = {
   '/ventas': 'CRM Ventas',
   '/ingenieria': 'Ingeniería',
   '/operaciones': 'Operaciones',
+  '/funnel': 'Funnel de Proyectos',
   '/configuracion': 'Configuración',
   '/alertas': 'Configuración Alertas',
   '/visitas': 'Visitas en Campo',

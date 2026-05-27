@@ -65,14 +65,23 @@ export async function linkVisitToInventory(opts: {
         continue;
       }
 
-      await supabaseAdmin
+      // UPDATE condicional sobre el status leído: si otra request concurrente ya cambió el estado,
+      // este update afectará 0 filas y NO insertamos un movimiento duplicado.
+      const { data: updated } = await supabaseAdmin
         .from('inventory_items')
         .update({
           status: 'installed',
           current_location: 'house',
           current_house_id: opts.houseId,
         })
-        .eq('id', item.id);
+        .eq('id', item.id)
+        .eq('status', item.status)
+        .select('id');
+
+      if (!updated || updated.length === 0) {
+        skipped.push(`${label}: ${serial} (modificado por otra operación, omitido)`);
+        continue;
+      }
 
       await supabaseAdmin.from('inventory_movements').insert({
         item_id: item.id,
@@ -112,12 +121,19 @@ export async function linkVisitToInventory(opts: {
       return { linked, skipped };
     }
 
-    // Si hay varios candidatos (ej. 2 medidores), marcar todos como in_repair
+    // Si hay varios candidatos (ej. 2 medidores), marcar todos como in_repair (con guard de concurrencia)
     for (const it of candidates) {
-      await supabaseAdmin
+      const { data: updated } = await supabaseAdmin
         .from('inventory_items')
         .update({ status: 'in_repair' })
-        .eq('id', it.id);
+        .eq('id', it.id)
+        .eq('status', 'installed')
+        .select('id');
+
+      if (!updated || updated.length === 0) {
+        skipped.push(`${equipoAfectado}: ${it.serial_number} (cambió de estado, omitido)`);
+        continue;
+      }
 
       await supabaseAdmin.from('inventory_movements').insert({
         item_id: it.id,

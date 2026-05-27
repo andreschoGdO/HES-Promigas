@@ -137,7 +137,8 @@ export async function GET(request: Request) {
       }
 
       // 3. Estado del gateway (sin red, basado en is_active y last_seen_at)
-      const gatewayOnline = gateway?.is_active !== false;
+      // Si la casa no tiene gateway registrado, no podemos afirmar que esté "online" → false
+      const gatewayOnline = gateway ? gateway.is_active !== false : false;
       const gatewayLastSeen = gateway?.last_seen_at ?? null;
 
       // 4. Calcular cos φ instantáneo

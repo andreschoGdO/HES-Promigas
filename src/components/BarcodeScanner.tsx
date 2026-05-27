@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface BarcodeDetectorLike {
   detect: (source: HTMLVideoElement | HTMLCanvasElement | ImageBitmap | Blob) => Promise<Array<{ rawValue: string; format: string }>>;
@@ -25,6 +25,12 @@ export function BarcodeScanner({ open, onClose, onDetect }: {
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [supported, setSupported] = useState<boolean | null>(null);
+
+  // Refs estables para los callbacks: evitan que el effect se re-ejecute (y reinicie la cámara)
+  // cuando el padre re-renderiza y pasa funciones inline nuevas.
+  const onDetectRef = useRef(onDetect);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onDetectRef.current = onDetect; onCloseRef.current = onClose; }, [onDetect, onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -57,9 +63,9 @@ export function BarcodeScanner({ open, onClose, onDetect }: {
             try {
               const results = await detector.detect(videoRef.current);
               if (results.length > 0) {
-                onDetect(results[0].rawValue);
+                onDetectRef.current(results[0].rawValue);
                 stop();
-                onClose();
+                onCloseRef.current();
                 return;
               }
             } catch {
@@ -83,7 +89,9 @@ export function BarcodeScanner({ open, onClose, onDetect }: {
 
     start();
     return () => stop();
-  }, [open, onClose, onDetect]);
+    // Solo depende de `open`: los callbacks se leen vía ref para no reiniciar la cámara
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 

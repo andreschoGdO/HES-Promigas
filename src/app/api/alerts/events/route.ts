@@ -30,9 +30,10 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   const body = await request.json();
   if (!body.id) return NextResponse.json({ error: 'id requerido' }, { status: 400 });
+  const ack = body.acknowledged ?? true;
   const { data, error } = await supabaseAdmin
     .from('alert_events')
-    .update({ acknowledged: body.acknowledged ?? true, acknowledged_at: new Date().toISOString() })
+    .update({ acknowledged: ack, acknowledged_at: ack ? new Date().toISOString() : null })
     .eq('id', body.id)
     .select('*')
     .single();

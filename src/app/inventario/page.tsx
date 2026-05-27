@@ -618,13 +618,41 @@ function BulkUploadModal({ onClose, onSaved, userEmail }: { onClose: () => void;
     setCsvText(text);
   };
 
+  // Parser CSV mínimo con soporte para comillas dobles (RFC 4180-light):
+  // - Campos pueden ir entre " "; comillas escapadas como ""
+  // - Saltos de línea dentro de comillas se respetan
   const parseCSV = (text: string): Record<string, string>[] => {
-    const lines = text.trim().split(/\r?\n/);
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map((h) => h.trim().replace(/^﻿/, ''));
+    const records: string[][] = [];
+    let cur: string[] = [];
+    let cell = '';
+    let inQuotes = false;
+    let i = 0;
+    while (i < text.length) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"' && text[i + 1] === '"') { cell += '"'; i += 2; continue; }
+        if (ch === '"') { inQuotes = false; i++; continue; }
+        cell += ch; i++; continue;
+      }
+      if (ch === '"') { inQuotes = true; i++; continue; }
+      if (ch === ',') { cur.push(cell); cell = ''; i++; continue; }
+      if (ch === '\n' || ch === '\r') {
+        cur.push(cell); cell = '';
+        if (cur.length > 1 || (cur.length === 1 && cur[0] !== '')) records.push(cur);
+        cur = [];
+        if (ch === '\r' && text[i + 1] === '\n') i += 2; else i++;
+        continue;
+      }
+      cell += ch; i++;
+    }
+    if (cell.length > 0 || cur.length > 0) { cur.push(cell); records.push(cur); }
+    if (records.length < 2) return [];
+    const headers = records[0].map((h) => h.trim().replace(/^﻿/, ''));
     const rows: Record<string, string>[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const cells = lines[i].split(',');
+    for (let r = 1; r < records.length; r++) {
+      const cells = records[r];
+      // Rechazar filas con número incorrecto de columnas — evita corrupción silenciosa
+      if (cells.length !== headers.length) continue;
       const obj: Record<string, string> = {};
       headers.forEach((h, idx) => { obj[h] = (cells[idx] ?? '').trim(); });
       if (obj.serial_number) rows.push(obj);
@@ -909,12 +937,24 @@ function MovimientosTab() {
   const [filterType, setFilterType] = useState<string>('all');
 
   useEffect(() => {
+    const ac = new AbortController();
+    setLoading(true);
     const params = new URLSearchParams({ limit: '300' });
     if (filterType !== 'all') params.set('type', filterType);
-    fetch(`/api/inventory/movements?${params}`).then((r) => r.json()).then((j) => {
-      setItems(j.movements ?? []);
-      setLoading(false);
-    });
+    fetch(`/api/inventory/movements?${params}`, { signal: ac.signal })
+      .then((r) => r.json())
+      .then((j) => {
+        if (ac.signal.aborted) return;
+        setItems(j.movements ?? []);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (e.name !== 'AbortError') {
+          console.error(e);
+          setLoading(false);
+        }
+      });
+    return () => ac.abort();
   }, [filterType]);
 
   const movementMeta = (type: string) => MOVEMENT_TYPES.find((m) => m.key === type) ?? { label: type, color: '#94a3b8' };

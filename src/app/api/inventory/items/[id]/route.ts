@@ -37,6 +37,10 @@ export async function PATCH(request: Request, context: Ctx) {
     const updates = { ...body };
     delete updates.id;
     delete updates.serial_number;  // no permitimos cambiar serial
+    // Campos que solo viven en inventory_movements, no en inventory_items:
+    delete updates.responsible_email;
+    delete updates.movement_notes;
+    delete updates.related_visit_id;
 
     const { data, error } = await supabaseAdmin.from('inventory_items').update(updates).eq('id', id).select('*').single();
     if (error) throw error;

@@ -4,14 +4,14 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const lowStock = url.searchParams.get('low_stock') === '1';
-  let q = supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('inventory_consumables')
     .select('*, inventory_categories(family, name)')
     .order('name', { ascending: true });
-  if (lowStock) q = q.lte('stock_quantity', 'min_threshold');
-  const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ consumables: data });
+  // Filtro low_stock se aplica en JS: PostgREST.lte solo admite valores literales, no nombres de columna
+  const out = lowStock ? (data ?? []).filter((c) => Number(c.stock_quantity ?? 0) <= Number(c.min_threshold ?? 0)) : data;
+  return NextResponse.json({ consumables: out });
 }
 
 export async function POST(request: Request) {

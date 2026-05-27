@@ -380,14 +380,15 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
 
   const schema = visit ? findSchema(visit.visit_type) ?? schemaProp : schemaProp;
 
-  // Inicializa: primera sección abierta, demás cerradas
+  // Re-inicializa al cambiar de visita: primera sección abierta, demás cerradas.
+  // Importante resetear: las section keys son distintas entre tipos de visita, no deben filtrarse.
   useEffect(() => {
-    if (visit && schema && Object.keys(openSections).length === 0) {
-      const init: Record<string, boolean> = { __ident: true };
-      schema.sections.forEach((s, i) => { init[s.title] = i === 0; });
-      setOpenSections(init);
-    }
-  }, [visit?.id, schema]);  // eslint-disable-line
+    if (!visit || !schema) return;
+    const init: Record<string, boolean> = { __ident: true };
+    schema.sections.forEach((s, i) => { init[s.title] = i === 0; });
+    setOpenSections(init);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visit?.id, visit?.visit_type]);
 
   const load = async () => {
     const r = await fetch(`/api/visits/${visitId}`);

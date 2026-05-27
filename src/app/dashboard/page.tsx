@@ -1,7 +1,7 @@
 "use client";
 import { supabase } from '@/lib/supabase';
 import { useEffect, useMemo, useState } from 'react';
-import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp, BarChart3, Cpu, AlertTriangle, Bell } from 'lucide-react';
 import { VARIABLES, findVariable, type VariableMeta } from '@/lib/variables-dict';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -311,11 +311,14 @@ function VariablesDictionary({ keys, title = 'Diccionario de variables' }: { key
 function BreakdownCard({ title, slices }: { title: string; slices: Slice[] }) {
   const total = slices.reduce((a, s) => a + s.value, 0);
   return (
-    <div className="glass-panel" style={{ flex: '1 1 260px', minWidth: 260, padding: '16px 20px' }}>
-      <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '12px' }}>{title}</div>
+    <div className="glass-panel" style={{ padding: '16px 20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
+        <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{title}</div>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total {total}</div>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
         <SliceDonut slices={slices} total={total} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: 0 }}>
           {slices.length === 0 ? (
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Sin dispositivos</span>
           ) : slices.map((s) => (
@@ -424,33 +427,66 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof BarChart3; description: string }> = {
+    cierres:  { label: 'Cierres y Granular',     color: '#07c5a8', Icon: Activity,       description: 'Lectura diaria por casa con energía, yield, performance ratio y vista granular por device.' },
+    consumos: { label: 'Consumo por Dispositivo', color: '#3b82f6', Icon: Cpu,            description: 'Las 37 columnas del diccionario por device y día. Con sub-tab de gráficas para inspección.' },
+    reactiva: { label: 'Reactiva vs Activa (CREG)', color: '#f59e0b', Icon: AlertTriangle, description: 'Ratio mensual de reactiva sobre activa para detectar penalización CREG 015-2018.' },
+    alertas:  { label: 'Alertas por Casa',       color: '#ef4444', Icon: Bell,            description: 'Eventos agrupados por casa con severidad, generados por las reglas configuradas.' },
+    control:  { label: 'Control Manual Inversor', color: '#8b5cf6', Icon: Play,           description: 'Envío de comandos al inversor (cos φ, Q, P_max, modo) — stub hasta credenciales OEM.' },
+  };
+  const meta = TAB_META[tab];
+
+  const totalDevices = devices.length;
+  const gatewayTotal = gatewaySlices.reduce((s, x) => s + x.value, 0);
+  const gatewayOnline = gatewaySlices.find((s) => s.label === 'En Línea')?.value ?? 0;
+
   return (
     <>
-      <div>
-        <h1>Dashboard</h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-          {devices.length} dispositivos registrados en Supabase.
+      {/* HEADER */}
+      <div style={{ marginBottom: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <BarChart3 size={24} style={{ color: 'var(--accent)' }} />
+          <h1 style={{ margin: 0 }}>Dashboard</h1>
+        </div>
+        <p style={{ color: 'var(--text-secondary)', marginTop: 4, fontSize: '0.88rem' }}>
+          Operación diaria del portafolio de 28 instalaciones solares. {totalDevices} dispositivos sincronizados desde Metrum
+          {gatewayTotal > 0 && <> · <strong style={{ color: '#10b981' }}>{gatewayOnline}/{gatewayTotal}</strong> módems en línea</>}.
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+      {/* Estado de flota — 3 cards en grid coherente */}
+      <div className="fleet-grid" style={{ marginBottom: 20 }}>
         <BreakdownCard title="Módems" slices={gatewaySlices} />
         <BreakdownCard title="Medidores" slices={meterSlices} />
         <BreakdownCard title="Inversores" slices={inverterSlices} />
+        <style jsx>{`
+          .fleet-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+          @media (max-width: 900px) { .fleet-grid { grid-template-columns: 1fr; } }
+        `}</style>
       </div>
 
-      <div className="tabs">
-        {([
-          { id: 'cierres' as const, label: 'Cierres y Granular' },
-          { id: 'consumos' as const, label: 'Consumo por Dispositivo' },
-          { id: 'reactiva' as const, label: 'Reactiva vs Activa (CREG)' },
-          { id: 'alertas' as const, label: 'Alertas por Casa' },
-          { id: 'control' as const, label: 'Control Manual Inversor' },
-        ]).map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`tab ${tab === t.id ? 'active' : ''}`}>
-            {t.label}
-          </button>
-        ))}
+      {/* TABS — primary navigation con color por intención */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+        {(Object.keys(TAB_META) as Tab[]).map((k) => {
+          const m = TAB_META[k];
+          return (
+            <button key={k} onClick={() => setTab(k)} className={`chip ${tab === k ? 'active' : ''}`}
+              style={{ fontSize: '0.85rem', padding: '10px 14px', borderLeft: `4px solid ${m.color}`, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <m.Icon size={14} /> {m.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Strip de identidad del tab activo */}
+      <div className="glass-panel" style={{ padding: 16, borderLeft: `4px solid ${meta.color}`, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <meta.Icon size={26} style={{ color: meta.color, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 style={{ margin: 0, fontSize: '1.05rem' }}>{meta.label}</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>{meta.description}</p>
+          </div>
+        </div>
       </div>
 
       {tab === 'cierres' && <CierresGranularTab devices={devices} />}

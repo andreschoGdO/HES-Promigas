@@ -86,6 +86,19 @@ const FAMILY_ICONS: Record<string, typeof Cpu> = {
   inverter: Cpu, battery: Battery, panel: Sun, gateway: Cpu, meter: Cpu, cable: Cable, breaker: Cable, tool: Package, other: Package,
 };
 
+const FAMILY_LABELS: Record<string, string> = {
+  inverter: 'Inversores', battery: 'Baterías', panel: 'Paneles', gateway: 'Gateways',
+  meter: 'Medidores', cable: 'Cableado', breaker: 'Breakers', tool: 'Herramientas', other: 'Otros',
+};
+
+const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu; description: string }> = {
+  resumen:     { label: 'Resumen',     color: '#07c5a8', Icon: Boxes,    description: 'Indicadores y atención requerida del inventario.' },
+  equipos:     { label: 'Equipos',     color: '#3b82f6', Icon: Cpu,      description: 'Catálogo de equipos serializados por número de fabricante.' },
+  consumibles: { label: 'Consumibles', color: '#8b5cf6', Icon: Cable,    description: 'Cantidad disponible, umbrales de stock mínimo y ajustes.' },
+  movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History,  description: 'Audit log de cada cambio: recepción, instalación, reparación, RMA.' },
+  categorias:  { label: 'Categorías',  color: '#10b981', Icon: Tags,     description: 'Catálogo de modelos con valores por defecto (marca, capacidad, garantía).' },
+};
+
 export default function InventarioPage() {
   const [tab, setTab] = useState<Tab>('resumen');
   const [userEmail, setUserEmail] = useState<string>('');
@@ -94,27 +107,46 @@ export default function InventarioPage() {
     supa().auth.getUser().then(({ data }) => { if (data.user?.email) setUserEmail(data.user.email); });
   }, []);
 
+  const meta = TAB_META[tab];
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 40 }}>
+      {/* HEADER */}
       <div style={{ marginBottom: 22 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Package size={24} style={{ color: 'var(--accent)' }} />
           <h1 style={{ margin: 0 }}>Inventario</h1>
         </div>
         <p style={{ color: 'var(--text-secondary)', marginTop: 4, fontSize: '0.88rem' }}>
-          Equipos serializados, consumibles, movimientos y catálogo de categorías.
+          Trazabilidad de equipos por serial del fabricante y consumibles, con audit log completo de cada movimiento.
         </p>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 22 }}>
-        <TabBtn active={tab === 'resumen'} onClick={() => setTab('resumen')} Icon={Boxes}>Resumen</TabBtn>
-        <TabBtn active={tab === 'equipos'} onClick={() => setTab('equipos')} Icon={Cpu}>Equipos</TabBtn>
-        <TabBtn active={tab === 'consumibles'} onClick={() => setTab('consumibles')} Icon={Cable}>Consumibles</TabBtn>
-        <TabBtn active={tab === 'movimientos'} onClick={() => setTab('movimientos')} Icon={History}>Movimientos</TabBtn>
-        <TabBtn active={tab === 'categorias'} onClick={() => setTab('categorias')} Icon={Tags}>Categorías</TabBtn>
+      {/* TABS — primary navigation */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+        {(Object.keys(TAB_META) as Tab[]).map((k) => {
+          const m = TAB_META[k];
+          return (
+            <button key={k} onClick={() => setTab(k)} className={`chip ${tab === k ? 'active' : ''}`}
+              style={{ fontSize: '0.85rem', padding: '10px 14px', borderLeft: `4px solid ${m.color}`, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <m.Icon size={14} /> {m.label}
+            </button>
+          );
+        })}
       </div>
 
-      {tab === 'resumen' && <ResumenTab />}
+      {/* Strip de identidad del tab activo */}
+      <div className="glass-panel" style={{ padding: 16, borderLeft: `4px solid ${meta.color}`, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <meta.Icon size={26} style={{ color: meta.color, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 style={{ margin: 0, fontSize: '1.05rem' }}>{meta.label}</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>{meta.description}</p>
+          </div>
+        </div>
+      </div>
+
+      {tab === 'resumen' && <ResumenTab onJump={setTab} />}
       {tab === 'equipos' && <EquiposTab userEmail={userEmail} />}
       {tab === 'consumibles' && <ConsumiblesTab userEmail={userEmail} />}
       {tab === 'movimientos' && <MovimientosTab />}
@@ -123,17 +155,8 @@ export default function InventarioPage() {
   );
 }
 
-function TabBtn({ active, onClick, Icon, children }: { active: boolean; onClick: () => void; Icon: typeof Cpu; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} className={`chip ${active ? 'active' : ''}`}
-      style={{ fontSize: '0.85rem', padding: '10px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <Icon size={14} /> {children}
-    </button>
-  );
-}
-
 /* ═════════════ RESUMEN ═════════════ */
-function ResumenTab() {
+function ResumenTab({ onJump }: { onJump: (t: Tab) => void }) {
   const [items, setItems] = useState<InvItem[]>([]);
   const [consumables, setConsumables] = useState<Consumable[]>([]);
   const [loading, setLoading] = useState(true);
@@ -161,66 +184,172 @@ function ResumenTab() {
       byFamily[fam] = (byFamily[fam] ?? 0) + 1;
       if (it.warranty_expires_at && new Date(it.warranty_expires_at) < nowPlus60) warrantyExpiring++;
     }
-    const lowStock = consumables.filter((c) => c.stock_quantity <= c.min_threshold).length;
-    return { byStatus, byFamily, warrantyExpiring, lowStock, totalItems: items.length, totalConsumables: consumables.length };
+    const lowStockList = consumables.filter((c) => c.stock_quantity <= c.min_threshold);
+    return {
+      byStatus, byFamily, warrantyExpiring,
+      lowStockCount: lowStockList.length,
+      lowStockList,
+      inRepair: (byStatus.in_repair ?? 0) + (byStatus.rma ?? 0),
+      totalItems: items.length,
+      totalConsumables: consumables.length,
+      maxFamilyCount: Math.max(1, ...Object.values(byFamily)),
+      maxStatusCount: Math.max(1, ...Object.values(byStatus)),
+    };
   }, [items, consumables]);
 
   if (loading) return <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
 
+  const empty = stats.totalItems === 0 && stats.totalConsumables === 0;
+  const attentionItems = [
+    stats.lowStockCount > 0 && { label: `${stats.lowStockCount} consumible${stats.lowStockCount === 1 ? '' : 's'} con stock bajo`, color: '#ef4444', tab: 'consumibles' as Tab, hint: 'Revisar y reponer' },
+    stats.warrantyExpiring > 0 && { label: `${stats.warrantyExpiring} garantía${stats.warrantyExpiring === 1 ? '' : 's'} próxima${stats.warrantyExpiring === 1 ? '' : 's'} a vencer (≤ 60 días)`, color: '#ec4899', tab: 'equipos' as Tab, hint: 'Revisar antes que expiren' },
+    stats.inRepair > 0 && { label: `${stats.inRepair} equipo${stats.inRepair === 1 ? '' : 's'} en reparación o RMA`, color: '#f59e0b', tab: 'equipos' as Tab, hint: 'Hacer seguimiento al taller' },
+  ].filter(Boolean) as Array<{ label: string; color: string; tab: Tab; hint: string }>;
+
   return (
     <>
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 14, marginBottom: 18 }}>
-        <KpiCard label="Total equipos" value={stats.totalItems} color="#07c5a8" />
-        <KpiCard label="En stock" value={stats.byStatus.in_stock ?? 0} color="#10b981" />
-        <KpiCard label="Instalados" value={stats.byStatus.installed ?? 0} color="#3b82f6" />
-        <KpiCard label="En reparación / RMA" value={(stats.byStatus.in_repair ?? 0) + (stats.byStatus.rma ?? 0)} color="#f59e0b" />
-        <KpiCard label="Consumibles" value={stats.totalConsumables} color="#8b5cf6" />
-        <KpiCard label="Stock bajo (consumibles)" value={stats.lowStock} color="#ef4444" />
-        <KpiCard label="Garantías ≤ 60 días" value={stats.warrantyExpiring} color="#ec4899" />
-      </div>
-
-      {/* Por estado */}
-      <div className="glass-panel" style={{ marginBottom: 14 }}>
-        <h3 style={{ margin: 0, marginBottom: 12, fontSize: '0.95rem' }}>Equipos por estado</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          {Object.entries(STATUS_META).map(([key, meta]) => (
-            <div key={key} style={{ flex: '1 1 140px', padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, borderLeft: `4px solid ${meta.color}` }}>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{meta.label}</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 700, color: meta.color, marginTop: 4 }}>{stats.byStatus[key] ?? 0}</div>
-            </div>
-          ))}
+      {empty && (
+        <div className="glass-panel" style={{ padding: 20, marginBottom: 14, borderLeft: '4px solid #f59e0b' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+            <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+            <h3 style={{ margin: 0, fontSize: '1rem' }}>Inventario vacío</h3>
+          </div>
+          <p style={{ margin: '0 0 14px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+            Aún no hay equipos ni consumibles registrados. Empieza dando de alta tu primer equipo serializado o cargando un CSV con varios.
+          </p>
+          <button onClick={() => onJump('equipos')} className="primary-btn">
+            <Plus size={14} /> Ir a Equipos para registrar el primero
+          </button>
         </div>
+      )}
+
+      {/* 1. Atención requerida — solo si hay algo accionable */}
+      {attentionItems.length > 0 && (
+        <div className="glass-panel" style={{ marginBottom: 14, borderLeft: '4px solid #ef4444', padding: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <AlertTriangle size={18} style={{ color: '#ef4444' }} />
+            <h3 style={{ margin: 0, fontSize: '0.98rem' }}>Atención requerida</h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {attentionItems.map((a, i) => (
+              <button key={i} onClick={() => onJump(a.tab)}
+                style={{ background: 'var(--bg-elevated)', border: 'none', borderLeft: `3px solid ${a.color}`, borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', color: 'var(--text-primary)', textAlign: 'left' }}>
+                <div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{a.label}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{a.hint}</div>
+                </div>
+                <span style={{ fontSize: '0.74rem', color: a.color, fontWeight: 600 }}>Ir a {TAB_META[a.tab].label} →</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 2. KPIs principales — vista de portafolio en 4 cards iguales */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 14 }}>
+        <KpiCard label="Equipos totales" value={stats.totalItems} sub={`${stats.byStatus.installed ?? 0} instalados`} color="#07c5a8" Icon={Cpu} />
+        <KpiCard label="En stock (bodega)" value={stats.byStatus.in_stock ?? 0} sub="Listos para instalar" color="#10b981" Icon={Boxes} />
+        <KpiCard label="En reparación / RMA" value={stats.inRepair} sub={stats.inRepair === 0 ? 'Todo operando' : 'Fuera de servicio'} color="#f59e0b" Icon={AlertTriangle} />
+        <KpiCard label="Consumibles" value={stats.totalConsumables} sub={`${stats.lowStockCount} con stock bajo`} color="#8b5cf6" Icon={Cable} />
       </div>
 
-      {/* Por familia */}
-      <div className="glass-panel">
-        <h3 style={{ margin: 0, marginBottom: 12, fontSize: '0.95rem' }}>Equipos por familia</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          {Object.entries(stats.byFamily).map(([fam, count]) => {
-            const Icon = FAMILY_ICONS[fam] ?? Package;
-            return (
-              <div key={fam} style={{ flex: '1 1 140px', padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Icon size={20} style={{ color: 'var(--accent)' }} />
-                <div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>{fam}</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{count}</div>
-                </div>
-              </div>
-            );
-          })}
+      {/* 3. Distribución por estado y por familia, lado a lado */}
+      {stats.totalItems > 0 && (
+        <div className="dist-grid" style={{ marginBottom: 14 }}>
+          <div className="glass-panel">
+            <h3 style={{ margin: 0, marginBottom: 14, fontSize: '0.95rem' }}>Equipos por estado</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {Object.entries(STATUS_META).map(([key, meta]) => {
+                const count = stats.byStatus[key] ?? 0;
+                if (count === 0) return null;
+                const pct = (count / stats.maxStatusCount) * 100;
+                return (
+                  <div key={key}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{meta.label}</span>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: meta.color, fontFamily: 'ui-monospace, monospace' }}>{count}</span>
+                    </div>
+                    <div style={{ height: 8, background: 'var(--bg-elevated)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: meta.color, borderRadius: 4, transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="glass-panel">
+            <h3 style={{ margin: 0, marginBottom: 14, fontSize: '0.95rem' }}>Equipos por familia</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {Object.entries(stats.byFamily).sort((a, b) => b[1] - a[1]).map(([fam, count]) => {
+                const Icon = FAMILY_ICONS[fam] ?? Package;
+                const pct = (count / stats.maxFamilyCount) * 100;
+                return (
+                  <div key={fam}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600 }}>
+                        <Icon size={14} style={{ color: 'var(--accent)' }} /> {FAMILY_LABELS[fam] ?? fam}
+                      </span>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent)', fontFamily: 'ui-monospace, monospace' }}>{count}</span>
+                    </div>
+                    <div style={{ height: 8, background: 'var(--bg-elevated)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 4 }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {Object.keys(stats.byFamily).length === 0 && (
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aún sin equipos clasificados por familia.</div>
+              )}
+            </div>
+          </div>
+
+          <style jsx>{`
+            .dist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+            @media (max-width: 768px) { .dist-grid { grid-template-columns: 1fr; } }
+          `}</style>
+        </div>
+      )}
+
+      {/* 4. Acciones rápidas — el siguiente paso natural */}
+      <div className="glass-panel" style={{ padding: 18 }}>
+        <h3 style={{ margin: 0, marginBottom: 4, fontSize: '0.95rem' }}>Siguientes acciones</h3>
+        <p style={{ margin: '0 0 14px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+          Lo más común que vas a hacer aquí:
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+          <ActionLink onClick={() => onJump('equipos')} color="#3b82f6" Icon={Plus} label="Registrar un equipo" hint="Manual, CSV, cámara o pistola" />
+          <ActionLink onClick={() => onJump('consumibles')} color="#8b5cf6" Icon={Cable} label="Ajustar stock de consumibles" hint="Entradas, salidas, ajustes" />
+          <ActionLink onClick={() => onJump('movimientos')} color="#f59e0b" Icon={History} label="Ver audit log" hint="Cada cambio queda registrado" />
         </div>
       </div>
     </>
   );
 }
 
-function KpiCard({ label, value, color }: { label: string; value: number; color: string }) {
+function KpiCard({ label, value, color, sub, Icon }: { label: string; value: number; color: string; sub?: string; Icon?: typeof Cpu }) {
   return (
-    <div className="glass-panel" style={{ padding: 14, borderLeft: `4px solid ${color}` }}>
-      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
-      <div style={{ fontSize: '1.7rem', fontWeight: 700, color, marginTop: 4 }}>{value}</div>
+    <div className="glass-panel" style={{ padding: 16, borderLeft: `4px solid ${color}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>{label}</div>
+        {Icon && <Icon size={16} style={{ color, opacity: 0.6 }} />}
+      </div>
+      <div style={{ fontSize: '1.8rem', fontWeight: 700, color, marginTop: 6, lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 4 }}>{sub}</div>}
     </div>
+  );
+}
+
+function ActionLink({ onClick, color, Icon, label, hint }: { onClick: () => void; color: string; Icon: typeof Cpu; label: string; hint: string }) {
+  return (
+    <button onClick={onClick}
+      style={{ background: 'var(--bg-elevated)', border: 'none', borderLeft: `3px solid ${color}`, borderRadius: 8, padding: 14, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, color: 'var(--text-primary)' }}>
+      <Icon size={18} style={{ color, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '0.86rem', fontWeight: 600 }}>{label}</div>
+        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 2 }}>{hint}</div>
+      </div>
+    </button>
   );
 }
 
@@ -256,7 +385,7 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
   return (
     <>
       <div className="glass-panel" style={{ marginBottom: 14, padding: 14 }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           <button onClick={() => setShowAdd(true)} className="primary-btn"><Plus size={14} /> Nuevo equipo</button>
           <button onClick={() => setShowBulk(true)} className="secondary-btn"><Upload size={14} /> Cargar CSV</button>
           <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
@@ -266,6 +395,7 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
               style={{ width: '100%', paddingLeft: 32 }} />
           </div>
         </div>
+        <div style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Filtrar por estado</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button className={`chip ${filterStatus === 'all' ? 'active' : ''}`} onClick={() => setFilterStatus('all')}>Todos</button>
           {Object.entries(STATUS_META).map(([key, meta]) => (
@@ -274,12 +404,22 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
             </button>
           ))}
         </div>
+        {!loading && items.length > 0 && (
+          <div style={{ marginTop: 10, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            Mostrando <strong style={{ color: 'var(--text-primary)' }}>{items.length}</strong> equipo{items.length === 1 ? '' : 's'}
+            {(filterStatus !== 'all' || search) && ' (con filtros aplicados)'}
+          </div>
+        )}
       </div>
 
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
       ) : items.length === 0 ? (
-        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>Sin equipos para los filtros actuales.</div>
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+          {(filterStatus !== 'all' || search)
+            ? 'Sin equipos para los filtros actuales. Prueba quitando los filtros.'
+            : 'Aún no hay equipos registrados. Usa "Nuevo equipo" para añadir uno manualmente o con cámara/pistola, o "Cargar CSV" para subir varios de una vez.'}
+        </div>
       ) : (
         <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
@@ -572,16 +712,30 @@ function ConsumiblesTab({ userEmail }: { userEmail: string }) {
     load();
   };
 
+  const lowStockCount = items.filter((c) => c.stock_quantity <= c.min_threshold).length;
+
   return (
     <>
-      <div className="glass-panel" style={{ marginBottom: 14, padding: 14 }}>
+      <div className="glass-panel" style={{ marginBottom: 14, padding: 14, display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={() => setShowAdd(true)} className="primary-btn"><Plus size={14} /> Nuevo consumible</button>
+        {items.length > 0 && (
+          <div style={{ display: 'flex', gap: 14, marginLeft: 'auto', fontSize: '0.82rem' }}>
+            <div><span style={{ color: 'var(--text-muted)' }}>Total: </span><strong>{items.length}</strong></div>
+            {lowStockCount > 0 && (
+              <div style={{ color: '#ef4444', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <AlertTriangle size={14} /> <strong>{lowStockCount}</strong> con stock bajo
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
       ) : items.length === 0 ? (
-        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>Sin consumibles registrados.</div>
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+          Aún no hay consumibles. Registra cables, conectores, breakers, tornillería y demás material que se gasta para que el sistema te alerte cuando estés por debajo del umbral mínimo.
+        </div>
       ) : (
         <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
           <table style={{ width: '100%', fontSize: '0.82rem' }}>
@@ -734,56 +888,100 @@ function AdjustStockModal({ consumable, onClose, onSaved, userEmail }: { consuma
 }
 
 /* ═════════════ MOVIMIENTOS ═════════════ */
+const MOVEMENT_TYPES: Array<{ key: string; label: string; color: string }> = [
+  { key: 'receive',          label: 'Recepción',       color: '#3b82f6' },
+  { key: 'install',          label: 'Instalación',     color: '#07c5a8' },
+  { key: 'uninstall',        label: 'Desinstalación',  color: '#94a3b8' },
+  { key: 'transfer',         label: 'Traslado',        color: '#10b981' },
+  { key: 'repair_start',     label: 'A reparación',    color: '#f59e0b' },
+  { key: 'repair_end',       label: 'Repar. cerrada',  color: '#10b981' },
+  { key: 'rma_send',         label: 'RMA enviado',     color: '#8b5cf6' },
+  { key: 'rma_return',       label: 'RMA retorno',     color: '#8b5cf6' },
+  { key: 'decommission',     label: 'Decomiso',        color: '#94a3b8' },
+  { key: 'adjust_quantity',  label: 'Ajuste stock',    color: '#ec4899' },
+  { key: 'reserve',          label: 'Reserva',         color: '#3b82f6' },
+  { key: 'unreserve',        label: 'Libera reserva',  color: '#94a3b8' },
+];
+
 function MovimientosTab() {
   const [items, setItems] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState<string>('all');
 
   useEffect(() => {
-    fetch('/api/inventory/movements?limit=200').then((r) => r.json()).then((j) => {
+    const params = new URLSearchParams({ limit: '300' });
+    if (filterType !== 'all') params.set('type', filterType);
+    fetch(`/api/inventory/movements?${params}`).then((r) => r.json()).then((j) => {
       setItems(j.movements ?? []);
       setLoading(false);
     });
-  }, []);
+  }, [filterType]);
 
-  if (loading) return <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
-  if (items.length === 0) return <div className="alert-warning" style={{ fontSize: '0.85rem' }}>No hay movimientos registrados aún.</div>;
+  const movementMeta = (type: string) => MOVEMENT_TYPES.find((m) => m.key === type) ?? { label: type, color: '#94a3b8' };
 
   return (
-    <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', fontSize: '0.82rem' }}>
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Tipo</th>
-              <th>Equipo / Consumible</th>
-              <th>De → A</th>
-              <th>Cantidad</th>
-              <th>Responsable</th>
-              <th>Notas</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((m) => (
-              <tr key={m.id}>
-                <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem' }}>{new Date(m.created_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td>
-                <td><span style={{ padding: '2px 8px', borderRadius: 10, background: 'var(--bg-elevated)', fontSize: '0.7rem', fontWeight: 600 }}>{m.type}</span></td>
-                <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem' }}>
-                  {m.inventory_items?.serial_number ?? m.inventory_consumables?.name ?? '—'}
-                </td>
-                <td style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
-                  {m.from_status && <>{m.from_status}</>}{m.from_status && m.to_status && ' → '}{m.to_status}
-                  {m.from_location && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{m.from_location} → {m.to_location}</div>}
-                </td>
-                <td style={{ fontFamily: 'ui-monospace, monospace' }}>{m.quantity ?? '—'}</td>
-                <td style={{ fontSize: '0.74rem' }}>{m.responsible_email ?? '—'}</td>
-                <td style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{m.notes ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <div className="glass-panel" style={{ marginBottom: 14, padding: 14 }}>
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Filtrar por tipo de movimiento</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className={`chip ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')}>Todos</button>
+          {MOVEMENT_TYPES.map((m) => (
+            <button key={m.key} className={`chip ${filterType === m.key ? 'active' : ''}`} onClick={() => setFilterType(m.key)} style={{ borderLeft: `3px solid ${m.color}` }}>
+              {m.label}
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
+
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
+      ) : items.length === 0 ? (
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+          {filterType === 'all' ? 'No hay movimientos registrados aún. Cualquier cambio de estado, recepción o ajuste de stock aparecerá aquí.' : 'Sin movimientos de este tipo.'}
+        </div>
+      ) : (
+        <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '0.82rem' }}>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Equipo / Consumible</th>
+                  <th>De → A</th>
+                  <th>Cantidad</th>
+                  <th>Responsable</th>
+                  <th>Notas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((m) => {
+                  const mm = movementMeta(m.type);
+                  return (
+                    <tr key={m.id} style={{ borderLeft: `3px solid ${mm.color}` }}>
+                      <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem' }}>{new Date(m.created_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                      <td>
+                        <span style={{ padding: '2px 10px', borderRadius: 10, background: mm.color + '20', color: mm.color, fontSize: '0.7rem', fontWeight: 700 }}>{mm.label}</span>
+                      </td>
+                      <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem' }}>
+                        {m.inventory_items?.serial_number ?? m.inventory_consumables?.name ?? '—'}
+                      </td>
+                      <td style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                        {m.from_status && <>{m.from_status}</>}{m.from_status && m.to_status && ' → '}{m.to_status}
+                        {m.from_location && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{m.from_location} → {m.to_location}</div>}
+                      </td>
+                      <td style={{ fontFamily: 'ui-monospace, monospace' }}>{m.quantity ?? '—'}</td>
+                      <td style={{ fontSize: '0.74rem' }}>{m.responsible_email ?? '—'}</td>
+                      <td style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{m.notes ?? '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -807,40 +1005,64 @@ function CategoriasTab() {
     load();
   };
 
+  const byFamily = useMemo(() => {
+    const groups: Record<string, Category[]> = {};
+    for (const c of items) {
+      const fam = c.family || 'other';
+      (groups[fam] ??= []).push(c);
+    }
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [items]);
+
   if (loading) return <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
+  if (items.length === 0) return <div className="alert-warning" style={{ fontSize: '0.85rem' }}>No hay categorías registradas. Las categorías sirven como plantilla para autocompletar marca, modelo, capacidad y garantía al dar de alta un equipo.</div>;
 
   return (
-    <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-      <table style={{ width: '100%', fontSize: '0.82rem' }}>
-        <thead>
-          <tr>
-            <th>Código (SKU modelo)</th>
-            <th>Nombre</th>
-            <th>Familia</th>
-            <th>Marca / Modelo default</th>
-            <th>Capacidad default</th>
-            <th>Garantía default</th>
-            <th style={{ textAlign: 'right' }}>Acciones</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((c) => (
-            <tr key={c.id}>
-              <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem', fontWeight: 600 }}>{c.code}</td>
-              <td>{c.name}</td>
-              <td style={{ textTransform: 'capitalize' }}>{c.family}</td>
-              <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{[c.default_brand, c.default_model].filter(Boolean).join(' · ') || '—'}</td>
-              <td style={{ fontSize: '0.78rem' }}>{c.default_capacity_value ? `${c.default_capacity_value} ${c.default_capacity_unit ?? ''}` : '—'}</td>
-              <td style={{ fontSize: '0.78rem' }}>{c.default_warranty_months ? `${c.default_warranty_months} meses` : '—'}</td>
-              <td style={{ textAlign: 'right' }}>
-                <button onClick={() => remove(c.id)} title="Eliminar" style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
-                  <Trash2 size={14} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {byFamily.map(([family, cats]) => {
+        const Icon = FAMILY_ICONS[family] ?? Package;
+        return (
+          <div key={family} className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '12px 18px', background: 'var(--bg-elevated)', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
+              <Icon size={18} style={{ color: 'var(--accent)' }} />
+              <h3 style={{ margin: 0, fontSize: '0.92rem' }}>{FAMILY_LABELS[family] ?? family}</h3>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                {cats.length} modelo{cats.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Nombre</th>
+                    <th>Marca / Modelo default</th>
+                    <th>Capacidad</th>
+                    <th>Garantía</th>
+                    <th style={{ textAlign: 'right', width: 60 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cats.map((c) => (
+                    <tr key={c.id}>
+                      <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.76rem', fontWeight: 600 }}>{c.code}</td>
+                      <td style={{ fontSize: '0.82rem' }}>{c.name}</td>
+                      <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{[c.default_brand, c.default_model].filter(Boolean).join(' · ') || '—'}</td>
+                      <td style={{ fontSize: '0.78rem', fontFamily: 'ui-monospace, monospace' }}>{c.default_capacity_value ? `${c.default_capacity_value} ${c.default_capacity_unit ?? ''}` : '—'}</td>
+                      <td style={{ fontSize: '0.78rem' }}>{c.default_warranty_months ? `${c.default_warranty_months} m` : '—'}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button onClick={() => remove(c.id)} title="Eliminar" style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

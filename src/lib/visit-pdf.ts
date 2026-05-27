@@ -42,16 +42,27 @@ const formatCell = (v: unknown): string => {
 const fetchImageAsBase64 = async (url: string): Promise<string | null> => {
   try {
     const r = await fetch(url);
+    if (!r.ok) {
+      console.error(`[PDF] fetch foto fallo (${r.status})`, url);
+      return null;
+    }
     const blob = await r.blob();
     return await new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
+      reader.onerror = () => { console.error('[PDF] FileReader fallo'); resolve(null); };
       reader.readAsDataURL(blob);
     });
-  } catch {
+  } catch (e) {
+    console.error('[PDF] fetchImageAsBase64 error:', e, url);
     return null;
   }
+};
+
+const detectImageFormat = (dataUri: string): 'PNG' | 'JPEG' | 'WEBP' => {
+  if (dataUri.startsWith('data:image/png')) return 'PNG';
+  if (dataUri.startsWith('data:image/webp')) return 'WEBP';
+  return 'JPEG';
 };
 
 // Dibuja el header (logo Sunny + datos visita) en la página actual
@@ -249,8 +260,10 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
     let col = 0;
     let rowY = py + 2;
 
+    let renderedCount = 0;
+    let failedCount = 0;
     for (const photo of photos) {
-      if (!photo.url) continue;
+      if (!photo.url) { failedCount++; continue; }
       if (rowY + cellH + labelH > pageHeight - margin) {
         doc.addPage();
         rowY = drawHeader(doc, schema, visit);
@@ -260,13 +273,17 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
       }
       const x = margin + col * (cellW + 3);
       const dataUri = await fetchImageAsBase64(photo.url);
+      let painted = false;
       if (dataUri) {
         try {
-          doc.addImage(dataUri, 'JPEG', x, rowY, cellW, cellH, undefined, 'FAST');
-        } catch {
-          // image format failure — skip
+          const fmt = detectImageFormat(dataUri);
+          doc.addImage(dataUri, fmt, x, rowY, cellW, cellH, undefined, 'FAST');
+          painted = true;
+        } catch (e) {
+          console.error('[PDF] addImage fallo:', e, photo.filename);
         }
       }
+      if (painted) renderedCount++; else failedCount++;
       // Caption
       doc.setFontSize(7);
       doc.setTextColor(MUTED);
@@ -280,6 +297,9 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
         col = 0;
         rowY += cellH + labelH + 3;
       }
+    }
+    if (failedCount > 0) {
+      console.warn(`[PDF] ${renderedCount} foto(s) renderizadas, ${failedCount} sin renderizar (URL inválida o formato no soportado).`);
     }
   }
 

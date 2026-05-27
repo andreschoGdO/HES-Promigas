@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil } from 'lucide-react';
+import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check } from 'lucide-react';
 import { VISIT_SCHEMAS, findSchema, type VisitType, type VisitTypeSchema, type VisitField } from '@/lib/visit-schemas';
 import { generateVisitPDF, type VisitPDFData, type VisitPhoto } from '@/lib/visit-pdf';
 
@@ -376,7 +376,8 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
   const [photoCategory, setPhotoCategory] = useState<string>('');
   const [customCategory, setCustomCategory] = useState<string>('');
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const schema = visit ? findSchema(visit.visit_type) ?? schemaProp : schemaProp;
 
@@ -442,15 +443,22 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     } finally { setSaving(false); }
   };
 
+  const clearFileInputs = () => {
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    if (galleryInputRef.current) galleryInputRef.current.value = '';
+  };
+
   const handlePhotoUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const catToUse = photoCategory === 'Otro' ? customCategory.trim() : photoCategory;
     if (!catToUse) {
       setMsg({ kind: 'error', text: 'Selecciona una categoría antes de subir la foto' });
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      clearFileInputs();
       return;
     }
     setUploading(true); setMsg(null);
+    let okCount = 0;
+    let nullUrlCount = 0;
     try {
       for (const file of Array.from(files)) {
         const fd = new FormData();
@@ -460,14 +468,20 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
         const r = await fetch(`/api/visits/${visitId}/photos`, { method: 'POST', body: fd });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? 'Error subiendo foto');
+        if (!j.photo?.url) nullUrlCount++;
         setPhotos((prev) => [...prev, j.photo]);
+        okCount++;
       }
-      setMsg({ kind: 'success', text: `${files.length} foto${files.length !== 1 ? 's' : ''} subida${files.length !== 1 ? 's' : ''} como "${catToUse}"` });
+      if (nullUrlCount > 0) {
+        setMsg({ kind: 'error', text: `${okCount} foto${okCount !== 1 ? 's subidas' : ' subida'}, pero ${nullUrlCount} sin URL — revisa permisos del bucket "visit-photos" en Supabase Storage.` });
+      } else {
+        setMsg({ kind: 'success', text: `${okCount} foto${okCount !== 1 ? 's' : ''} subida${okCount !== 1 ? 's' : ''} como "${catToUse}"` });
+      }
     } catch (e) {
       setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Error subiendo' });
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      clearFileInputs();
     }
   };
 
@@ -631,6 +645,44 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
 
       {/* Fotos */}
       <CollapsibleSection title={`Registro fotográfico (${photos.length})`} open={openSections['__fotos'] ?? true} onToggle={() => toggleSection('__fotos')}>
+        {/* Checklist visual de categorías esperadas */}
+        {schema.photoCategories.filter((c) => c !== 'Otro').length > 0 && (() => {
+          const covered = new Set(photos.map((p) => (p.description ?? '').trim()).filter(Boolean));
+          const expected = schema.photoCategories.filter((c) => c !== 'Otro');
+          const coveredCount = expected.filter((c) => covered.has(c)).length;
+          return (
+            <div style={{ marginBottom: 14, padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, borderLeft: `3px solid ${coveredCount === expected.length ? '#10b981' : '#f59e0b'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-primary)' }}>Categorías esperadas</div>
+                <div style={{ fontSize: '0.74rem', color: coveredCount === expected.length ? '#10b981' : '#f59e0b', fontWeight: 600 }}>
+                  {coveredCount} de {expected.length} cubiertas
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {expected.map((cat) => {
+                  const has = covered.has(cat);
+                  return (
+                    <button key={cat} type="button" onClick={() => setPhotoCategory(cat)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                        padding: '4px 10px',
+                        borderRadius: 12,
+                        fontSize: '0.72rem',
+                        fontWeight: 500,
+                        border: '1px solid ' + (photoCategory === cat ? '#07c5a8' : has ? '#10b98140' : 'var(--border)'),
+                        background: photoCategory === cat ? '#07c5a820' : has ? '#10b98115' : 'var(--bg-surface)',
+                        color: has ? '#10b981' : 'var(--text-secondary)',
+                        cursor: 'pointer',
+                      }}>
+                      {has && <Check size={11} />} {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         <div style={{ marginBottom: 12 }}>
           <label className="input-label" style={{ fontSize: '0.78rem' }}>Categoría de la(s) próxima(s) foto(s)</label>
           <select value={photoCategory} onChange={(e) => setPhotoCategory(e.target.value)} style={{ marginBottom: 8 }}>
@@ -642,13 +694,24 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           )}
         </div>
 
-        <input ref={fileInputRef} type="file" accept="image/*" capture="environment" multiple
+        {/* Inputs ocultos: uno con `capture` para cámara, otro sin para galería */}
+        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" multiple
           onChange={(e) => handlePhotoUpload(e.target.files)}
           style={{ display: 'none' }} />
-        <button onClick={() => fileInputRef.current?.click()} disabled={uploading || !photoCategory}
-          className="primary-btn" style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '0.95rem' }}>
-          <Camera size={18} /> {uploading ? 'Subiendo…' : 'Tomar / subir fotos'}
-        </button>
+        <input ref={galleryInputRef} type="file" accept="image/*" multiple
+          onChange={(e) => handlePhotoUpload(e.target.files)}
+          style={{ display: 'none' }} />
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => cameraInputRef.current?.click()} disabled={uploading || !photoCategory}
+            className="primary-btn" style={{ flex: 1, justifyContent: 'center', padding: '14px', fontSize: '0.9rem' }}>
+            <Camera size={16} /> {uploading ? 'Subiendo…' : 'Tomar foto'}
+          </button>
+          <button onClick={() => galleryInputRef.current?.click()} disabled={uploading || !photoCategory}
+            className="secondary-btn" style={{ flex: 1, justifyContent: 'center', padding: '14px', fontSize: '0.9rem' }}>
+            <ImagePlus size={16} /> Galería
+          </button>
+        </div>
 
         {photos.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginTop: 14 }}>

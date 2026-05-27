@@ -119,12 +119,6 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         ],
       },
       {
-        title: 'V. Registro fotográfico',
-        fields: [
-          { key: 'foto_categorias_nota', label: 'Las fotos se suben abajo. Categorías esperadas', type: 'textarea', help: 'Medidor eléctrico · Tablero de distribución · Proyección ubicación de equipos · Tipo de cubierta · Cerchas identificadas · Vistas aéreas · Fachada de la casa. Al subir una foto, pon en su descripción la categoría a la que pertenece.' },
-        ],
-      },
-      {
         title: 'VI. Observaciones',
         fields: [
           { key: 'observaciones', label: 'Observaciones', type: 'textarea' },

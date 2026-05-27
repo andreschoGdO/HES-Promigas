@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { linkVisitToInventory } from '@/lib/inventory-visit-link';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -48,10 +49,30 @@ export async function PATCH(request: Request, context: RouteContext) {
     for (const k of allowed) {
       if (k in body) updates[k] = body[k];
     }
+    // Detectar transición a completed para disparar el enlace de inventario una sola vez
+    const { data: prev } = await supabaseAdmin.from('field_visits').select('status').eq('id', id).single();
+    const transitioningToCompleted = body.status === 'completed' && prev?.status !== 'completed';
     if (body.status === 'completed') updates.completed_at = new Date().toISOString();
+
     const { data, error } = await supabaseAdmin.from('field_visits').update(updates).eq('id', id).select('*').single();
     if (error) throw error;
-    return NextResponse.json({ visit: data });
+
+    let inventoryLink: { linked: string[]; skipped: string[] } | null = null;
+    if (transitioningToCompleted) {
+      try {
+        inventoryLink = await linkVisitToInventory({
+          visitId: data.id,
+          visitType: data.visit_type,
+          formData: data.form_data,
+          houseId: data.house_id,
+          technicianEmail: data.technician_email,
+        });
+      } catch (e) {
+        console.error('linkVisitToInventory failed:', e);
+      }
+    }
+
+    return NextResponse.json({ visit: data, inventoryLink });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
   }

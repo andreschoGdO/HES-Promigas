@@ -12,6 +12,7 @@ const TITLES: Record<string, string> = {
   '/configuracion': 'Configuración',
   '/alertas': 'Configuración Alertas',
   '/visitas': 'Visitas en Campo',
+  '/inventario': 'Inventario',
   '/cuenta': 'Mi cuenta',
 };
 

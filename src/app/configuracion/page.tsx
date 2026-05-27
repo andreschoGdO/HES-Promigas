@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Server, Key, CheckCircle2, AlertCircle, Clock, RefreshCw } from 'lucide-react';
-import { classifyDevice } from '../page';
+import { classifyDevice } from '@/lib/classify-device';
 
 export default function Configuracion() {
   return (

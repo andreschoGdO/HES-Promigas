@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { linkVisitToInventory } from '@/lib/inventory-visit-link';
 
 /**
  * GET /api/visits?type=&casa=&status=&from=&to=
@@ -59,7 +60,23 @@ export async function POST(request: Request) {
     };
     const { data, error } = await supabaseAdmin.from('field_visits').insert(payload).select('*').single();
     if (error) throw error;
-    return NextResponse.json({ visit: data });
+
+    let inventoryLink: { linked: string[]; skipped: string[] } | null = null;
+    if (data.status === 'completed') {
+      try {
+        inventoryLink = await linkVisitToInventory({
+          visitId: data.id,
+          visitType: data.visit_type,
+          formData: data.form_data,
+          houseId: data.house_id,
+          technicianEmail: data.technician_email,
+        });
+      } catch (e) {
+        console.error('linkVisitToInventory failed:', e);
+      }
+    }
+
+    return NextResponse.json({ visit: data, inventoryLink });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
   }

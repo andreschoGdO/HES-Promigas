@@ -7,7 +7,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { classifyDevice } from '../page';
+import { classifyDevice } from '@/lib/classify-device';
 
 type Tab = 'cierres' | 'consumos' | 'alertas' | 'reactiva' | 'control';
 type TypeFilter = 'all' | 'meter' | 'inverter' | 'gateway' | 'other';

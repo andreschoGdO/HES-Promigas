@@ -206,22 +206,34 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
     const lat = visit.lat.toFixed(5);
     const lng = visit.lng.toFixed(5);
     const mapsUrl = `https://www.google.com/maps?q=${visit.lat},${visit.lng}`;
+    const lineY = y + 3;
     doc.setFontSize(8);
-    doc.setTextColor(MUTED);
-    doc.text(`Ubicación GPS:`, margin, y + 2);
-    doc.setTextColor(TEXT);
     doc.setFont('helvetica', 'normal');
-    doc.text(`${lat}, ${lng}`, margin + 22, y + 2);
-    // Enlace clickeable a Google Maps
+
+    // 1) Etiqueta
+    doc.setTextColor(MUTED);
+    const labelText = 'Ubicación GPS:';
+    doc.text(labelText, margin, lineY);
+    let cursorX = margin + doc.getTextWidth(labelText) + 2;
+
+    // 2) Coordenadas
+    doc.setTextColor(TEXT);
+    const coordsText = `${lat}, ${lng}`;
+    doc.text(coordsText, cursorX, lineY);
+    cursorX += doc.getTextWidth(coordsText) + 4;
+
+    // 3) Separador
+    doc.setTextColor(MUTED);
+    doc.text('|', cursorX, lineY);
+    cursorX += doc.getTextWidth('|') + 4;
+
+    // 4) Link clickeable
     doc.setTextColor(ACCENT);
     doc.setFont('helvetica', 'bold');
-    const linkText = 'Abrir en Maps →';
-    const textWidth = doc.getTextWidth(linkText);
-    const linkX = doc.internal.pageSize.getWidth() - margin - textWidth;
-    doc.textWithLink(linkText, linkX, y + 2, { url: mapsUrl });
+    doc.textWithLink('Ver en Google Maps', cursorX, lineY, { url: mapsUrl });
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(TEXT);
-    y += 6;
+    y += 7;
   }
 
   // Cada sección del schema → título + tabla

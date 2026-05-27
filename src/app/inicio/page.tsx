@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Home, BarChart3, ClipboardCheck, Bell, Settings, ArrowRight, Server, Database, Cloud, Cpu, Sun, FileText, AlertOctagon, Wrench, Settings2 } from 'lucide-react';
+import { Home, BarChart3, ClipboardCheck, Bell, Settings, ArrowRight, Server, Database, Cloud, Cpu, Sun, FileText, AlertOctagon, Wrench, Settings2, Package, ScanLine } from 'lucide-react';
 
 interface Module {
   href: string;
@@ -41,6 +41,22 @@ const MODULES: Module[] = [
       'Upload de fotos con preview y signed URLs en Supabase Storage',
       'Descarga PDF con layout oficial PROMIGAS (logo Sunny + secciones + fotos)',
       'Historial con filtros por tipo, estado, casa',
+      'Al completar una visita, dispara movimientos en Inventario automáticamente',
+    ],
+  },
+  {
+    href: '/inventario',
+    title: 'Inventario',
+    description: 'Trazabilidad de equipos serializados y consumibles, con audit log completo.',
+    Icon: Package,
+    color: '#8b5cf6',
+    details: [
+      '4 métodos de ingreso: CSV bulk + manual + cámara QR + pistola USB',
+      '5 tabs: Resumen, Equipos, Consumibles, Movimientos, Categorías',
+      'Equipos por serial del fabricante (sin SKU interno) con estado, ubicación, garantía',
+      'Consumibles por cantidad con umbral mínimo y alerta de stock bajo',
+      'Audit log: cada cambio de estado o ubicación genera un movimiento auditado',
+      'Integración bidireccional: Instalación marca seriales como installed; Emergencia marca como in_repair',
     ],
   },
   {
@@ -95,7 +111,8 @@ export default function InicioPage() {
         <p style={{ color: 'var(--text-secondary)', marginTop: 6, maxWidth: 800 }}>
           Plataforma de monitoreo, control y operación de las instalaciones solares residenciales de HES Promigas.
           Integra Metrum (ThingsBoard) con Supabase y procesa cierres diarios, métricas mensuales CREG, alertas en tiempo real,
-          actas de visitas técnicas en campo y eventualmente control de los inversores vía API del fabricante.
+          actas de visitas técnicas en campo, inventario serializado con trazabilidad de equipos, y eventualmente control
+          de los inversores vía API del fabricante.
         </p>
       </div>
 
@@ -155,6 +172,15 @@ export default function InicioPage() {
           Cada acta sigue una plantilla específica según el motivo de la visita:
         </p>
         <VisitTypesGrid />
+      </div>
+
+      {/* Integración Visitas ↔ Inventario */}
+      <div className="glass-panel">
+        <h2 className="card-title" style={{ marginBottom: 4 }}>Visitas ↔ Inventario — lazo automático</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: 18, marginTop: 4 }}>
+          Cuando una visita se marca como completada, el sistema mueve los equipos del inventario sin acción manual extra:
+        </p>
+        <InventoryLinkFlow />
       </div>
 
       {/* Stack tecnológico */}
@@ -223,7 +249,7 @@ function ArchitectureDiagram() {
           <div style={{ ...box, borderColor: '#10b981', minWidth: 180 }}>
             <div style={{ color: '#10b981', marginBottom: 4 }}><Database size={20} /></div>
             <div style={title}>Supabase Postgres</div>
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>devices · houses · closures · consumption · casa_metrics · instant_metrics · alert_rules · alert_events · field_visits</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4 }}>devices · houses · closures · consumption · casa_metrics · instant_metrics · alert_rules · alert_events · field_visits · inventory_items · inventory_consumables · inventory_movements · inventory_categories</div>
           </div>
           <div style={{ ...box, borderColor: '#94a3b8', fontSize: '0.78rem' }}>
             <div>Supabase Storage</div>
@@ -322,13 +348,66 @@ function VisitTypesGrid() {
   );
 }
 
+/* ═══════════════ Visitas ↔ Inventario ═══════════════ */
+function InventoryLinkFlow() {
+  const flows = [
+    {
+      color: '#10b981',
+      Icon: Wrench,
+      title: 'Visita de Instalación → Equipos como installed',
+      bullets: [
+        'Al completar el acta, lee inv_serial, batt_serial, gateway_serial, meter_solar_serial, meter_red_serial',
+        'Por cada serial que ya esté en inventario: status = installed, current_house_id = casa de la visita',
+        'Genera movimiento type=install con related_visit_id (auditable desde Movimientos)',
+        'Seriales no encontrados en inventario se ignoran silenciosamente (no destructivo)',
+      ],
+    },
+    {
+      color: '#ef4444',
+      Icon: AlertOctagon,
+      title: 'Visita de Emergencia con requiere_repuesto → Equipos como in_repair',
+      bullets: [
+        'Si requiere_repuesto = Sí y equipo_afectado está marcado, busca el equipo instalado en esa casa de esa familia',
+        'Cambia status a in_repair y genera movimiento type=repair_start con related_visit_id',
+        'Cuando el equipo regresa de taller, se cambia manualmente a in_stock desde la tabla de Equipos',
+      ],
+    },
+    {
+      color: '#8b5cf6',
+      Icon: ScanLine,
+      title: 'Ingreso de equipos nuevos al inventario',
+      bullets: [
+        'CSV bulk (template descargable) para grandes lotes desde el proveedor',
+        'Formulario manual con autocompletado por categoría (marca, modelo, capacidad, garantía default)',
+        'Escáner de cámara (BarcodeDetector API: QR + Code 128 + EAN + UPC + Data Matrix + PDF417)',
+        'Pistola USB: escanea al input enfocado, igual que tecleo',
+      ],
+    },
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {flows.map((f, i) => (
+        <div key={i} style={{ padding: 14, borderRadius: 10, background: 'var(--bg-elevated)', borderLeft: `4px solid ${f.color}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <f.Icon size={18} style={{ color: f.color }} />
+            <div style={{ fontSize: '0.92rem', fontWeight: 600 }}>{f.title}</div>
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 22, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+            {f.bullets.map((b, j) => <li key={j}>{b}</li>)}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ═══════════════ Stack ═══════════════ */
 function TechStack() {
   const items = [
     { label: 'Frontend', value: 'Next.js 16 (App Router) + React 19 + TypeScript + Tailwind 4' },
     { label: 'Charts', value: 'Recharts (líneas, barras, donuts, ejes duales)' },
     { label: 'Iconos', value: 'Lucide React' },
-    { label: 'Base de datos', value: 'Supabase Postgres con 9 tablas + 1 schema auth.* gestionado' },
+    { label: 'Base de datos', value: 'Supabase Postgres con 13 tablas + 1 schema auth.* gestionado' },
     { label: 'Storage', value: 'Supabase Storage para fotos de visitas (signed URLs)' },
     { label: 'Auth', value: 'Supabase Auth · email + password · bcrypt · validación de dominio en 3 capas' },
     { label: 'Backend datos', value: 'Metrum (ThingsBoard) API REST · login JWT · queries entitiesQuery y timeseries' },
@@ -336,6 +415,7 @@ function TechStack() {
     { label: 'Cron diario', value: 'Vercel Cron 06:00 UTC (sync completo)' },
     { label: 'Cron 15 min', value: 'GitHub Actions */15 * * * * (lazo instantáneo)' },
     { label: 'PDF', value: 'jsPDF + jspdf-autotable (generación de actas)' },
+    { label: 'Escáner', value: 'BarcodeDetector API nativa del navegador (QR + Code 128 + EAN + UPC + Data Matrix + PDF417)' },
   ];
   return (
     <table style={{ width: '100%', fontSize: '0.85rem' }}>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check } from 'lucide-react';
+import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink } from 'lucide-react';
 import { VISIT_SCHEMAS, findSchema, type VisitType, type VisitTypeSchema, type VisitField } from '@/lib/visit-schemas';
 import { generateVisitPDF, type VisitPDFData, type VisitPhoto } from '@/lib/visit-pdf';
 
@@ -613,9 +613,22 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           </FieldWrapper>
 
           <FieldWrapper label="Ubicación GPS" fullWidth>
-            <button onClick={captureGeo} className="secondary-btn" type="button" style={{ width: '100%', justifyContent: 'center' }}>
-              <MapPin size={14} /> {visit.lat && visit.lng ? `${visit.lat.toFixed(4)}, ${visit.lng.toFixed(4)}` : 'Capturar ubicación GPS'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={captureGeo} className="secondary-btn" type="button" style={{ flex: 1, minWidth: 200, justifyContent: 'center' }}>
+                <MapPin size={14} /> {visit.lat && visit.lng ? `${visit.lat.toFixed(5)}, ${visit.lng.toFixed(5)}` : 'Capturar ubicación GPS'}
+              </button>
+              {visit.lat !== null && visit.lng !== null && (
+                <a
+                  href={`https://www.google.com/maps?q=${visit.lat},${visit.lng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="primary-btn"
+                  style={{ justifyContent: 'center', textDecoration: 'none', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  <ExternalLink size={14} /> Abrir en Maps
+                </a>
+              )}
+            </div>
           </FieldWrapper>
         </FieldsGrid>
       </CollapsibleSection>

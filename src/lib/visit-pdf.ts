@@ -201,6 +201,29 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
   // Header inicial
   let y = drawHeader(doc, schema, visit);
 
+  // Línea de ubicación GPS con enlace clickeable a Google Maps (si hay coords)
+  if (visit.lat !== null && visit.lng !== null) {
+    const lat = visit.lat.toFixed(5);
+    const lng = visit.lng.toFixed(5);
+    const mapsUrl = `https://www.google.com/maps?q=${visit.lat},${visit.lng}`;
+    doc.setFontSize(8);
+    doc.setTextColor(MUTED);
+    doc.text(`Ubicación GPS:`, margin, y + 2);
+    doc.setTextColor(TEXT);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${lat}, ${lng}`, margin + 22, y + 2);
+    // Enlace clickeable a Google Maps
+    doc.setTextColor(ACCENT);
+    doc.setFont('helvetica', 'bold');
+    const linkText = 'Abrir en Maps →';
+    const textWidth = doc.getTextWidth(linkText);
+    const linkX = doc.internal.pageSize.getWidth() - margin - textWidth;
+    doc.textWithLink(linkText, linkX, y + 2, { url: mapsUrl });
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(TEXT);
+    y += 6;
+  }
+
   // Cada sección del schema → título + tabla
   for (const sec of schema.sections) {
     // Saltar la sección de "Registro fotográfico" (las fotos van aparte)

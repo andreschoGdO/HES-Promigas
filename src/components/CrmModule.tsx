@@ -101,27 +101,41 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
   }, [projects, stages, module]);
 
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto', paddingBottom: 40 }}>
-      {/* HEADER */}
-      <div style={{ marginBottom: 18 }}>
-        <h1 style={{ margin: 0 }}>{title}</h1>
-        <p style={{ color: 'var(--text-secondary)', marginTop: 4, fontSize: '0.88rem' }}>{description}</p>
+    <div style={{ maxWidth: 1600, margin: '0 auto', paddingBottom: 40 }}>
+      {/* HEADER compacto estilo Pipefy */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <h1 style={{ margin: 0, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>{title}</h1>
+          <p style={{ color: 'var(--text-secondary)', marginTop: 2, fontSize: '0.82rem' }}>{description}</p>
+        </div>
+        {module === 'sales' && (
+          <button onClick={() => setShowCreate(true)} className="primary-btn" style={{ padding: '10px 16px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600, background: color, border: 'none' }}>
+            <Plus size={15} /> Nuevo proyecto
+          </button>
+        )}
       </div>
 
-      {/* Action bar */}
-      <div className="glass-panel" style={{ padding: 14, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        {module === 'sales' && (
-          <button onClick={() => setShowCreate(true)} className="primary-btn"><Plus size={14} /> Nuevo proyecto</button>
-        )}
-        <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
-          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      {/* Toolbar — búsqueda + view toggle */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+        <div style={{ flex: 1, minWidth: 240, position: 'relative' }}>
+          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input type="text" placeholder="Buscar por código, título, cliente, email…"
             value={search} onChange={(e) => setSearch(e.target.value)}
-            style={{ width: '100%', paddingLeft: 32 }} />
+            style={{ width: '100%', paddingLeft: 36, paddingTop: 9, paddingBottom: 9, borderRadius: 8 }} />
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => setView('kanban')} className={`chip ${view === 'kanban' ? 'active' : ''}`}>Kanban</button>
-          <button onClick={() => setView('tabla')} className={`chip ${view === 'tabla' ? 'active' : ''}`}>Tabla</button>
+        <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', borderRadius: 8, padding: 3, border: '1px solid var(--border)' }}>
+          <button onClick={() => setView('kanban')} style={{
+            padding: '6px 14px', fontSize: '0.78rem', fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: view === 'kanban' ? 'var(--bg-surface)' : 'transparent',
+            color: view === 'kanban' ? 'var(--text-primary)' : 'var(--text-muted)',
+            boxShadow: view === 'kanban' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+          }}>Kanban</button>
+          <button onClick={() => setView('tabla')} style={{
+            padding: '6px 14px', fontSize: '0.78rem', fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer',
+            background: view === 'tabla' ? 'var(--bg-surface)' : 'transparent',
+            color: view === 'tabla' ? 'var(--text-primary)' : 'var(--text-muted)',
+            boxShadow: view === 'tabla' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
+          }}>Tabla</button>
         </div>
       </div>
 
@@ -148,7 +162,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
   );
 }
 
-/* ─────────────── KANBAN ─────────────── */
+/* ─────────────── KANBAN — estilo Pipefy ─────────────── */
 function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance }: {
   stages: StageMeta[];
   projectsByStage: Map<string, CrmProject[]>;
@@ -157,85 +171,243 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance }: {
   onAdvance: (t: { project: CrmProject; def: TransitionDef }) => void;
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stages.length}, minmax(240px, 1fr))`, gap: 12, overflowX: 'auto' }}>
+    <div className="pipefy-board">
       {stages.map((s) => {
         const list = projectsByStage.get(s.key) ?? [];
         return (
-          <div key={s.key} style={{ minWidth: 240 }}>
-            <div style={{ padding: '10px 12px', borderRadius: '8px 8px 0 0', background: 'var(--bg-elevated)', borderTop: `3px solid ${s.color}`, borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>{s.shortLabel}</span>
-                <span style={{ fontSize: '0.72rem', color: s.color, fontWeight: 700 }}>{list.length}</span>
+          <div key={s.key} className="pipefy-col">
+            {/* Header de columna con stripe colorida arriba */}
+            <div className="pipefy-col-head" style={{ borderTopColor: s.color }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, letterSpacing: '-0.01em' }}>{s.shortLabel}</span>
+                </div>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 700, color: s.color,
+                  background: s.color + '15', padding: '2px 9px', borderRadius: 12, minWidth: 22, textAlign: 'center',
+                }}>{list.length}</span>
               </div>
-              <p style={{ margin: '4px 0 0', fontSize: '0.68rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>{s.description}</p>
+              <p style={{ margin: '4px 0 0', fontSize: '0.66rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>{s.description}</p>
             </div>
-            <div style={{ padding: 8, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderTop: 'none', borderRadius: '0 0 8px 8px', minHeight: 200, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Body de columna — fondo gris suave */}
+            <div className="pipefy-col-body">
               {list.length === 0 ? (
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', padding: 20, fontStyle: 'italic' }}>Vacío</div>
+                <div className="pipefy-empty">
+                  <div style={{ fontSize: '0.74rem' }}>Vacío</div>
+                  <div style={{ fontSize: '0.66rem', marginTop: 4, opacity: 0.6 }}>Las cards aparecen aquí</div>
+                </div>
               ) : list.map((p) => (
-                <ProjectCard key={p.id} project={p} onOpen={() => onOpen(p)} module={module} onAdvance={onAdvance} />
+                <ProjectCard key={p.id} project={p} onOpen={() => onOpen(p)} module={module} onAdvance={onAdvance} stageColor={s.color} />
               ))}
             </div>
           </div>
         );
       })}
+      <style jsx>{`
+        .pipefy-board {
+          display: grid;
+          grid-template-columns: repeat(${stages.length}, minmax(280px, 1fr));
+          gap: 14px;
+          overflow-x: auto;
+          padding-bottom: 8px;
+        }
+        .pipefy-col {
+          display: flex;
+          flex-direction: column;
+          min-width: 280px;
+          background: var(--bg-surface);
+          border-radius: 12px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+          border: 1px solid var(--border);
+          overflow: hidden;
+        }
+        .pipefy-col-head {
+          padding: 14px 14px 12px;
+          background: var(--bg-surface);
+          border-top: 4px solid;
+          border-bottom: 1px solid var(--border);
+        }
+        .pipefy-col-body {
+          padding: 10px;
+          background: var(--bg-elevated);
+          min-height: 360px;
+          max-height: calc(100vh - 280px);
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          flex: 1;
+        }
+        .pipefy-empty {
+          text-align: center;
+          padding: 28px 12px;
+          color: var(--text-muted);
+          border: 2px dashed var(--border);
+          border-radius: 10px;
+          background: var(--bg-surface);
+          font-style: italic;
+        }
+      `}</style>
     </div>
   );
 }
 
-function ProjectCard({ project, onOpen, module, onAdvance }: {
+/* ─────────── Card de proyecto, look Pipefy ─────────── */
+function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
   project: CrmProject;
   onOpen: () => void;
   module: 'sales' | 'engineering' | 'operations';
   onAdvance: (t: { project: CrmProject; def: TransitionDef }) => void;
+  stageColor: string;
 }) {
   const stage = module === 'sales' ? project.sales_stage : module === 'engineering' ? project.engineering_stage : project.operations_stage;
   const availableTransitions = transitionsFrom(module, stage);
   const fmt = (n: number | null) => n === null ? '—' : n.toLocaleString('es-CO');
 
+  // Tags por módulo
+  const tags: Array<{ label: string; bg: string; fg: string }> = [];
+  if (project.client_city) tags.push({ label: project.client_city, bg: '#e2e8f0', fg: '#475569' });
+  if (module === 'sales') {
+    if (project.invoice_kwh_mensual) tags.push({ label: `${fmt(project.invoice_kwh_mensual)} kWh/mes`, bg: '#dbeafe', fg: '#1e40af' });
+    if (project.propuesta_kwp) tags.push({ label: `${project.propuesta_kwp} kWp`, bg: '#ede9fe', fg: '#6d28d9' });
+    if (project.propuesta_valor_cop) tags.push({ label: `$${(project.propuesta_valor_cop / 1_000_000).toFixed(1)}M`, bg: '#dcfce7', fg: '#166534' });
+  }
+  if (module === 'engineering') {
+    if (project.diseno_kwp) tags.push({ label: `${project.diseno_kwp} kWp`, bg: '#ede9fe', fg: '#6d28d9' });
+    if (project.diseno_paneles) tags.push({ label: `${project.diseno_paneles} paneles`, bg: '#fef3c7', fg: '#92400e' });
+    if (project.diseno_yield_estimado_kwh_mes) tags.push({ label: `${Math.round(project.diseno_yield_estimado_kwh_mes)} kWh/m`, bg: '#dbeafe', fg: '#1e40af' });
+  }
+  if (module === 'operations') {
+    if (project.diseno_kwp) tags.push({ label: `${project.diseno_kwp} kWp`, bg: '#ede9fe', fg: '#6d28d9' });
+    if (project.installation_date) tags.push({ label: `Inst. ${project.installation_date}`, bg: '#fed7aa', fg: '#9a3412' });
+    if (project.contractor_name) tags.push({ label: project.contractor_name, bg: '#fecaca', fg: '#991b1b' });
+  }
+
+  const next = availableTransitions[0];
+
   return (
-    <div className="glass-panel" style={{ padding: 10, cursor: 'pointer', border: '1px solid var(--border)' }} onClick={onOpen}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.66rem', color: 'var(--text-muted)' }}>{project.code}</span>
+    <div
+      onClick={onOpen}
+      style={{
+        background: 'var(--bg-surface)',
+        borderRadius: 10,
+        padding: 12,
+        border: '1px solid var(--border)',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        cursor: 'pointer',
+        transition: 'transform 0.12s, box-shadow 0.12s, border-color 0.12s',
+        position: 'relative',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-1px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.06)';
+        e.currentTarget.style.borderColor = stageColor + '60';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = '';
+        e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
+        e.currentTarget.style.borderColor = 'var(--border)';
+      }}
+    >
+      {/* Top row: código + indicador de tiempo */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.02em' }}>{project.code}</span>
+        <span style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{timeSince(project.updated_at)}</span>
       </div>
-      <div style={{ fontSize: '0.84rem', fontWeight: 600, marginBottom: 4 }}>{project.title}</div>
-      {project.client_name && <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>{project.client_name}</div>}
-      {project.client_city && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{project.client_city}</div>}
 
-      {/* Mini-stats por módulo */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-        {module === 'sales' && project.invoice_kwh_mensual && (
-          <span style={{ fontSize: '0.66rem', padding: '2px 6px', background: 'var(--bg-elevated)', borderRadius: 6 }}>{fmt(project.invoice_kwh_mensual)} kWh/mes</span>
-        )}
-        {module === 'sales' && project.propuesta_valor_cop && (
-          <span style={{ fontSize: '0.66rem', padding: '2px 6px', background: 'var(--bg-elevated)', borderRadius: 6 }}>${fmt(project.propuesta_valor_cop)}</span>
-        )}
-        {module === 'engineering' && project.diseno_kwp && (
-          <span style={{ fontSize: '0.66rem', padding: '2px 6px', background: 'var(--bg-elevated)', borderRadius: 6 }}>{project.diseno_kwp} kWp</span>
-        )}
-        {module === 'engineering' && project.diseno_paneles && (
-          <span style={{ fontSize: '0.66rem', padding: '2px 6px', background: 'var(--bg-elevated)', borderRadius: 6 }}>{project.diseno_paneles} paneles</span>
-        )}
-        {module === 'operations' && project.installation_date && (
-          <span style={{ fontSize: '0.66rem', padding: '2px 6px', background: 'var(--bg-elevated)', borderRadius: 6 }}>Inst: {project.installation_date}</span>
-        )}
-        {module === 'operations' && project.contractor_name && (
-          <span style={{ fontSize: '0.66rem', padding: '2px 6px', background: 'var(--bg-elevated)', borderRadius: 6 }}>{project.contractor_name}</span>
-        )}
+      {/* Título */}
+      <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.3, marginBottom: 10, letterSpacing: '-0.01em' }}>
+        {project.title}
       </div>
 
-      {availableTransitions.length > 0 && (
-        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {availableTransitions.map((t) => (
-            <button key={t.action} onClick={(e) => { e.stopPropagation(); onAdvance({ project, def: t }); }}
-              style={{ fontSize: '0.7rem', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--accent)10', color: 'var(--accent)', cursor: 'pointer', textAlign: 'left' }}>
-              {t.buttonLabel}
-            </button>
+      {/* Cliente con avatar */}
+      {project.client_name && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <Avatar name={project.client_name} />
+          <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.client_name}</div>
+        </div>
+      )}
+
+      {/* Tags row */}
+      {tags.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 10 }}>
+          {tags.map((t, i) => (
+            <span key={i} style={{
+              fontSize: '0.66rem', fontWeight: 500,
+              padding: '3px 8px', borderRadius: 4,
+              background: t.bg, color: t.fg,
+              whiteSpace: 'nowrap',
+            }}>{t.label}</span>
           ))}
+        </div>
+      )}
+
+      {/* Footer con acción */}
+      {next && (
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)',
+        }}>
+          <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+            Siguiente:
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onAdvance({ project, def: next }); }}
+            style={{
+              padding: '4px 12px',
+              background: stageColor,
+              color: 'white',
+              border: 'none',
+              borderRadius: 16,
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              transition: 'filter 0.12s',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.filter = 'brightness(1.1)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.filter = ''; }}
+          >
+            {next.buttonLabel.replace(' →', '')} <ArrowRight size={11} />
+          </button>
         </div>
       )}
     </div>
   );
+}
+
+/* Avatar circular con inicial y color por hash del nombre */
+function Avatar({ name }: { name: string }) {
+  const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#ef4444', '#84cc16'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i)) % colors.length;
+  const initial = (name.trim().charAt(0) || '?').toUpperCase();
+  return (
+    <div style={{
+      width: 24, height: 24, borderRadius: '50%',
+      background: colors[hash], color: 'white',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: '0.72rem', fontWeight: 700, flexShrink: 0,
+    }}>
+      {initial}
+    </div>
+  );
+}
+
+function timeSince(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'ahora';
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d`;
+  const mo = Math.floor(d / 30);
+  return `${mo}mo`;
 }
 
 /* ─────────────── TABLE VIEW ─────────────── */

@@ -89,7 +89,34 @@ a:hover { color: var(--accent-hover); }
   left: 0;
   top: 0;
   z-index: 50;
+  transition: width 0.18s ease;
 }
+
+/* Sidebar colapsado (desktop) — solo iconos */
+.sidebar.collapsed { width: 64px; }
+.sidebar.collapsed .sidebar-logo { justify-content: center; padding: 0; }
+.sidebar.collapsed .nav-item { justify-content: center; padding: 10px 0; }
+.sidebar.collapsed .sidebar-footer { justify-content: center; padding: 12px 0; }
+
+.sidebar-collapse-btn {
+  position: absolute;
+  top: 50%;
+  right: -10px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  transition: color 0.12s, background 0.12s;
+}
+.sidebar-collapse-btn:hover { color: var(--accent); background: var(--bg-elevated); }
 
 .sidebar-logo {
   display: flex;
@@ -223,7 +250,9 @@ a:hover { color: var(--accent-hover); }
   height: 100vh;
   overflow: hidden;
   min-width: 0;
+  transition: margin-left 0.18s ease;
 }
+html.sidebar-collapsed .main-area { margin-left: 64px; }
 
 /* ===== Topbar ===== */
 .topbar {

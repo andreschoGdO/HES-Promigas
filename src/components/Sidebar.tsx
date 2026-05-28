@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat, TrendingUp } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat, TrendingUp, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
 export function Sidebar() {
@@ -11,6 +11,25 @@ export function Sidebar() {
   const router = useRouter();
   const [user, setUser] = useState<{ email: string; initial: string } | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Collapsed state (desktop only) — persiste en localStorage
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    try { setCollapsed(localStorage.getItem('sidebar-collapsed') === '1'); } catch {}
+  }, []);
+  const toggleCollapsed = () => {
+    setCollapsed((v) => {
+      const next = !v;
+      try { localStorage.setItem('sidebar-collapsed', next ? '1' : '0'); } catch {}
+      // Disparar evento para que el layout (margen del main) reaccione
+      window.dispatchEvent(new CustomEvent('sidebar-collapsed-change', { detail: next }));
+      return next;
+    });
+  };
+  // Emitir el estado actual al cambiar (también al montar) + ajustar clase del <html>
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('sidebar-collapsed-change', { detail: collapsed }));
+    document.documentElement.classList.toggle('sidebar-collapsed', collapsed);
+  }, [collapsed]);
 
   // Escuchar el botón hamburguesa del topbar
   useEffect(() => {
@@ -79,16 +98,24 @@ export function Sidebar() {
         onClick={() => setMobileOpen(false)}
         aria-hidden="true"
       />
-      <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
-      <div className="sidebar-logo">
+      <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+      <div className="sidebar-logo" style={{ position: 'relative' }}>
         <div className="sidebar-logo-mark" style={{ background: 'transparent', color: 'var(--accent)' }}>
           <Sun size={26} strokeWidth={2.5} fill="currentColor" />
         </div>
-        <span className="sidebar-logo-text">SUNNY</span>
+        {!collapsed && <span className="sidebar-logo-text">SUNNY</span>}
+        <button
+          onClick={toggleCollapsed}
+          title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+          className="sidebar-collapse-btn"
+          aria-label="Colapsar menú"
+        >
+          {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+        </button>
       </div>
 
       <div className="sidebar-content">
-        <div className="sidebar-section">General</div>
+        {!collapsed && <div className="sidebar-section">General</div>}
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.path;
@@ -97,14 +124,15 @@ export function Sidebar() {
               key={item.path}
               href={item.path}
               className={`nav-item ${active ? 'active' : ''}`}
+              title={collapsed ? item.label : undefined}
             >
               <Icon size={16} />
-              <span>{item.label}</span>
+              {!collapsed && <span>{item.label}</span>}
             </Link>
           );
         })}
 
-        <div className="sidebar-section">Sistema</div>
+        {!collapsed && <div className="sidebar-section">Sistema</div>}
         {adminItems.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.path;
@@ -113,9 +141,10 @@ export function Sidebar() {
               key={item.path}
               href={item.path}
               className={`nav-item ${active ? 'active' : ''}`}
+              title={collapsed ? item.label : undefined}
             >
               <Icon size={16} />
-              <span>{item.label}</span>
+              {!collapsed && <span>{item.label}</span>}
             </Link>
           );
         })}
@@ -125,23 +154,27 @@ export function Sidebar() {
         href="/cuenta"
         className={`sidebar-footer ${pathname === '/cuenta' ? 'active' : ''}`}
         style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-        title="Mi cuenta"
+        title={collapsed ? (user?.email ?? 'Mi cuenta') : 'Mi cuenta'}
       >
         <div className="sidebar-avatar">{user?.initial ?? '?'}</div>
-        <div className="sidebar-user-info" style={{ minWidth: 0, overflow: 'hidden' }}>
-          <div className="sidebar-user-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {user?.email?.split('@')[0] ?? 'Mi cuenta'}
-          </div>
-          <div className="sidebar-user-role">Configurar</div>
-        </div>
-        <button
-          className="icon-btn"
-          title="Cerrar sesión"
-          aria-label="Cerrar sesión"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLogout(); }}
-        >
-          <LogOut size={14} />
-        </button>
+        {!collapsed && (
+          <>
+            <div className="sidebar-user-info" style={{ minWidth: 0, overflow: 'hidden' }}>
+              <div className="sidebar-user-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.email?.split('@')[0] ?? 'Mi cuenta'}
+              </div>
+              <div className="sidebar-user-role">Configurar</div>
+            </div>
+            <button
+              className="icon-btn"
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleLogout(); }}
+            >
+              <LogOut size={14} />
+            </button>
+          </>
+        )}
       </Link>
     </aside>
     </>

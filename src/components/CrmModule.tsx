@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History } from 'lucide-react';
+import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical } from 'lucide-react';
 import {
   type CrmModule, type StageMeta, type TransitionDef,
   SALES_STAGES, ENGINEERING_STAGES, OPERATIONS_STAGES,
@@ -77,6 +77,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
   const [activeProject, setActiveProject] = useState<CrmProject | null>(null);
   const [transition, setTransition] = useState<{ project: CrmProject; def: TransitionDef } | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [configStage, setConfigStage] = useState<StageMeta | null>(null);
   const stages = MODULE_STAGES[module];
 
   const load = async () => {
@@ -154,7 +155,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
             </div>
           )}
           {view === 'kanban' ? (
-            <KanbanView stages={stages} projectsByStage={projectsByStage} onOpen={setActiveProject} module={module} onAdvance={setTransition} />
+            <KanbanView stages={stages} projectsByStage={projectsByStage} onOpen={setActiveProject} module={module} onAdvance={setTransition} onConfigureStage={setConfigStage} />
           ) : (
             <TableView projects={projects} stages={stages} module={module} onOpen={setActiveProject} onAdvance={setTransition} />
           )}
@@ -164,17 +165,19 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
       {activeProject && <ProjectDetailModal project={activeProject} onClose={() => setActiveProject(null)} onChanged={() => { setActiveProject(null); load(); }} userEmail={userEmail} module={module} onAdvance={(t) => { setActiveProject(null); setTransition(t); }} />}
       {transition && <TransitionModal project={transition.project} def={transition.def} userEmail={userEmail} onClose={() => setTransition(null)} onDone={() => { setTransition(null); load(); }} />}
       {showCreate && <CreateProjectModal userEmail={userEmail} onClose={() => setShowCreate(false)} onCreated={(p) => { setShowCreate(false); load(); setActiveProject(p); }} />}
+      {configStage && <StageConfigModal module={module} stage={configStage} onClose={() => setConfigStage(null)} />}
     </div>
   );
 }
 
 /* ─────────────── KANBAN — estilo Pipefy ─────────────── */
-function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance }: {
+function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConfigureStage }: {
   stages: StageMeta[];
   projectsByStage: Map<string, CrmProject[]>;
   onOpen: (p: CrmProject) => void;
   module: 'sales' | 'engineering' | 'operations';
   onAdvance: (t: { project: CrmProject; def: TransitionDef }) => void;
+  onConfigureStage: (stage: StageMeta) => void;
 }) {
   return (
     <div className="pipefy-board">
@@ -182,12 +185,18 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance }: {
         const list = projectsByStage.get(s.key) ?? [];
         return (
           <div key={s.key} className="pipefy-col">
-            {/* Header de columna con stripe colorida arriba */}
-            <div className="pipefy-col-head" style={{ borderTopColor: s.color }}>
+            {/* Header de columna con stripe colorida arriba — click abre configurador */}
+            <button
+              className="pipefy-col-head"
+              style={{ borderTopColor: s.color, textAlign: 'left', width: '100%', background: 'var(--bg-surface)', border: 'none', cursor: 'pointer', display: 'block' }}
+              onClick={() => onConfigureStage(s)}
+              title="Click para ver/editar los campos de esta etapa"
+            >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
                   <span style={{ fontSize: '0.82rem', fontWeight: 700, letterSpacing: '-0.01em' }}>{s.shortLabel}</span>
+                  <Settings size={11} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
                 </div>
                 <span style={{
                   fontSize: '0.7rem', fontWeight: 700, color: s.color,
@@ -195,7 +204,7 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance }: {
                 }}>{list.length}</span>
               </div>
               <p style={{ margin: '4px 0 0', fontSize: '0.66rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>{s.description}</p>
-            </div>
+            </button>
             {/* Body de columna — fondo gris suave */}
             <div className="pipefy-col-body">
               {list.length === 0 ? (
@@ -628,32 +637,74 @@ function KV({ label, value }: { label: string; value: unknown }) {
 }
 
 /* ─────────────── TRANSITION MODAL ─────────────── */
+interface DbField {
+  id: string;
+  field_key: string;
+  field_label: string;
+  field_type: 'text' | 'textarea' | 'number' | 'date' | 'datetime' | 'email' | 'url' | 'select';
+  options: string[] | null;
+  required: boolean;
+  placeholder: string | null;
+  help: string | null;
+  sort_order: number;
+}
+
 function TransitionModal({ project, def, userEmail, onClose, onDone }: {
   project: CrmProject; def: TransitionDef; userEmail: string; onClose: () => void; onDone: () => void;
 }) {
-  const [values, setValues] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const f of def.requiredFields) {
-      const cur = (project as unknown as Record<string, unknown>)[f.key];
-      init[f.key] = cur === null || cur === undefined ? '' : String(cur);
-    }
-    return init;
-  });
+  const [fields, setFields] = useState<DbField[]>([]);
+  const [fieldsLoading, setFieldsLoading] = useState(true);
+  const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  useEffect(() => {
+    // Cargar dinámicamente los campos configurados para la etapa destino.
+    // Si la BD está vacía, el endpoint siembra automáticamente con los defaults.
+    (async () => {
+      try {
+        const r = await fetch(`/api/crm/stage-fields?module=${def.toModule}&stage=${def.toStage}`);
+        const j = await r.json();
+        const dbFields: DbField[] = j.fields ?? [];
+        setFields(dbFields);
+        const init: Record<string, string> = {};
+        const customDataRaw = (project as unknown as Record<string, unknown>).custom_data as Record<string, unknown> | undefined;
+        for (const f of dbFields) {
+          const cur = (project as unknown as Record<string, unknown>)[f.field_key] ?? customDataRaw?.[f.field_key];
+          init[f.field_key] = cur === null || cur === undefined ? '' : String(cur);
+        }
+        setValues(init);
+      } catch {
+        // Fallback al def.requiredFields hardcoded
+        const fallback: DbField[] = def.requiredFields.map((f, i) => ({
+          id: `default-${f.key}`,
+          field_key: f.key,
+          field_label: f.label,
+          field_type: f.type,
+          options: f.options ?? null,
+          required: f.required ?? false,
+          placeholder: f.placeholder ?? null,
+          help: f.help ?? null,
+          sort_order: i,
+        }));
+        setFields(fallback);
+      } finally {
+        setFieldsLoading(false);
+      }
+    })();
+  }, [def, project]);
+
   const submit = async () => {
     setErr(null);
-    for (const f of def.requiredFields) {
-      if (f.required && !values[f.key]) { setErr(`${f.label} es requerido`); return; }
+    for (const f of fields) {
+      if (f.required && !values[f.field_key]) { setErr(`${f.field_label} es requerido`); return; }
     }
     setSaving(true);
     const payload: Record<string, unknown> = { action: def.action, actor_email: userEmail };
-    for (const [k, v] of Object.entries(values)) {
-      const field = def.requiredFields.find((f) => f.key === k);
-      if (!field || v === '') continue;
-      if (field.type === 'number') payload[k] = Number(v);
-      else payload[k] = v;
+    for (const f of fields) {
+      const v = values[f.field_key];
+      if (v === undefined || v === '') continue;
+      payload[f.field_key] = f.field_type === 'number' ? Number(v) : v;
     }
     const r = await fetch(`/api/crm/projects/${project.id}/transition`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -678,25 +729,27 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
 
         {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
 
-        {def.requiredFields.length === 0 ? (
+        {fieldsLoading ? (
+          <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>Cargando campos…</p>
+        ) : fields.length === 0 ? (
           <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>Esta transición no requiere datos adicionales. Confirma para ejecutar.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {def.requiredFields.map((f) => (
-              <div key={f.key}>
+            {fields.map((f) => (
+              <div key={f.id}>
                 <label className="input-label" style={{ fontSize: '0.78rem' }}>
-                  {f.label}{f.required && <span style={{ color: '#ef4444', marginLeft: 3 }}>*</span>}
+                  {f.field_label}{f.required && <span style={{ color: '#ef4444', marginLeft: 3 }}>*</span>}
                 </label>
-                {f.type === 'textarea' ? (
-                  <textarea value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} placeholder={f.placeholder} rows={3} style={{ width: '100%' }} />
-                ) : f.type === 'select' ? (
-                  <select value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })}>
+                {f.field_type === 'textarea' ? (
+                  <textarea value={values[f.field_key] ?? ''} onChange={(e) => setValues({ ...values, [f.field_key]: e.target.value })} placeholder={f.placeholder ?? undefined} rows={3} style={{ width: '100%' }} />
+                ) : f.field_type === 'select' ? (
+                  <select value={values[f.field_key] ?? ''} onChange={(e) => setValues({ ...values, [f.field_key]: e.target.value })}>
                     <option value="">— Selecciona —</option>
-                    {f.options?.map((o) => <option key={o} value={o}>{o}</option>)}
+                    {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
                   </select>
                 ) : (
-                  <input type={f.type === 'number' ? 'text' : f.type === 'date' ? 'date' : f.type} inputMode={f.type === 'number' ? 'decimal' : undefined}
-                    value={values[f.key] ?? ''} onChange={(e) => setValues({ ...values, [f.key]: e.target.value })} placeholder={f.placeholder} style={{ width: '100%' }} />
+                  <input type={f.field_type === 'number' ? 'text' : f.field_type === 'date' ? 'date' : f.field_type} inputMode={f.field_type === 'number' ? 'decimal' : undefined}
+                    value={values[f.field_key] ?? ''} onChange={(e) => setValues({ ...values, [f.field_key]: e.target.value })} placeholder={f.placeholder ?? undefined} style={{ width: '100%' }} />
                 )}
                 {f.help && <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '3px 0 0' }}>{f.help}</p>}
               </div>
@@ -760,6 +813,211 @@ function CreateProjectModal({ userEmail, onClose, onCreated }: { userEmail: stri
           <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
           <button onClick={submit} className="primary-btn" disabled={saving}>{saving ? 'Creando…' : 'Crear proyecto'}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────── STAGE CONFIG MODAL ─────────────── */
+function StageConfigModal({ module, stage, onClose }: {
+  module: 'sales' | 'engineering' | 'operations';
+  stage: StageMeta;
+  onClose: () => void;
+}) {
+  const [fields, setFields] = useState<Array<DbField & { is_custom?: boolean }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await fetch(`/api/crm/stage-fields?module=${module}&stage=${stage.key}`);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      setFields(j.fields ?? []);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [module, stage.key]);
+
+  const removeField = async (id: string, label: string) => {
+    if (!confirm(`Quitar el campo "${label}"? Ya no se pedirá al avanzar a esta etapa. Los datos ya capturados no se borran.`)) return;
+    const r = await fetch(`/api/crm/stage-fields?id=${id}`, { method: 'DELETE' });
+    if (!r.ok) { const j = await r.json(); setErr(j.error ?? 'Error'); return; }
+    load();
+  };
+
+  const toggleRequired = async (id: string, currentRequired: boolean) => {
+    const r = await fetch('/api/crm/stage-fields', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, required: !currentRequired }),
+    });
+    if (r.ok) load();
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: 640, maxHeight: '90vh', overflowY: 'auto', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: stage.color }} />
+              <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Campos de la etapa: {stage.shortLabel}</h2>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+              Estos son los datos que se piden al avanzar A esta etapa. Puedes agregar campos personalizados, quitar los que no apliquen, o cambiar si son obligatorios.
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1, marginLeft: 12 }}>×</button>
+        </div>
+
+        {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+
+        {loading ? (
+          <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>Cargando…</div>
+        ) : fields.length === 0 ? (
+          <div className="alert-warning" style={{ fontSize: '0.82rem', marginBottom: 12 }}>
+            Sin campos configurados. Esta etapa no pide datos extra al avanzar. Agrega uno si quieres capturar algo aquí.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+            {fields.map((f) => (
+              <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--bg-elevated)', borderRadius: 8, borderLeft: `3px solid ${f.is_custom ? '#8b5cf6' : stage.color}` }}>
+                <GripVertical size={14} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '0.86rem', fontWeight: 600 }}>
+                    {f.field_label}
+                    {f.is_custom && <span style={{ marginLeft: 6, fontSize: '0.66rem', padding: '1px 6px', borderRadius: 4, background: '#ede9fe', color: '#6d28d9', fontWeight: 700 }}>CUSTOM</span>}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace' }}>
+                    {f.field_key} · {f.field_type}
+                    {f.options && f.options.length > 0 && ` · ${f.options.length} opciones`}
+                  </div>
+                  {f.help && <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 2 }}>{f.help}</div>}
+                </div>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.74rem', cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={f.required} onChange={() => toggleRequired(f.id, f.required)} />
+                  Obligatorio
+                </label>
+                <button onClick={() => removeField(f.id, f.field_label)} title="Quitar"
+                  style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!showAdd ? (
+          <button onClick={() => setShowAdd(true)} className="secondary-btn" style={{ width: '100%', justifyContent: 'center', padding: '10px' }}>
+            <Plus size={14} /> Agregar campo
+          </button>
+        ) : (
+          <AddFieldForm module={module} stageKey={stage.key} onCancel={() => setShowAdd(false)} onAdded={() => { setShowAdd(false); load(); }} />
+        )}
+
+        <div style={{ marginTop: 14, fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+          <strong>Tip:</strong> los campos por defecto se mapean a columnas existentes de la BD. Los campos custom (morados) se guardan en JSON dentro del proyecto.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddFieldForm({ module, stageKey, onCancel, onAdded }: {
+  module: 'sales' | 'engineering' | 'operations';
+  stageKey: string;
+  onCancel: () => void;
+  onAdded: () => void;
+}) {
+  const [fieldKey, setFieldKey] = useState('');
+  const [fieldLabel, setFieldLabel] = useState('');
+  const [fieldType, setFieldType] = useState<DbField['field_type']>('text');
+  const [optionsText, setOptionsText] = useState('');
+  const [required, setRequired] = useState(false);
+  const [placeholder, setPlaceholder] = useState('');
+  const [help, setHelp] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    setErr(null);
+    if (!fieldLabel.trim()) { setErr('Etiqueta requerida'); return; }
+    const key = (fieldKey || fieldLabel).trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_');
+    if (!key) { setErr('Key inválida'); return; }
+    setSaving(true);
+    const options = fieldType === 'select'
+      ? optionsText.split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean)
+      : null;
+    const r = await fetch('/api/crm/stage-fields', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        module, stage: stageKey,
+        field_key: key, field_label: fieldLabel, field_type: fieldType,
+        options, required, placeholder: placeholder || null, help: help || null,
+        is_custom: true,
+      }),
+    });
+    setSaving(false);
+    const j = await r.json();
+    if (!r.ok) { setErr(j.error ?? 'Error'); return; }
+    onAdded();
+  };
+
+  return (
+    <div style={{ padding: 14, background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+      <h3 style={{ margin: '0 0 10px', fontSize: '0.92rem' }}>Nuevo campo personalizado</h3>
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.78rem' }}>{err}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+        <div>
+          <label className="input-label" style={{ fontSize: '0.74rem' }}>Etiqueta visible *</label>
+          <input type="text" value={fieldLabel} onChange={(e) => setFieldLabel(e.target.value)} placeholder="Nombre del contacto" />
+        </div>
+        <div>
+          <label className="input-label" style={{ fontSize: '0.74rem' }}>Tipo</label>
+          <select value={fieldType} onChange={(e) => setFieldType(e.target.value as DbField['field_type'])}>
+            <option value="text">Texto corto</option>
+            <option value="textarea">Texto largo</option>
+            <option value="number">Número</option>
+            <option value="date">Fecha</option>
+            <option value="email">Email</option>
+            <option value="url">URL</option>
+            <option value="select">Selección (dropdown)</option>
+          </select>
+        </div>
+        <div>
+          <label className="input-label" style={{ fontSize: '0.74rem' }}>Key (opcional)</label>
+          <input type="text" value={fieldKey} onChange={(e) => setFieldKey(e.target.value)} placeholder="nombre_contacto" style={{ fontFamily: 'ui-monospace, monospace' }} />
+          <p style={{ fontSize: '0.66rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>Se deriva de la etiqueta si lo dejas vacío</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.78rem' }}>
+            <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />
+            Obligatorio
+          </label>
+        </div>
+      </div>
+      {fieldType === 'select' && (
+        <div style={{ marginBottom: 8 }}>
+          <label className="input-label" style={{ fontSize: '0.74rem' }}>Opciones (una por línea o separadas por coma)</label>
+          <textarea value={optionsText} onChange={(e) => setOptionsText(e.target.value)} rows={3} placeholder="Opción A&#10;Opción B&#10;Opción C" />
+        </div>
+      )}
+      <div style={{ marginBottom: 8 }}>
+        <label className="input-label" style={{ fontSize: '0.74rem' }}>Placeholder (opcional)</label>
+        <input type="text" value={placeholder} onChange={(e) => setPlaceholder(e.target.value)} />
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <label className="input-label" style={{ fontSize: '0.74rem' }}>Texto de ayuda (opcional)</label>
+        <input type="text" value={help} onChange={(e) => setHelp(e.target.value)} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button onClick={onCancel} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={submit} className="primary-btn" disabled={saving}>{saving ? 'Guardando…' : 'Crear campo'}</button>
       </div>
     </div>
   );

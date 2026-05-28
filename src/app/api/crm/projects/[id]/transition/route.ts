@@ -121,8 +121,8 @@ export async function POST(request: Request, context: Ctx) {
       }
     }
 
-    // Coercer también campos opcionales que llegaron en el body si están en allowedFields
-    const allowedFields = new Set([
+    // Columnas físicas reconocidas en crm_projects
+    const knownColumns = new Set([
       'client_name','client_email','client_phone','client_address','client_city',
       'client_doc_type','client_doc_number','estrato','tipo_vivienda','lat','lng',
       'invoice_kwh_mensual','invoice_valor_cop',
@@ -135,11 +135,31 @@ export async function POST(request: Request, context: Ctx) {
       'contractor_name','contractor_email','installation_date','lectura_inicial_kwh',
       'operativo_at','legalizado_at','assigned_to','notes',
     ]);
+
+    // Campos del body que no son del schema fijo van a custom_data JSONB
+    const customExtras: Record<string, unknown> = {};
+    const META_KEYS = new Set(['action','actor_email','notes_override','id']);
     for (const k of Object.keys(body)) {
-      if (!allowedFields.has(k) || k in coerced) continue;
-      const c = coerceValue(k, body[k]);
-      if (!c.ok) return NextResponse.json({ error: c.error }, { status: 400 });
-      if (c.value !== null) coerced[k] = c.value;
+      if (META_KEYS.has(k)) continue;
+      if (k in coerced) continue;
+      if (knownColumns.has(k)) {
+        const c = coerceValue(k, body[k]);
+        if (!c.ok) return NextResponse.json({ error: c.error }, { status: 400 });
+        if (c.value !== null) coerced[k] = c.value;
+      } else if (body[k] !== '' && body[k] !== null && body[k] !== undefined) {
+        // Campo personalizado — guardarlo en custom_data
+        customExtras[k] = body[k];
+      }
+    }
+
+    // Si vinieron campos personalizados, hacer merge contra el custom_data existente
+    if (Object.keys(customExtras).length > 0) {
+      const { data: cur } = await supabaseAdmin
+        .from('crm_projects')
+        .select('custom_data')
+        .eq('id', id)
+        .single();
+      coerced.custom_data = { ...(cur?.custom_data ?? {}), ...customExtras };
     }
 
     // Construir update

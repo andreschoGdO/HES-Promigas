@@ -141,18 +141,24 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
 
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
-      ) : projects.length === 0 ? (
-        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
-          {module === 'sales'
-            ? 'Aún no hay proyectos. Crea el primero con "Nuevo proyecto" — empezará en la etapa Prospecto.'
-            : module === 'engineering'
-              ? 'No hay proyectos esperando ingeniería. Aparecen aquí cuando Ventas marca un proyecto como Firmado.'
-              : 'No hay proyectos en operaciones. Aparecen aquí cuando Ingeniería solicita visita previa o aprueba un diseño.'}
-        </div>
-      ) : view === 'kanban' ? (
-        <KanbanView stages={stages} projectsByStage={projectsByStage} onOpen={setActiveProject} module={module} onAdvance={setTransition} />
       ) : (
-        <TableView projects={projects} stages={stages} module={module} onOpen={setActiveProject} onAdvance={setTransition} />
+        <>
+          {/* Hint cuando no hay proyectos, pero el kanban se sigue mostrando con las etapas vacías */}
+          {projects.length === 0 && (
+            <div className="alert-warning" style={{ fontSize: '0.82rem', marginBottom: 14 }}>
+              {module === 'sales'
+                ? 'Aún no hay proyectos. Crea el primero con "Nuevo proyecto" — empezará en la etapa Prospecto.'
+                : module === 'engineering'
+                  ? 'No hay proyectos esperando ingeniería. Aparecen aquí cuando Ventas marca un proyecto como Firmado.'
+                  : 'No hay proyectos en operaciones. Aparecen aquí cuando Ingeniería solicita visita previa o aprueba un diseño.'}
+            </div>
+          )}
+          {view === 'kanban' ? (
+            <KanbanView stages={stages} projectsByStage={projectsByStage} onOpen={setActiveProject} module={module} onAdvance={setTransition} />
+          ) : (
+            <TableView projects={projects} stages={stages} module={module} onOpen={setActiveProject} onAdvance={setTransition} />
+          )}
+        </>
       )}
 
       {activeProject && <ProjectDetailModal project={activeProject} onClose={() => setActiveProject(null)} onChanged={() => { setActiveProject(null); load(); }} userEmail={userEmail} module={module} onAdvance={(t) => { setActiveProject(null); setTransition(t); }} />}

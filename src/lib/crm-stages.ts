@@ -8,7 +8,7 @@
 
 export type SalesStage = 'prospecto' | 'levantamiento' | 'propuesta' | 'contrato' | 'firmado' | 'completado';
 export type EngineeringStage = 'pending' | 'prefactibilidad_ok' | 'dimensionamiento' | 'aprobacion' | 'aprobado' | 'completado';
-export type OperationsStage = 'pending' | 'visita_previa' | 'alistamiento' | 'instalacion' | 'operativo' | 'legalizado' | 'completado';
+export type OperationsStage = 'pending' | 'dimensionamiento' | 'alistamiento' | 'instalacion' | 'operativo' | 'legalizado' | 'completado';
 export type CrmModule = 'sales' | 'engineering' | 'operations' | 'closed';
 
 export interface StageMeta {
@@ -36,11 +36,11 @@ export const ENGINEERING_STAGES: StageMeta[] = [
 ];
 
 export const OPERATIONS_STAGES: StageMeta[] = [
-  { key: 'visita_previa', label: '1. Visita previa',   shortLabel: 'Visita previa',   color: '#94a3b8', description: 'Ingeniería solicitó visita de prefactibilidad. Levantar acta en /visitas y vincular al proyecto.' },
-  { key: 'alistamiento',  label: '2. Alistamiento',    shortLabel: 'Alistamiento',    color: '#3b82f6', description: 'Diseño aprobado. Crear reserva en inventario con los SKUs definidos y preparar equipos.' },
-  { key: 'instalacion',   label: '3. Instalación',     shortLabel: 'Instalación',     color: '#8b5cf6', description: 'Contratista seleccionado, instalación en curso. Visita de instalación enlazada en /visitas.' },
-  { key: 'operativo',     label: '4. Operativo',       shortLabel: 'Operativo',       color: '#f59e0b', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum.' },
-  { key: 'legalizado',    label: '5. Legalizado',      shortLabel: 'Legalizado',      color: '#10b981', description: 'Papeleo cerrado: actas, garantías, normalización con el operador de red.' },
+  { key: 'dimensionamiento', label: '1. Dimensionamiento', shortLabel: 'Dimensionamiento', color: '#94a3b8', description: 'Diseño aprobado por Ingeniería. Revisar paneles, inversor, baterías y responsable antes de iniciar alistamiento.' },
+  { key: 'alistamiento',     label: '2. Alistamiento',     shortLabel: 'Alistamiento',     color: '#3b82f6', description: 'Reservar equipos en inventario con los SKUs del diseño y verificar disponibilidad física antes de despachar.' },
+  { key: 'instalacion',      label: '3. Instalación',      shortLabel: 'Instalación',      color: '#8b5cf6', description: 'Contratista seleccionado, instalación en curso. Visita de instalación enlazada en /visitas.' },
+  { key: 'operativo',        label: '4. Operativo',        shortLabel: 'Operativo',        color: '#f59e0b', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum.' },
+  { key: 'legalizado',       label: '5. Legalizado',       shortLabel: 'Legalizado',       color: '#10b981', description: 'Papeleo cerrado: actas, garantías, normalización con el operador de red.' },
 ];
 
 export const MODULE_META: Record<CrmModule, { label: string; color: string; href: string }> = {
@@ -145,19 +145,19 @@ export const TRANSITIONS: TransitionDef[] = [
   },
 
   // ─── INGENIERÍA ───
+  // Ingeniería gestiona internamente si necesita visita previa (la crea en /visitas
+  // vinculada al proyecto sin cambiar de módulo). Cuando ya tiene la info en sitio,
+  // marca prefactibilidad lista.
   {
-    action: 'engineering_request_prefactibilidad',
-    label: 'Solicitar visita previa',
-    buttonLabel: 'Solicitar visita previa →',
-    fromModule: 'engineering', fromStage: 'pending', toModule: 'operations', toStage: 'visita_previa',
+    action: 'engineering_pending_to_prefactibilidad_ok',
+    label: 'Marcar prefactibilidad lista',
+    buttonLabel: 'Prefactibilidad lista →',
+    fromModule: 'engineering', fromStage: 'pending', toModule: 'engineering', toStage: 'prefactibilidad_ok',
     requiredFields: [
-      f('notes', 'Instrucciones para Operaciones', 'textarea', false, { placeholder: 'Detalles sobre acceso, contacto en sitio, etc.' }),
+      f('visita_previa_id', 'ID de la visita previa en /visitas', 'text', false, { help: 'Opcional: UUID del acta de prefactibilidad si la levantaste en /visitas.' }),
     ],
-    noteTemplate: 'Ingeniería solicita visita previa. Operaciones debe levantar acta en /visitas y vincular al proyecto.',
-    // Engineering queda en 'pending' (esperando), no en 'completado'. El control vuelve después.
-    keepSourceStage: true,
+    noteTemplate: 'Prefactibilidad lista. Listo para dimensionar.',
   },
-  // (operations completa visita_previa → vuelve a engineering con stage prefactibilidad_ok automáticamente)
   {
     action: 'engineering_to_dimensionamiento',
     label: 'Iniciar dimensionamiento',
@@ -173,6 +173,7 @@ export const TRANSITIONS: TransitionDef[] = [
     requiredFields: [
       f('diseno_kwp', 'kWp finales', 'number'),
       f('diseno_paneles', 'Cantidad de paneles', 'number'),
+      f('diseno_baterias_cantidad', 'Cantidad de baterías', 'number', false),
       f('diseno_yield_estimado_kwh_mes', 'Yield estimado (kWh/mes)', 'number', false),
       f('diseno_notes', 'Notas del diseño', 'textarea', false),
     ],
@@ -181,25 +182,21 @@ export const TRANSITIONS: TransitionDef[] = [
     action: 'engineering_aprobar',
     label: 'Aprobar diseño',
     buttonLabel: 'Aprobar y enviar a Operaciones →',
-    fromModule: 'engineering', fromStage: 'aprobacion', toModule: 'operations', toStage: 'alistamiento',
+    fromModule: 'engineering', fromStage: 'aprobacion', toModule: 'operations', toStage: 'dimensionamiento',
     requiredFields: [
-      f('diseno_aprobado_por', 'Aprobado por (email)', 'email'),
+      f('diseno_aprobado_por', 'Responsable / aprobado por', 'text', true, { placeholder: 'Nombre completo o email' }),
     ],
-    noteTemplate: 'Diseño aprobado. Operaciones debe alistar equipos según el diseño.',
+    noteTemplate: 'Diseño aprobado. Operaciones recibe la ficha de dimensionamiento.',
   },
 
   // ─── OPERACIONES ───
   {
-    action: 'operations_complete_previa',
-    label: 'Cerrar visita previa',
-    buttonLabel: 'Visita previa lista → vuelve a Ingeniería',
-    fromModule: 'operations', fromStage: 'visita_previa', toModule: 'engineering', toStage: 'prefactibilidad_ok',
-    requiredFields: [
-      f('visita_previa_id', 'ID visita previa (de /visitas)', 'text', false, { help: 'Pega el UUID de la visita previa completada en /visitas, o déjalo vacío si la enlazaste por otro medio.' }),
-    ],
-    noteTemplate: 'Visita previa completada. Vuelve a Ingeniería para dimensionar.',
-    // Operations va a volver (a 'alistamiento') más adelante, no se completa aún
-    keepSourceStage: true,
+    action: 'operations_dimensionamiento_to_alistamiento',
+    label: 'Iniciar alistamiento',
+    buttonLabel: 'Iniciar alistamiento →',
+    fromModule: 'operations', fromStage: 'dimensionamiento', toModule: 'operations', toStage: 'alistamiento',
+    requiredFields: [],
+    noteTemplate: 'Dimensionamiento revisado. Alistando equipos.',
   },
   {
     action: 'operations_to_instalacion',

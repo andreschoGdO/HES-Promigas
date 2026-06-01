@@ -34,6 +34,7 @@ interface CrmProject {
   contrato_signed_at: string | null;
   diseno_kwp: number | null;
   diseno_paneles: number | null;
+  diseno_baterias_cantidad: number | null;
   diseno_inversor_categoria_id: string | null;
   diseno_panel_categoria_id: string | null;
   diseno_bateria_categoria_id: string | null;
@@ -295,6 +296,9 @@ function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
   }
   if (module === 'operations') {
     if (project.diseno_kwp) tags.push({ label: `${project.diseno_kwp} kWp`, bg: '#ede9fe', fg: '#6d28d9' });
+    if (project.diseno_paneles) tags.push({ label: `${project.diseno_paneles} paneles`, bg: '#fef3c7', fg: '#92400e' });
+    if (project.diseno_baterias_cantidad) tags.push({ label: `${project.diseno_baterias_cantidad} bat.`, bg: '#fce7f3', fg: '#9d174d' });
+    if (project.diseno_aprobado_por) tags.push({ label: `R: ${project.diseno_aprobado_por.split('@')[0].split(' ')[0]}`, bg: '#dcfce7', fg: '#166534' });
     if (project.installation_date) tags.push({ label: `Inst. ${project.installation_date}`, bg: '#fed7aa', fg: '#9a3412' });
     if (project.contractor_name) tags.push({ label: project.contractor_name, bg: '#fecaca', fg: '#991b1b' });
   }
@@ -538,6 +542,7 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
         <DetailSection title="Ingeniería / Diseño">
           <KV label="kWp diseño" value={project.diseno_kwp} />
           <KV label="Paneles" value={project.diseno_paneles} />
+          <KV label="Baterías" value={project.diseno_baterias_cantidad} />
           <KV label="Yield estimado" value={project.diseno_yield_estimado_kwh_mes ? `${project.diseno_yield_estimado_kwh_mes} kWh/mes` : null} />
           <KV label="Aprobado por" value={project.diseno_aprobado_por} />
           <KV label="Aprobado en" value={project.diseno_aprobado_at ? new Date(project.diseno_aprobado_at).toLocaleString('es-CO') : null} />

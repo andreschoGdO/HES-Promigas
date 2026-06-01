@@ -27,6 +27,12 @@ interface PlannerTask {
   completed_at: string | null;
 }
 
+interface AppUser {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
 type ViewMode = 'kanban' | 'lista' | 'gantt' | 'calendario';
 
 const URGENCY_META: Record<Urgency, { label: string; color: string; icon: typeof AlertCircle }> = {
@@ -51,6 +57,7 @@ const todayIso = (): string => toIsoDate(new Date());
 
 export default function PlannerPage() {
   const [tasks, setTasks] = useState<PlannerTask[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>('kanban');
   const [editing, setEditing] = useState<PlannerTask | null>(null);
@@ -72,7 +79,17 @@ export default function PlannerPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  const loadUsers = async () => {
+    try {
+      const r = await fetch('/api/users');
+      const j = await r.json();
+      if (j.users) setUsers(j.users);
+    } catch {
+      // Si falla, el dropdown muestra solo lo que viene del campo libre — no bloqueamos
+    }
+  };
+
+  useEffect(() => { load(); loadUsers(); }, []);
 
   // Lista de asignados únicos para el dropdown de filtro
   const assignees = useMemo(() => {
@@ -197,8 +214,8 @@ export default function PlannerPage() {
 
       {msg && <div className={msg.kind === 'success' ? 'alert-success' : 'alert-error'} style={{ marginTop: 12 }}>{msg.text}</div>}
 
-      {/* STATS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginTop: 16 }}>
+      {/* STATS compactas (una sola fila) */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         <StatCard color="#94a3b8" label="Pendientes" value={stats.pending} />
         <StatCard color="#3b82f6" label="En progreso" value={stats.inProgress} />
         <StatCard color="#ef4444" label="Vencidas"   value={stats.overdue}    highlight={stats.overdue > 0} />
@@ -206,65 +223,45 @@ export default function PlannerPage() {
         <StatCard color="#64748b" label="Total"      value={stats.total} />
       </div>
 
-      {/* FILTROS */}
-      <div className="glass-panel" style={{ marginTop: 16, padding: 14 }}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
-            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+      {/* FILTROS — una sola fila, todo inline */}
+      <div className="glass-panel" style={{ marginTop: 10, padding: '8px 10px' }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 180 }}>
+            <Search size={12} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
               type="text"
-              placeholder="Buscar por título, descripción, etiqueta…"
+              placeholder="Buscar…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ width: '100%', paddingLeft: 32 }}
+              style={{ width: '100%', paddingLeft: 26, paddingTop: 4, paddingBottom: 4, fontSize: '0.8rem' }}
             />
           </div>
-          <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)} style={{ minWidth: 180 }}>
+          <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}
+            style={{ minWidth: 150, fontSize: '0.8rem', padding: '4px 6px' }}>
             <option value="">Todos los responsables</option>
             {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
+          <select value={filterUrgency} onChange={(e) => setFilterUrgency(e.target.value as Urgency | 'all')}
+            style={{ minWidth: 120, fontSize: '0.8rem', padding: '4px 6px' }}>
+            <option value="all">Urgencia: todas</option>
+            {URGENCY_ORDER.map((u) => <option key={u} value={u}>{URGENCY_META[u].label}</option>)}
+          </select>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as Status | 'all')}
+            style={{ minWidth: 130, fontSize: '0.8rem', padding: '4px 6px' }}>
+            <option value="all">Estado: todos</option>
+            {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
+          </select>
+          {(filterUrgency !== 'all' || filterStatus !== 'all' || filterAssignee !== '' || search !== '') && (
+            <button onClick={() => { setFilterUrgency('all'); setFilterStatus('all'); setFilterAssignee(''); setSearch(''); }}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.74rem', padding: '2px 6px' }}>
+              Limpiar · {filtered.length}/{tasks.length}
+            </button>
+          )}
         </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', alignSelf: 'center', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 4 }}>Urgencia:</span>
-          <button onClick={() => setFilterUrgency('all')} className={`chip ${filterUrgency === 'all' ? 'active' : ''}`}>Todas</button>
-          {URGENCY_ORDER.map((u) => {
-            const m = URGENCY_META[u];
-            const Icon = m.icon;
-            return (
-              <button key={u} onClick={() => setFilterUrgency(u)} className={`chip ${filterUrgency === u ? 'active' : ''}`}
-                style={{ borderLeft: `3px solid ${m.color}`, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Icon size={11} style={{ color: m.color }} /> {m.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', alignSelf: 'center', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: 4 }}>Estado:</span>
-          <button onClick={() => setFilterStatus('all')} className={`chip ${filterStatus === 'all' ? 'active' : ''}`}>Todos</button>
-          {STATUS_ORDER.map((s) => {
-            const m = STATUS_META[s];
-            const Icon = m.icon;
-            return (
-              <button key={s} onClick={() => setFilterStatus(s)} className={`chip ${filterStatus === s ? 'active' : ''}`}
-                style={{ borderLeft: `3px solid ${m.color}`, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Icon size={11} style={{ color: m.color }} /> {m.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {(filterUrgency !== 'all' || filterStatus !== 'all' || filterAssignee !== '' || search !== '') && (
-          <button onClick={() => { setFilterUrgency('all'); setFilterStatus('all'); setFilterAssignee(''); setSearch(''); }}
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: 8, padding: 0 }}>
-            Limpiar filtros · {filtered.length} de {tasks.length}
-          </button>
-        )}
       </div>
 
       {/* VIEW TABS */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 18, marginBottom: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 6, marginTop: 10, marginBottom: 10, flexWrap: 'wrap' }}>
         {([
           { key: 'kanban' as const, label: 'Kanban', icon: LayoutGrid, color: '#ef4444' },
           { key: 'lista' as const, label: 'Lista', icon: ListTodo, color: '#07c5a8' },
@@ -272,8 +269,8 @@ export default function PlannerPage() {
           { key: 'calendario' as const, label: 'Calendario', icon: CalendarIcon, color: '#f59e0b' },
         ]).map((v) => (
           <button key={v.key} onClick={() => setView(v.key)} className={`chip ${view === v.key ? 'active' : ''}`}
-            style={{ fontSize: '0.85rem', padding: '10px 14px', borderLeft: `3px solid ${v.color}`, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <v.icon size={14} /> {v.label}
+            style={{ fontSize: '0.8rem', padding: '6px 10px', borderLeft: `3px solid ${v.color}`, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <v.icon size={13} /> {v.label}
           </button>
         ))}
       </div>
@@ -307,6 +304,7 @@ export default function PlannerPage() {
       {creating && (
         <TaskFormModal
           mode="create"
+          users={users}
           onClose={() => setCreating(false)}
           onSaved={(t) => { setTasks((cur) => [t, ...cur]); setCreating(false); }}
         />
@@ -315,6 +313,7 @@ export default function PlannerPage() {
         <TaskFormModal
           mode="edit"
           initial={editing}
+          users={users}
           onClose={() => setEditing(null)}
           onSaved={(t) => { setTasks((cur) => cur.map((x) => x.id === t.id ? t : x)); setEditing(null); }}
           onDeleted={(id) => { setTasks((cur) => cur.filter((x) => x.id !== id)); setEditing(null); }}
@@ -337,12 +336,12 @@ export default function PlannerPage() {
   );
 }
 
-/* ─────────────── StatCard ─────────────── */
+/* ─────────────── StatCard (compacto) ─────────────── */
 function StatCard({ color, label, value, highlight }: { color: string; label: string; value: number; highlight?: boolean }) {
   return (
-    <div className="glass-panel" style={{ padding: '14px 16px', borderLeft: `4px solid ${color}`, background: highlight ? `${color}08` : undefined }}>
-      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{ marginTop: 4, fontSize: '1.7rem', fontWeight: 700, color: highlight ? color : 'var(--text-primary)' }}>{value}</div>
+    <div className="glass-panel" style={{ padding: '6px 10px', borderLeft: `3px solid ${color}`, background: highlight ? `${color}08` : undefined, display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{ fontSize: '1.15rem', fontWeight: 700, color: highlight ? color : 'var(--text-primary)', lineHeight: 1, minWidth: 28 }}>{value}</span>
+      <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.2 }}>{label}</span>
     </div>
   );
 }
@@ -386,7 +385,7 @@ function KanbanView({ tasks, onEdit, onStatusChange }: {
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(240px, 1fr))', gap: 12, overflowX: 'auto' }}>
+    <div style={{ display: 'flex', gap: 12, overflowX: 'auto', overflowY: 'visible', paddingBottom: 8 }}>
       {STATUS_ORDER.map((s) => {
         const sm = STATUS_META[s];
         const SIcon = sm.icon;
@@ -399,17 +398,21 @@ function KanbanView({ tasks, onEdit, onStatusChange }: {
             onDrop={(e) => onDrop(e, s)}
             className="glass-panel"
             style={{
-              padding: 10,
+              padding: 12,
               borderTop: `4px solid ${sm.color}`,
-              minHeight: 320,
+              minHeight: 420,
+              width: 300,
+              flexShrink: 0,
               background: isDropping ? `${sm.color}10` : undefined,
               outline: isDropping ? `2px dashed ${sm.color}` : undefined,
               outlineOffset: -2,
+              display: 'flex',
+              flexDirection: 'column',
             }}>
             {/* Header de columna */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px 10px', borderBottom: '1px solid var(--border)', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 4px 10px', borderBottom: '1px solid var(--border)', marginBottom: 10 }}>
               <SIcon size={14} style={{ color: sm.color }} />
-              <strong style={{ fontSize: '0.86rem' }}>{sm.label}</strong>
+              <strong style={{ fontSize: '0.88rem' }}>{sm.label}</strong>
               <span style={{ marginLeft: 'auto', fontSize: '0.72rem', padding: '1px 8px', borderRadius: 10, background: sm.color + '20', color: sm.color, fontWeight: 700 }}>
                 {list.length}
               </span>
@@ -631,9 +634,10 @@ function TaskListView({ tasks, onEdit, onDelete, onCycleStatus }: {
 
 /* ─────────────── Vista Gantt ─────────────── */
 function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: PlannerTask) => void }) {
-  const dayWidth = 36; // px por día
-  const rowHeight = 38;
-  const labelWidth = 240;
+  const dayWidth = 56; // px por día
+  const rowHeight = 48;
+  const labelWidth = 280;
+  const headerHeight = 56;
 
   const dayDiff = (a: Date, b: Date): number => Math.round((b.getTime() - a.getTime()) / 86400000);
   const isoToDate = (s: string): Date => new Date(s + 'T00:00:00Z');
@@ -717,17 +721,22 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
         <div style={{ display: 'flex', minWidth: labelWidth + totalWidth }}>
           {/* Columna de etiquetas */}
           <div style={{ width: labelWidth, flexShrink: 0, borderRight: '1px solid var(--border)' }}>
-            <div style={{ height: 44, padding: '0 12px', display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <div style={{ height: headerHeight, padding: '0 14px', display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Tarea
             </div>
             {sorted.map((t) => {
               const um = URGENCY_META[t.urgency];
               return (
                 <div key={t.id} onClick={() => onEdit(t)}
-                  style={{ height: rowHeight, padding: '0 12px', display: 'flex', alignItems: 'center', gap: 6, borderBottom: '1px solid var(--border)', cursor: 'pointer', borderLeft: `3px solid ${um.color}` }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: t.status === 'done' ? 400 : 600, textDecoration: t.status === 'done' ? 'line-through' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  style={{ height: rowHeight, padding: '0 14px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2, borderBottom: '1px solid var(--border)', cursor: 'pointer', borderLeft: `3px solid ${um.color}` }}>
+                  <span style={{ fontSize: '0.86rem', fontWeight: t.status === 'done' ? 400 : 600, textDecoration: t.status === 'done' ? 'line-through' : undefined, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {t.title}
                   </span>
+                  {t.assigned_to && (
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {t.assigned_to}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -736,9 +745,9 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
           {/* Área de timeline */}
           <div style={{ position: 'relative', width: totalWidth }}>
             {/* Header con marcas */}
-            <div style={{ height: 44, position: 'relative', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ height: headerHeight, position: 'relative', borderBottom: '1px solid var(--border)' }}>
               {headerMarks.map((m, i) => (
-                <div key={i} style={{ position: 'absolute', left: m.x, top: 0, bottom: 0, borderLeft: m.isMonth ? '2px solid var(--border)' : '1px solid var(--border)', paddingLeft: 4, paddingTop: 4, fontSize: '0.68rem', color: m.isMonth ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: m.isMonth ? 700 : 400, whiteSpace: 'nowrap' }}>
+                <div key={i} style={{ position: 'absolute', left: m.x, top: 0, bottom: 0, borderLeft: m.isMonth ? '2px solid var(--border)' : '1px solid var(--border)', paddingLeft: 6, paddingTop: 6, fontSize: '0.74rem', color: m.isMonth ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: m.isMonth ? 700 : 500, whiteSpace: 'nowrap' }}>
                   {m.label}
                 </div>
               ))}
@@ -750,14 +759,14 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
               d.setUTCDate(d.getUTCDate() + i);
               const isWeekend = d.getUTCDay() === 0 || d.getUTCDay() === 6;
               return (
-                <div key={i} style={{ position: 'absolute', left: i * dayWidth, top: 44, bottom: 0, width: dayWidth, background: isWeekend ? 'rgba(148, 163, 184, 0.04)' : undefined, borderLeft: '1px solid rgba(148, 163, 184, 0.08)' }} />
+                <div key={i} style={{ position: 'absolute', left: i * dayWidth, top: headerHeight, bottom: 0, width: dayWidth, background: isWeekend ? 'rgba(148, 163, 184, 0.04)' : undefined, borderLeft: '1px solid rgba(148, 163, 184, 0.08)' }} />
               );
             })}
 
             {/* Línea de "hoy" */}
             {todayX >= 0 && todayX <= totalWidth && (
-              <div style={{ position: 'absolute', left: todayX, top: 44, bottom: 0, width: 2, background: '#ef4444', zIndex: 2 }}>
-                <div style={{ position: 'absolute', top: -16, left: -20, fontSize: '0.65rem', color: '#ef4444', fontWeight: 700, background: 'var(--bg-surface)', padding: '0 4px' }}>HOY</div>
+              <div style={{ position: 'absolute', left: todayX, top: headerHeight, bottom: 0, width: 2, background: '#ef4444', zIndex: 2 }}>
+                <div style={{ position: 'absolute', top: -18, left: -20, fontSize: '0.7rem', color: '#ef4444', fontWeight: 700, background: 'var(--bg-surface)', padding: '0 5px' }}>HOY</div>
               </div>
             )}
 
@@ -770,24 +779,25 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
               const endOffset = dayDiff(rangeStart, isoToDate(end));
               const left = startOffset * dayWidth;
               const width = Math.max(dayWidth, (endOffset - startOffset + 1) * dayWidth);
-              const y = 44 + idx * rowHeight + (rowHeight - 22) / 2;
+              const barHeight = 30;
+              const y = headerHeight + idx * rowHeight + (rowHeight - barHeight) / 2;
               const isDone = t.status === 'done';
               return (
                 <div key={t.id}
                   onClick={() => onEdit(t)}
                   title={`${t.title}\n${start} → ${end}\n${t.assigned_to ?? 'sin asignar'} · ${URGENCY_META[t.urgency].label} · ${STATUS_META[t.status].label}`}
                   style={{
-                    position: 'absolute', left, top: y, width, height: 22,
+                    position: 'absolute', left, top: y, width, height: barHeight,
                     background: isDone ? `${um.color}40` : um.color,
-                    borderRadius: 4,
+                    borderRadius: 5,
                     cursor: 'pointer',
-                    boxShadow: isDone ? 'none' : '0 1px 3px rgba(0,0,0,0.12)',
-                    display: 'flex', alignItems: 'center', paddingLeft: 6, paddingRight: 6,
+                    boxShadow: isDone ? 'none' : '0 1px 3px rgba(0,0,0,0.18)',
+                    display: 'flex', alignItems: 'center', paddingLeft: 8, paddingRight: 8,
                     overflow: 'hidden', whiteSpace: 'nowrap',
                     zIndex: 1,
                   }}>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: isDone ? um.color : '#fff', textDecoration: isDone ? 'line-through' : undefined, textShadow: isDone ? 'none' : '0 1px 2px rgba(0,0,0,0.2)' }}>
-                    {t.assigned_to ? `${t.assigned_to} · ` : ''}{STATUS_META[t.status].label}
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: isDone ? um.color : '#fff', textDecoration: isDone ? 'line-through' : undefined, textShadow: isDone ? 'none' : '0 1px 2px rgba(0,0,0,0.25)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {t.title}
                   </span>
                 </div>
               );
@@ -795,11 +805,11 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
 
             {/* Background para filas */}
             {sorted.map((_, idx) => (
-              <div key={`row-bg-${idx}`} style={{ position: 'absolute', left: 0, top: 44 + idx * rowHeight, width: totalWidth, height: rowHeight, borderBottom: '1px solid var(--border)' }} />
+              <div key={`row-bg-${idx}`} style={{ position: 'absolute', left: 0, top: headerHeight + idx * rowHeight, width: totalWidth, height: rowHeight, borderBottom: '1px solid var(--border)' }} />
             ))}
 
             {/* Spacer para mantener altura total */}
-            <div style={{ height: 44 + sorted.length * rowHeight }} />
+            <div style={{ height: headerHeight + sorted.length * rowHeight }} />
           </div>
         </div>
       </div>
@@ -894,13 +904,13 @@ function CalendarView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Pla
 
           return (
             <div key={i} style={{
-              minHeight: 96,
+              minHeight: 130,
               padding: 6,
               borderRight: (i % 7 !== 6) ? '1px solid var(--border)' : undefined,
               borderTop: i >= 7 ? '1px solid var(--border)' : undefined,
               background: !inMonth ? 'var(--bg-elevated)' : isToday ? 'rgba(7, 197, 168, 0.06)' : undefined,
               opacity: !inMonth ? 0.55 : 1,
-              display: 'flex', flexDirection: 'column', gap: 3,
+              display: 'flex', flexDirection: 'column', gap: 4,
             }}>
               <div style={{ fontSize: '0.74rem', fontWeight: isToday ? 700 : 500, color: isToday ? 'var(--accent)' : 'var(--text-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{d.getUTCDate()}</span>
@@ -917,19 +927,34 @@ function CalendarView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Pla
                   <button key={t.id} onClick={() => onEdit(t)} title={`${t.title}${t.assigned_to ? ' · ' + t.assigned_to : ''}`}
                     style={{
                       textAlign: 'left',
-                      fontSize: '0.68rem',
-                      padding: '2px 5px',
-                      borderRadius: 3,
+                      padding: '3px 6px',
+                      borderRadius: 4,
                       border: 'none',
                       background: t.status === 'done' ? `${um.color}20` : `${um.color}30`,
                       color: t.status === 'done' ? 'var(--text-muted)' : 'var(--text-primary)',
                       borderLeft: `3px solid ${um.color}`,
                       cursor: 'pointer',
-                      overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                      textDecoration: t.status === 'done' ? 'line-through' : undefined,
-                      fontWeight: isOverdue ? 700 : 500,
+                      overflow: 'hidden',
+                      display: 'flex', flexDirection: 'column', gap: 0,
+                      lineHeight: 1.25,
                     }}>
-                    {t.title}
+                    <span style={{
+                      fontSize: '0.7rem',
+                      fontWeight: isOverdue ? 700 : 600,
+                      textDecoration: t.status === 'done' ? 'line-through' : undefined,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {t.title}
+                    </span>
+                    {t.assigned_to && (
+                      <span style={{
+                        fontSize: '0.62rem',
+                        color: 'var(--text-muted)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {t.assigned_to}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -945,9 +970,10 @@ function CalendarView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Pla
 }
 
 /* ─────────────── Modal crear/editar tarea ─────────────── */
-function TaskFormModal({ mode, initial, onClose, onSaved, onDeleted }: {
+function TaskFormModal({ mode, initial, users, onClose, onSaved, onDeleted }: {
   mode: 'create' | 'edit';
   initial?: PlannerTask;
+  users: AppUser[];
   onClose: () => void;
   onSaved: (t: PlannerTask) => void;
   onDeleted?: (id: string) => void;
@@ -1035,7 +1061,28 @@ function TaskFormModal({ mode, initial, onClose, onSaved, onDeleted }: {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div className="input-group" style={{ margin: 0 }}>
             <label className="input-label">Responsable</label>
-            <input value={form.assigned_to} onChange={(e) => set('assigned_to', e.target.value)} placeholder="email@dominio o nombre" />
+            {users.length > 0 ? (
+              <>
+                <input
+                  list="planner-user-list"
+                  value={form.assigned_to}
+                  onChange={(e) => set('assigned_to', e.target.value)}
+                  placeholder="Seleccionar usuario o escribir nombre"
+                />
+                <datalist id="planner-user-list">
+                  {users.map((u) => (
+                    <option key={u.id} value={u.email}>
+                      {u.name ? `${u.name} — ${u.email}` : u.email}
+                    </option>
+                  ))}
+                </datalist>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                  {users.length} usuario{users.length === 1 ? '' : 's'} disponible{users.length === 1 ? '' : 's'} en la cuenta
+                </p>
+              </>
+            ) : (
+              <input value={form.assigned_to} onChange={(e) => set('assigned_to', e.target.value)} placeholder="email@dominio o nombre" />
+            )}
           </div>
           <div className="input-group" style={{ margin: 0 }}>
             <label className="input-label">Urgencia</label>

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat, TrendingUp, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
-import { readVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
+import { readVisibility, fetchVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -32,10 +32,12 @@ export function Sidebar() {
     document.documentElement.classList.toggle('sidebar-collapsed', collapsed);
   }, [collapsed]);
 
-  // Visibility per-item (configurable desde /configuracion)
+  // Visibility per-item (global, configurable desde /configuracion).
+  // Render inicial usa cache local; en mount sincronizamos contra la API.
   const [visibility, setVisibility] = useState<SidebarVisibility>({});
   useEffect(() => {
     setVisibility(readVisibility());
+    void fetchVisibility().then(setVisibility);
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<SidebarVisibility>).detail;
       setVisibility(detail ?? readVisibility());
@@ -89,7 +91,7 @@ export function Sidebar() {
 
   const navItemsAll = [
     { id: 'inicio',      label: 'Inicio', path: '/inicio', icon: Home },
-    { id: 'dashboard',   label: 'HES Head End System', path: '/dashboard', icon: BarChart3 },
+    { id: 'dashboard',   label: 'Head End System', path: '/dashboard', icon: BarChart3 },
     { id: 'ventas',      label: 'CRM Ventas', path: '/ventas', icon: ShoppingCart },
     { id: 'ingenieria',  label: 'Ingeniería', path: '/ingenieria', icon: Ruler },
     { id: 'operaciones', label: 'Operaciones', path: '/operaciones', icon: HardHat },

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Server, Key, CheckCircle2, AlertCircle, Clock, RefreshCw, EyeOff, Eye, Copy, Code, ChevronDown, ChevronUp, Plug, Send, Lock } from 'lucide-react';
 import { classifyDevice } from '@/lib/classify-device';
-import { readVisibility, writeVisibility, MENU_ITEM_CATALOG, ALWAYS_VISIBLE_IDS, type SidebarVisibility } from '@/lib/sidebar-visibility';
+import { readVisibility, fetchVisibility, writeVisibility, MENU_ITEM_CATALOG, ALWAYS_VISIBLE_IDS, type SidebarVisibility } from '@/lib/sidebar-visibility';
 
 export default function Configuracion() {
   return (
@@ -495,7 +495,7 @@ function EndpointTable({ endpoints }: { endpoints: EndpointDef[] }) {
 function ModulesSection({ isModuleVisible }: { isModuleVisible: (id: keyof SidebarVisibility | undefined) => boolean }) {
   const allModules: Array<{ id: keyof SidebarVisibility; path: string; name: string; desc: string }> = [
     { id: 'inicio',        path: '/inicio',        name: 'Inicio',                  desc: 'Landing con diagramas de arquitectura + flujos + widget de status de crons en vivo.' },
-    { id: 'dashboard',     path: '/dashboard',     name: 'HES Head End System',     desc: 'Operación diaria de la flota: vista granular multi-device, CREG mensual, alertas por casa, control manual de inversor.' },
+    { id: 'dashboard',     path: '/dashboard',     name: 'Head End System',         desc: 'Operación diaria de la flota: vista granular multi-device, CREG mensual, alertas por casa, control manual de inversor.' },
     { id: 'ventas',        path: '/ventas',        name: 'CRM Ventas',              desc: 'Kanban Pipefy-style de 5 etapas. Al firmar, handoff automático a Ingeniería.' },
     { id: 'ingenieria',    path: '/ingenieria',    name: 'Ingeniería',              desc: 'Calculadora de dimensionamiento + workflow de 5 etapas. Solicita visita previa a Operaciones, aprueba diseño.' },
     { id: 'operaciones',   path: '/operaciones',   name: 'Operaciones',             desc: 'Dimensionado, alistamiento de inventario (reserva auto), instalación con contratista, operativo.' },
@@ -615,7 +615,10 @@ function ModRow({ path, name, children }: { path: string; name: string; children
 function SidebarVisibilityCard() {
   const [vis, setVis] = useState<SidebarVisibility>({});
 
-  useEffect(() => { setVis(readVisibility()); }, []);
+  useEffect(() => {
+    setVis(readVisibility());
+    void fetchVisibility().then(setVis);
+  }, []);
 
   const toggle = (id: keyof SidebarVisibility) => {
     if (ALWAYS_VISIBLE_IDS.has(id)) return;
@@ -643,7 +646,7 @@ function SidebarVisibilityCard() {
         </div>
       </div>
       <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
-        Oculta secciones que no usas para tener un menú más limpio. Esta preferencia se guarda en este navegador. Inicio y Configuración API siempre quedan visibles (escape hatch).
+        Oculta secciones que no usas para tener un menú más limpio. <strong>Esta configuración es global</strong> — se aplica a todos los usuarios de la cuenta. Inicio y Configuración API siempre quedan visibles (escape hatch).
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18 }}>

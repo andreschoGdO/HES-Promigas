@@ -1,10 +1,15 @@
 /**
  * Configuración de visibilidad del menú lateral.
  *
- * Persiste en localStorage por navegador (no se sincroniza entre dispositivos
- * — es preferencia local del usuario, no del proyecto). Los cambios disparan
- * un CustomEvent `sidebar-visibility-change` para que el Sidebar reaccione
- * inmediatamente sin recargar.
+ * Persiste en Supabase (`app_settings` con key='sidebar_visibility') y se
+ * aplica a TODOS los usuarios de la cuenta. localStorage se usa solo como
+ * cache para render instantáneo — la fuente de verdad es la API.
+ *
+ * - `readVisibility()` devuelve el cache local (sincrónico, render inicial).
+ * - `fetchVisibility()` lee desde la API y sincroniza el cache; debe llamarse
+ *   en el mount del Sidebar (y de la página /configuracion).
+ * - `writeVisibility()` actualiza cache + API; dispara CustomEvent para que
+ *   el Sidebar reaccione sin recargar.
  *
  * "Inicio" y "Configuración API" SIEMPRE están visibles para evitar que el
  * usuario se quede sin forma de regresar al panel de control.
@@ -33,7 +38,7 @@ export const ALWAYS_VISIBLE_IDS: ReadonlySet<string> = new Set(['inicio', 'confi
 /** Catálogo completo de items que se pueden mostrar/ocultar */
 export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: string; group: 'general' | 'sistema' }> = [
   { id: 'inicio',        label: 'Inicio',                  group: 'general' },
-  { id: 'dashboard',     label: 'HES Head End System',     group: 'general' },
+  { id: 'dashboard',     label: 'Head End System',         group: 'general' },
   { id: 'ventas',        label: 'CRM Ventas',              group: 'general' },
   { id: 'ingenieria',    label: 'Ingeniería',              group: 'general' },
   { id: 'operaciones',   label: 'Operaciones',             group: 'general' },
@@ -56,6 +61,26 @@ export function readVisibility(): SidebarVisibility {
   }
 }
 
+/**
+ * Carga la visibilidad global desde la API y actualiza el cache local.
+ * Dispara `sidebar-visibility-change` para refrescar los componentes.
+ * Llamar en el mount del Sidebar y de /configuracion.
+ */
+export async function fetchVisibility(): Promise<SidebarVisibility> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const r = await fetch('/api/settings/sidebar-visibility');
+    if (!r.ok) return readVisibility();
+    const j = await r.json();
+    const v: SidebarVisibility = j.visibility ?? {};
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(v));
+    window.dispatchEvent(new CustomEvent('sidebar-visibility-change', { detail: v }));
+    return v;
+  } catch {
+    return readVisibility();
+  }
+}
+
 export function writeVisibility(v: SidebarVisibility): void {
   if (typeof window === 'undefined') return;
   try {
@@ -64,6 +89,13 @@ export function writeVisibility(v: SidebarVisibility): void {
   } catch {
     // ignorar errores de storage (quota, modo privado, etc.)
   }
+  // Persistir a la API (global para todos los usuarios). Fire-and-forget; si
+  // falla, el cambio queda solo en este navegador hasta el próximo intento.
+  void fetch('/api/settings/sidebar-visibility', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visibility: v }),
+  }).catch(() => {});
 }
 
 export function setItemVisibility(id: keyof SidebarVisibility, visible: boolean): void {

@@ -16,7 +16,7 @@ interface Module {
 const MODULES: Module[] = [
   {
     href: '/dashboard',
-    title: 'HES Head End System',
+    title: 'Head End System',
     description: 'Visión integral del portafolio de 28 casas solares operando hoy.',
     Icon: BarChart3,
     color: '#07c5a8',

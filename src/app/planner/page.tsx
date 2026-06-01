@@ -61,9 +61,27 @@ export default function PlannerPage() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewMode>('kanban');
   const [editing, setEditing] = useState<PlannerTask | null>(null);
+  const [previewing, setPreviewing] = useState<PlannerTask | null>(null);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detectar mobile (viewport < 768px) — reactivo al resize
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 767px)');
+    const apply = () => setIsMobile(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
+  // En mobile, tap → preview; en desktop, click → editar directo
+  const onOpenTask = (t: PlannerTask) => {
+    if (isMobile) setPreviewing(t);
+    else setEditing(t);
+  };
 
   // Filtros
   const [filterUrgency, setFilterUrgency] = useState<Urgency | 'all'>('all');
@@ -305,7 +323,7 @@ export default function PlannerPage() {
           {tasks.length === 0 ? 'No hay tareas. Crea la primera con "Nueva tarea" o importa un CSV.' : 'Ninguna tarea coincide con los filtros actuales.'}
         </div>
       ) : view === 'kanban' ? (
-        <KanbanView tasks={filtered} onEdit={setEditing} displayAssignee={displayAssignee} onStatusChange={async (task, next) => {
+        <KanbanView tasks={filtered} onEdit={onOpenTask} displayAssignee={displayAssignee} onStatusChange={async (task, next) => {
           const r = await fetch('/api/planner/tasks', {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: task.id, status: next }),
@@ -315,14 +333,41 @@ export default function PlannerPage() {
           setTasks((cur) => cur.map((t) => (t.id === task.id ? j.task : t)));
         }} />
       ) : view === 'lista' ? (
-        <TaskListView tasks={filtered} onEdit={setEditing} onDelete={onDelete} onCycleStatus={onCycleStatus} displayAssignee={displayAssignee} />
+        <TaskListView tasks={filtered} onEdit={onOpenTask} onDelete={onDelete} onCycleStatus={onCycleStatus} displayAssignee={displayAssignee} />
       ) : view === 'gantt' ? (
-        <GanttView tasks={filtered} onEdit={setEditing} displayAssignee={displayAssignee} />
+        <GanttView tasks={filtered} onEdit={onOpenTask} displayAssignee={displayAssignee} />
       ) : (
-        <CalendarView tasks={filtered} onEdit={setEditing} displayAssignee={displayAssignee} />
+        <CalendarView tasks={filtered} onEdit={onOpenTask} displayAssignee={displayAssignee} />
       )}
 
       {/* MODALS */}
+      {previewing && (
+        <TaskPreviewModal
+          task={previewing}
+          displayAssignee={displayAssignee}
+          onClose={() => setPreviewing(null)}
+          onEdit={() => { const t = previewing; setPreviewing(null); setEditing(t); }}
+          onDelete={async () => {
+            if (!confirm('¿Eliminar esta tarea?')) return;
+            const id = previewing.id;
+            const r = await fetch(`/api/planner/tasks?id=${id}`, { method: 'DELETE' });
+            if (!r.ok) { const j = await r.json(); setMsg({ kind: 'error', text: j.error ?? 'Error' }); return; }
+            setTasks((cur) => cur.filter((x) => x.id !== id));
+            setPreviewing(null);
+          }}
+          onStatusChange={async (next) => {
+            const id = previewing.id;
+            const r = await fetch('/api/planner/tasks', {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id, status: next }),
+            });
+            if (!r.ok) { const j = await r.json(); setMsg({ kind: 'error', text: j.error ?? 'Error' }); return; }
+            const j = await r.json();
+            setTasks((cur) => cur.map((x) => x.id === id ? j.task : x));
+            setPreviewing(j.task);
+          }}
+        />
+      )}
       {creating && (
         <TaskFormModal
           mode="create"
@@ -998,6 +1043,138 @@ function CalendarView({ tasks, onEdit, displayAssignee }: {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────── Modal preview (móvil) ─────────────── */
+function TaskPreviewModal({ task, displayAssignee, onClose, onEdit, onDelete, onStatusChange }: {
+  task: PlannerTask;
+  displayAssignee: (val: string | null | undefined) => string;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onStatusChange: (next: Status) => void;
+}) {
+  const um = URGENCY_META[task.urgency];
+  const sm = STATUS_META[task.status];
+  const UIcon = um.icon;
+  const SIcon = sm.icon;
+  const today = todayIso();
+  const overdue = task.due_date && task.due_date < today && task.status !== 'done';
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0 }} onClick={onClose}>
+      <div className="glass-panel"
+        style={{
+          width: '100%',
+          maxWidth: 560,
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          padding: 20,
+          borderRadius: '16px 16px 0 0',
+          borderTop: `4px solid ${um.color}`,
+        }}
+        onClick={(e) => e.stopPropagation()}>
+        {/* Drag handle (afordancia móvil) */}
+        <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 14px' }} />
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+          <h2 style={{ margin: 0, fontSize: '1.05rem', lineHeight: 1.3, flex: 1 }}>{task.title}</h2>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Badges */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 12, background: um.color + '20', color: um.color, fontSize: '0.78rem', fontWeight: 700 }}>
+            <UIcon size={12} /> {um.label}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 12, background: sm.color + '20', color: sm.color, fontSize: '0.78rem', fontWeight: 600 }}>
+            <SIcon size={12} /> {sm.label}
+          </span>
+          {overdue && (
+            <span style={{ padding: '3px 10px', borderRadius: 12, background: '#ef444420', color: '#ef4444', fontSize: '0.74rem', fontWeight: 700 }}>
+              Vencida
+            </span>
+          )}
+        </div>
+
+        {/* Descripción */}
+        {task.description && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Descripción</div>
+            <p style={{ margin: 0, fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.5 }}>{task.description}</p>
+          </div>
+        )}
+
+        {/* Tabla de detalles */}
+        <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '8px 12px', marginBottom: 16, fontSize: '0.84rem' }}>
+          <span style={{ color: 'var(--text-muted)' }}>Responsable</span>
+          <span>{task.assigned_to ? displayAssignee(task.assigned_to) : <em style={{ color: 'var(--text-muted)' }}>sin asignar</em>}</span>
+
+          <span style={{ color: 'var(--text-muted)' }}>Inicio</span>
+          <span style={{ fontFamily: 'ui-monospace, monospace' }}>{task.start_date ?? '—'}</span>
+
+          <span style={{ color: 'var(--text-muted)' }}>Vencimiento</span>
+          <span style={{ fontFamily: 'ui-monospace, monospace', color: overdue ? '#ef4444' : undefined, fontWeight: overdue ? 700 : 400 }}>
+            {task.due_date ?? '—'}
+          </span>
+
+          {task.tags && task.tags.length > 0 && (
+            <>
+              <span style={{ color: 'var(--text-muted)' }}>Etiquetas</span>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {task.tags.map((tg) => (
+                  <span key={tg} style={{ fontSize: '0.7rem', padding: '1px 6px', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>
+                    #{tg}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Cambio rápido de estado */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Cambiar estado</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {STATUS_ORDER.map((s) => {
+              const m = STATUS_META[s];
+              const Icon = m.icon;
+              const active = task.status === s;
+              return (
+                <button key={s} onClick={() => onStatusChange(s)} disabled={active}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: 8,
+                    border: '1px solid ' + (active ? m.color : 'var(--border)'),
+                    background: active ? m.color + '20' : 'transparent',
+                    color: active ? m.color : 'var(--text-secondary)',
+                    fontSize: '0.78rem',
+                    fontWeight: active ? 700 : 500,
+                    cursor: active ? 'default' : 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                  }}>
+                  <Icon size={12} /> {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Acciones */}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 10 }}>
+          <button onClick={onDelete} className="secondary-btn" style={{ color: '#ef4444' }}>
+            <Trash2 size={14} /> Eliminar
+          </button>
+          <button onClick={onEdit} className="primary-btn" style={{ flex: 1, maxWidth: 200 }}>
+            <Pencil size={14} /> Editar
+          </button>
+        </div>
       </div>
     </div>
   );

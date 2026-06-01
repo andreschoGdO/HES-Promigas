@@ -32,8 +32,10 @@ export interface SidebarVisibility {
 
 const STORAGE_KEY = 'sidebar-visibility-v1';
 
-/** IDs que no se pueden ocultar (escape hatch para regresar a la configuración) */
-export const ALWAYS_VISIBLE_IDS: ReadonlySet<string> = new Set(['inicio', 'configuracion']);
+/** IDs que no se pueden ocultar. Vacío: cualquier ítem puede ocultarse globalmente.
+ *  Si se oculta /configuracion, sigue siendo navegable escribiendo la URL en el
+ *  navegador — la ocultación es solo del menú lateral. */
+export const ALWAYS_VISIBLE_IDS: ReadonlySet<string> = new Set();
 
 /** Catálogo completo de items que se pueden mostrar/ocultar */
 export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: string; group: 'general' | 'sistema' }> = [

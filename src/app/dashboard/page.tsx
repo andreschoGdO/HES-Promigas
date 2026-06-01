@@ -507,6 +507,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [selectedDevice, setSelectedDevice] = useState<string>('');
+  const [deviceSearch, setDeviceSearch] = useState<string>('');
   const [startDate, setStartDate] = useState<string>(dateStr(weekAgo()));
   const [endDate, setEndDate] = useState<string>(dateStr(today()));
 
@@ -901,7 +902,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           </div>
         </div>
 
-        {/* Selector multi-device: click para añadir/quitar. Activos quedan resaltados. */}
+        {/* Selector multi-device con buscador. Click para añadir/quitar. */}
         <div className="input-group" style={{ marginBottom: 0 }}>
           <label className="input-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <span>Dispositivos ({granularDeviceIds.size} seleccionados)</span>
@@ -912,29 +913,59 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
               </button>
             )}
           </label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflowY: 'auto', padding: 6, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-surface)' }}>
-            {filteredDevices.length === 0 ? (
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: 4 }}>Ajusta los filtros de tipo o ubicación para ver dispositivos</span>
-            ) : filteredDevices.map((d) => {
-              const active = granularDeviceIds.has(d.id);
-              return (
-                <button
-                  key={d.id}
-                  onClick={() => {
-                    toggleGranularDevice(d.id);
-                    // Sincronizar el "selectedDevice" individual con el último click
-                    // (lo necesita el bloque de cierre diario aunque esté oculto, y carga keys de Metrum)
-                    setSelectedDevice(active ? '' : d.id);
-                  }}
-                  className={`chip ${active ? 'active' : ''}`}
-                  style={{ fontSize: '0.74rem' }}
-                  title={d.name}
-                >
-                  {deviceLabel(d)}
-                </button>
-              );
-            })}
-          </div>
+          {(() => {
+            const q = deviceSearch.trim().toLowerCase();
+            const searched = q
+              ? filteredDevices.filter((d) => {
+                  const fields = [d.name, d.casa, d.client, d.location, d.city, d.marca, d.modelo, d.type].filter(Boolean).join(' ').toLowerCase();
+                  return fields.includes(q);
+                })
+              : filteredDevices;
+            return (
+              <>
+                <div style={{ position: 'relative', marginBottom: 6 }}>
+                  <Filter size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                  <input type="text" value={deviceSearch} onChange={(e) => setDeviceSearch(e.target.value)}
+                    placeholder="Buscar por nombre, casa, ciudad, marca, modelo…"
+                    style={{ width: '100%', paddingLeft: 30, fontSize: '0.8rem' }} />
+                  {deviceSearch && (
+                    <button onClick={() => setDeviceSearch('')} title="Limpiar"
+                      style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '2px 6px', lineHeight: 1 }}>
+                      ×
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 200, overflowY: 'auto', padding: 6, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-surface)' }}>
+                  {filteredDevices.length === 0 ? (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: 4 }}>Ajusta los filtros de tipo o ubicación para ver dispositivos</span>
+                  ) : searched.length === 0 ? (
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: 4 }}>Sin resultados para &quot;{deviceSearch}&quot; entre {filteredDevices.length} dispositivos</span>
+                  ) : searched.map((d) => {
+                    const active = granularDeviceIds.has(d.id);
+                    return (
+                      <button
+                        key={d.id}
+                        onClick={() => {
+                          toggleGranularDevice(d.id);
+                          setSelectedDevice(active ? '' : d.id);
+                        }}
+                        className={`chip ${active ? 'active' : ''}`}
+                        style={{ fontSize: '0.74rem' }}
+                        title={d.name}
+                      >
+                        {deviceLabel(d)}
+                      </button>
+                    );
+                  })}
+                </div>
+                {deviceSearch && searched.length > 0 && (
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                    {searched.length} de {filteredDevices.length} dispositivos coinciden con &quot;{deviceSearch}&quot;
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       </div>
 

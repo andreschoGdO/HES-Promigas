@@ -40,22 +40,30 @@ export interface MailMessage {
   text?: string;
 }
 
-export async function sendEmail(msg: MailMessage): Promise<{ ok: boolean; reason?: string }> {
+export async function sendEmail(msg: MailMessage): Promise<{ ok: boolean; reason?: string; messageId?: string; accepted?: string[]; rejected?: string[] }> {
   const t = getTransporter();
-  if (!t) return { ok: false, reason: 'SMTP no configurado (faltan env vars SMTP_HOST/USER/PASS)' };
+  if (!t) {
+    const missing: string[] = [];
+    if (!process.env.SMTP_HOST) missing.push('SMTP_HOST');
+    if (!process.env.SMTP_USER) missing.push('SMTP_USER');
+    if (!process.env.SMTP_PASS) missing.push('SMTP_PASS');
+    return { ok: false, reason: `SMTP no configurado (faltan: ${missing.join(', ') || 'desconocido'})` };
+  }
   const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  console.log('[mailer] sendEmail →', msg.to, '| subject:', msg.subject, '| from:', from);
   try {
-    await t.sendMail({
+    const info = await t.sendMail({
       from,
       to: msg.to,
       subject: msg.subject,
       html: msg.html,
       text: msg.text ?? msg.html.replace(/<[^>]+>/g, ''),
     });
-    return { ok: true };
+    console.log('[mailer] OK messageId=', info.messageId, '| accepted=', info.accepted, '| rejected=', info.rejected, '| response=', info.response);
+    return { ok: true, messageId: info.messageId, accepted: info.accepted as string[], rejected: info.rejected as string[] };
   } catch (err) {
-    console.error('sendEmail error', err);
-    return { ok: false, reason: err instanceof Error ? err.message : 'Error desconocido' };
+    console.error('[mailer] ERROR', err);
+    return { ok: false, reason: err instanceof Error ? `${err.name}: ${err.message}` : 'Error desconocido' };
   }
 }
 

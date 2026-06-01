@@ -116,8 +116,26 @@ export async function POST(request: Request) {
   if (externalId) customData.external_id = externalId;
   if (source) customData.source = source;
 
-  const payload = {
+  // Módulo y etapa donde se crea (default: sales/prospecto). Para crear directo
+  // en Operaciones con la ficha de dimensionado completa, mandar:
+  //   { "module": "operations", "stage": "dimensionado", ... }
+  const targetModule = strField(body.module) ?? 'sales';
+  const targetStage = strField(body.stage);
+
+  let initialSalesStage = 'prospecto';
+  let initialEngStage = 'pending';
+  let initialOpsStage = 'pending';
+  if (targetModule === 'sales' && targetStage) initialSalesStage = targetStage;
+  if (targetModule === 'engineering') initialEngStage = targetStage ?? 'pending';
+  if (targetModule === 'operations')  initialOpsStage = targetStage ?? 'dimensionado';
+
+  const payload: Record<string, unknown> = {
     title: String(body.title).trim(),
+    current_module: targetModule,
+    sales_stage: initialSalesStage,
+    engineering_stage: initialEngStage,
+    operations_stage: initialOpsStage,
+    // Cliente
     client_name: strField(body.client_name),
     client_email: strField(body.client_email),
     client_phone: strField(body.client_phone),
@@ -129,18 +147,52 @@ export async function POST(request: Request) {
     tipo_vivienda: strField(body.tipo_vivienda),
     lat: numField(body.lat),
     lng: numField(body.lng),
+    // Campos del conjunto / vivienda
+    conjunto: strField(body.conjunto),
+    casa_numero: strField(body.casa_numero),
+    carga_carro_electrico: strField(body.carga_carro_electrico),
+    autosuficiencia_objetivo_pct: numField(body.autosuficiencia_objetivo_pct),
+    // Comercial
     invoice_kwh_mensual: numField(body.invoice_kwh_mensual),
     invoice_valor_cop: numField(body.invoice_valor_cop),
+    propuesta_kwp: numField(body.propuesta_kwp),
+    propuesta_valor_cop: numField(body.propuesta_valor_cop),
+    // Dimensionamiento
+    diseno_kwp: numField(body.diseno_kwp),
+    diseno_paneles: numField(body.diseno_paneles),
+    diseno_baterias_cantidad: numField(body.diseno_baterias_cantidad),
+    diseno_inversor_categoria_id: strField(body.diseno_inversor_categoria_id),
+    diseno_panel_categoria_id: strField(body.diseno_panel_categoria_id),
+    diseno_bateria_categoria_id: strField(body.diseno_bateria_categoria_id),
+    diseno_yield_estimado_kwh_mes: numField(body.diseno_yield_estimado_kwh_mes),
+    diseno_notes: strField(body.diseno_notes),
+    diseno_aprobado_por: strField(body.diseno_aprobado_por),
+    // Operación
+    contractor_name: strField(body.contractor_name),
+    contractor_email: strField(body.contractor_email),
+    installation_date: strField(body.installation_date),
+    // Metadata
     assigned_to: strField(body.assigned_to),
     notes: strField(body.notes),
     created_by: strField(body.created_by) ?? 'external-api',
     custom_data: Object.keys(customData).length > 0 ? customData : {},
   };
 
+  // Si se crea directo en Operations/dimensionado, los módulos previos quedan completados
+  if (targetModule === 'operations') {
+    payload.sales_stage = 'completado';
+    payload.engineering_stage = 'completado';
+    // Stamp de aprobación si vino diseno_aprobado_por
+    if (payload.diseno_aprobado_por) payload.diseno_aprobado_at = new Date().toISOString();
+  }
+  if (targetModule === 'engineering') {
+    payload.sales_stage = 'completado';
+  }
+
   const { data: project, error } = await supabaseAdmin
     .from('crm_projects')
     .insert(payload)
-    .select('id, code, title, current_module, sales_stage, created_at')
+    .select('id, code, title, current_module, sales_stage, engineering_stage, operations_stage, created_at')
     .single();
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
@@ -150,11 +202,11 @@ export async function POST(request: Request) {
   await supabaseAdmin.from('crm_project_events').insert({
     project_id: project.id,
     event_type: 'created',
-    to_module: 'sales',
-    to_stage: 'prospecto',
+    to_module: targetModule,
+    to_stage: targetModule === 'sales' ? initialSalesStage : targetModule === 'engineering' ? initialEngStage : initialOpsStage,
     actor_email: 'external-api',
     notes: source ? `Creado vía API externa (source: ${source})` : 'Creado vía API externa',
-    data: { external_id: externalId, source },
+    data: { external_id: externalId, source, target_module: targetModule, target_stage: targetStage },
   });
 
   return NextResponse.json({ ok: true, created: true, project }, { status: 201 });

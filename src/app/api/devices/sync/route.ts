@@ -29,11 +29,11 @@ export async function GET() {
     const token = await loginToMetrum();
     const response = await getDevices(token);
 
-    const entities: ThingsBoardEntity[] = Array.isArray(response)
+    const entities: ThingsBoardEntity[] = (Array.isArray(response)
       ? response
       : Array.isArray(response?.data)
         ? response.data
-        : [];
+        : []) as ThingsBoardEntity[];
 
     const pick = (e: ThingsBoardEntity, keys: string[]): string | null => {
       const attrs = e.latest?.ATTRIBUTE ?? {};
@@ -138,21 +138,33 @@ export async function GET() {
       })
       .filter((d): d is NonNullable<typeof d> => d !== null);
 
+    // Cuántas entidades trajo Metrum (incluyendo las excluidas y las que no son devices válidos)
+    const metrumTotal = entities.length;
+    const excludedCount = entities.filter((e) => e.entityId?.id && EXCLUDED_METRUM_IDS.has(e.entityId.id)).length;
+
     if (formatted.length === 0) {
       return NextResponse.json({
         success: true,
         inserted: 0,
-        warning: 'Metrum no devolvió dispositivos.',
-        raw: response,
+        metrum_total: metrumTotal,
+        excluded: excludedCount,
+        warning: 'Metrum no devolvió dispositivos (después de filtros). Verifica credenciales o que existan entidades.',
       });
     }
 
-    const { error } = await supabaseAdmin
+    const { error, data: upserted } = await supabaseAdmin
       .from('devices')
-      .upsert(formatted, { onConflict: 'metrum_id' });
+      .upsert(formatted, { onConflict: 'metrum_id' })
+      .select('id');
     if (error) throw error;
 
-    return NextResponse.json({ success: true, inserted: formatted.length });
+    return NextResponse.json({
+      success: true,
+      inserted: formatted.length,
+      metrum_total: metrumTotal,
+      excluded: excludedCount,
+      upserted: upserted?.length ?? formatted.length,
+    });
   } catch (err) {
     console.error('Device sync error:', err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

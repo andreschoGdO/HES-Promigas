@@ -78,7 +78,9 @@ export async function getDevices(token: string) {
     'flagEMayor', 'flagEMenor', 'flagEAM', 'flagECEO', 'flagEPSR', 'flagESSI',
     'UIcolorRojo', 'UIcolorAmarillo', 'UIcolorNaranja',
   ];
-  const body = {
+  const PAGE_SIZE = 1000;
+  const MAX_PAGES = 20; // tope de seguridad: 20 × 1000 = 20k entidades máx
+  const buildBody = (page: number) => ({
     entityFilter: { type: 'entityType', entityType: 'DEVICE' },
     entityFields: [
       { type: 'ENTITY_FIELD', key: 'name' },
@@ -89,23 +91,39 @@ export async function getDevices(token: string) {
     ],
     latestValues: allAttrs.map((key) => ({ type: 'ATTRIBUTE', key })),
     pageLink: {
-      page: 0,
-      pageSize: 500,
+      page,
+      pageSize: PAGE_SIZE,
       sortOrder: { key: { key: 'name', type: 'ENTITY_FIELD' }, direction: 'ASC' },
     },
-  };
-
-  const res = await fetch(`${METRUM_API_URL}/api/entitiesQuery/find`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify(body)
   });
 
-  if (!res.ok) throw new Error('Error buscando entidades en Metrum');
-  return res.json();
+  // Pagina hasta que no haya más entidades, en vez de tomar solo la primera página.
+  // Antes esto era page=0 pageSize=500 — si Metrum acumulaba más de 500 entidades
+  // (devices nuevos, viejos, deshabilitados) los excedentes se perdían silenciosamente.
+  const allEntities: unknown[] = [];
+  let totalElements: number | null = null;
+  let totalPages: number | null = null;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await fetch(`${METRUM_API_URL}/api/entitiesQuery/find`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(buildBody(page)),
+    });
+    if (!res.ok) throw new Error(`Error buscando entidades en Metrum (page ${page}, status ${res.status})`);
+    const json = await res.json();
+    const data: unknown[] = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
+    allEntities.push(...data);
+    // Capturar metadatos de paginación (primera vuelta)
+    if (page === 0) {
+      totalElements = typeof json?.totalElements === 'number' ? json.totalElements : null;
+      totalPages = typeof json?.totalPages === 'number' ? json.totalPages : null;
+    }
+    const hasNext = typeof json?.hasNext === 'boolean' ? json.hasNext : data.length === PAGE_SIZE;
+    if (!hasNext) break;
+  }
+
+  console.log(`[metrum-api] getDevices: trajo ${allEntities.length} entidades (totalElements=${totalElements}, totalPages=${totalPages})`);
+  return { data: allEntities, totalElements, totalPages, fetchedCount: allEntities.length };
 }
 
 export async function getTimeseriesKeys(token: string, entityId: string): Promise<string[]> {

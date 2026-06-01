@@ -8,7 +8,7 @@
 
 export type SalesStage = 'prospecto' | 'levantamiento' | 'propuesta' | 'contrato' | 'firmado' | 'completado';
 export type EngineeringStage = 'pending' | 'prefactibilidad_ok' | 'dimensionamiento' | 'aprobacion' | 'aprobado' | 'completado';
-export type OperationsStage = 'pending' | 'dimensionamiento' | 'alistamiento' | 'instalacion' | 'operativo' | 'legalizado' | 'completado';
+export type OperationsStage = 'pending' | 'dimensionado' | 'alistamiento' | 'instalacion' | 'operativo' | 'completado';
 export type CrmModule = 'sales' | 'engineering' | 'operations' | 'closed';
 
 export interface StageMeta {
@@ -36,11 +36,10 @@ export const ENGINEERING_STAGES: StageMeta[] = [
 ];
 
 export const OPERATIONS_STAGES: StageMeta[] = [
-  { key: 'dimensionamiento', label: '1. Dimensionamiento', shortLabel: 'Dimensionamiento', color: '#94a3b8', description: 'Diseño aprobado por Ingeniería. Revisar paneles, inversor, baterías y responsable antes de iniciar alistamiento.' },
-  { key: 'alistamiento',     label: '2. Alistamiento',     shortLabel: 'Alistamiento',     color: '#3b82f6', description: 'Reservar equipos en inventario con los SKUs del diseño y verificar disponibilidad física antes de despachar.' },
-  { key: 'instalacion',      label: '3. Instalación',      shortLabel: 'Instalación',      color: '#8b5cf6', description: 'Contratista seleccionado, instalación en curso. Visita de instalación enlazada en /visitas.' },
-  { key: 'operativo',        label: '4. Operativo',        shortLabel: 'Operativo',        color: '#f59e0b', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum.' },
-  { key: 'legalizado',       label: '5. Legalizado',       shortLabel: 'Legalizado',       color: '#10b981', description: 'Papeleo cerrado: actas, garantías, normalización con el operador de red.' },
+  { key: 'dimensionado',  label: '1. Dimensionado', shortLabel: 'Dimensionado', color: '#94a3b8', description: 'Diseño aprobado por Ingeniería. Card con cliente, conjunto, dirección, dimensionamiento (paneles, inversor, batería) y responsable.' },
+  { key: 'alistamiento',  label: '2. Alistamiento', shortLabel: 'Alistamiento', color: '#3b82f6', description: 'Reservar equipos en inventario con los SKUs del diseño y verificar disponibilidad física antes de despachar.' },
+  { key: 'instalacion',   label: '3. Instalación',  shortLabel: 'Instalación',  color: '#8b5cf6', description: 'Contratista seleccionado, instalación en curso. Visita de instalación enlazada en /visitas.' },
+  { key: 'operativo',     label: '4. Operativo',    shortLabel: 'Operativo',    color: '#10b981', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum. Cierra el flujo de Operaciones.' },
 ];
 
 export const MODULE_META: Record<CrmModule, { label: string; color: string; href: string }> = {
@@ -182,21 +181,21 @@ export const TRANSITIONS: TransitionDef[] = [
     action: 'engineering_aprobar',
     label: 'Aprobar diseño',
     buttonLabel: 'Aprobar y enviar a Operaciones →',
-    fromModule: 'engineering', fromStage: 'aprobacion', toModule: 'operations', toStage: 'dimensionamiento',
+    fromModule: 'engineering', fromStage: 'aprobacion', toModule: 'operations', toStage: 'dimensionado',
     requiredFields: [
       f('diseno_aprobado_por', 'Responsable / aprobado por', 'text', true, { placeholder: 'Nombre completo o email' }),
     ],
-    noteTemplate: 'Diseño aprobado. Operaciones recibe la ficha de dimensionamiento.',
+    noteTemplate: 'Diseño aprobado. Operaciones recibe la ficha de dimensionado.',
   },
 
   // ─── OPERACIONES ───
   {
-    action: 'operations_dimensionamiento_to_alistamiento',
+    action: 'operations_dimensionado_to_alistamiento',
     label: 'Iniciar alistamiento',
     buttonLabel: 'Iniciar alistamiento →',
-    fromModule: 'operations', fromStage: 'dimensionamiento', toModule: 'operations', toStage: 'alistamiento',
+    fromModule: 'operations', fromStage: 'dimensionado', toModule: 'operations', toStage: 'alistamiento',
     requiredFields: [],
-    noteTemplate: 'Dimensionamiento revisado. Alistando equipos.',
+    noteTemplate: 'Dimensionado revisado. Alistando equipos.',
   },
   {
     action: 'operations_to_instalacion',
@@ -221,14 +220,12 @@ export const TRANSITIONS: TransitionDef[] = [
     ],
   },
   {
-    action: 'operations_to_legalizado',
-    label: 'Legalizar',
+    action: 'operations_to_completado',
+    label: 'Cerrar proyecto',
     buttonLabel: 'Cerrar proyecto →',
     fromModule: 'operations', fromStage: 'operativo', toModule: 'closed', toStage: 'completado',
-    requiredFields: [
-      f('legalizado_at', 'Fecha de legalización', 'date'),
-    ],
-    noteTemplate: 'Proyecto legalizado y cerrado.',
+    requiredFields: [],
+    noteTemplate: 'Proyecto cerrado.',
   },
 ];
 

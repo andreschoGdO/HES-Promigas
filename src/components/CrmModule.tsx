@@ -110,7 +110,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
           <h1 style={{ margin: 0, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>{title}</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: 2, fontSize: '0.82rem' }}>{description}</p>
         </div>
-        {module === 'sales' && (
+        {(module === 'sales' || module === 'operations') && (
           <button onClick={() => setShowCreate(true)} className="primary-btn" style={{ padding: '10px 16px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600, background: color, border: 'none' }}>
             <Plus size={15} /> Nuevo proyecto
           </button>
@@ -165,7 +165,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
 
       {activeProject && <ProjectDetailModal project={activeProject} onClose={() => setActiveProject(null)} onChanged={() => { setActiveProject(null); load(); }} userEmail={userEmail} module={module} onAdvance={(t) => { setActiveProject(null); setTransition(t); }} />}
       {transition && <TransitionModal project={transition.project} def={transition.def} userEmail={userEmail} onClose={() => setTransition(null)} onDone={() => { setTransition(null); load(); }} />}
-      {showCreate && <CreateProjectModal userEmail={userEmail} onClose={() => setShowCreate(false)} onCreated={(p) => { setShowCreate(false); load(); setActiveProject(p); }} />}
+      {showCreate && <CreateProjectModal userEmail={userEmail} module={module} onClose={() => setShowCreate(false)} onCreated={(p) => { setShowCreate(false); load(); setActiveProject(p); }} />}
       {configStage && <StageConfigModal module={module} stage={configStage} onClose={() => setConfigStage(null)} />}
     </div>
   );
@@ -774,51 +774,206 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
 }
 
 /* ─────────────── CREATE PROJECT MODAL ─────────────── */
-function CreateProjectModal({ userEmail, onClose, onCreated }: { userEmail: string; onClose: () => void; onCreated: (p: CrmProject) => void }) {
-  const [title, setTitle] = useState('');
-  const [clientName, setClientName] = useState('');
-  const [clientCity, setClientCity] = useState('');
+function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
+  userEmail: string;
+  module: 'sales' | 'engineering' | 'operations';
+  onClose: () => void;
+  onCreated: (p: CrmProject) => void;
+}) {
+  const isOps = module === 'operations';
+  const [form, setForm] = useState<Record<string, string>>({});
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // En operaciones la card de Dimensionado requiere la ficha completa.
+  // Para evitar duplicar el endpoint interno, usamos el endpoint externo
+  // (que ya acepta module/stage). Pero como aún no hay key configurada por
+  // defecto, llamamos al endpoint interno (que ya estaba para sales) y
+  // luego — si es operations — hacemos un PATCH para llenar los campos del
+  // dimensionado + mover al módulo correcto vía manipulación de stages.
+  // Más simple: usar el endpoint POST /api/crm/projects que ya creamos y
+  // adjuntar los campos en su body; el endpoint los persiste vía PATCH.
+
   const submit = async () => {
     setErr(null);
-    if (!title.trim()) { setErr('Título obligatorio'); return; }
+    if (!form.title?.trim()) { setErr('Título obligatorio'); return; }
+    if (isOps && !form.client_name?.trim()) { setErr('Nombre del cliente obligatorio para crear en Operaciones'); return; }
     setSaving(true);
-    const r = await fetch('/api/crm/projects', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, client_name: clientName || null, client_city: clientCity || null, created_by: userEmail }),
-    });
-    setSaving(false);
-    const j = await r.json();
-    if (!r.ok) { setErr(j.error ?? 'Error'); return; }
-    onCreated(j.project as CrmProject);
+    try {
+      // 1. Crear proyecto base (queda en sales/prospecto por defecto)
+      const r = await fetch('/api/crm/projects', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: form.title,
+          client_name: form.client_name || null,
+          client_city: form.client_city || null,
+          created_by: userEmail,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      const created = j.project as CrmProject;
+
+      // 2. Si la creación es para operations, hacer PATCH con TODOS los campos
+      // y mover stages a operations/dimensionado
+      if (isOps) {
+        const num = (k: string): number | null => {
+          const v = form[k];
+          if (!v) return null;
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        };
+        const str = (k: string): string | null => form[k]?.trim() || null;
+        const patchBody = {
+          id: created.id,
+          // Cliente
+          client_name: str('client_name'),
+          client_email: str('client_email'),
+          client_phone: str('client_phone'),
+          client_address: str('client_address'),
+          client_city: str('client_city'),
+          estrato: num('estrato'),
+          conjunto: str('conjunto'),
+          casa_numero: str('casa_numero'),
+          carga_carro_electrico: str('carga_carro_electrico'),
+          tipo_vivienda: str('tipo_vivienda'),
+          // Dimensionamiento
+          invoice_kwh_mensual: num('invoice_kwh_mensual'),
+          autosuficiencia_objetivo_pct: num('autosuficiencia_objetivo_pct'),
+          diseno_kwp: num('diseno_kwp'),
+          diseno_paneles: num('diseno_paneles'),
+          diseno_baterias_cantidad: num('diseno_baterias_cantidad'),
+          diseno_notes: str('diseno_notes'),
+          diseno_aprobado_por: str('diseno_aprobado_por'),
+          notes: str('notes'),
+          actor_email: userEmail,
+          note: 'Creado directamente en Operaciones',
+        };
+        const r2 = await fetch('/api/crm/projects', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patchBody),
+        });
+        const j2 = await r2.json();
+        if (!r2.ok) throw new Error(j2.error ?? 'Error al guardar dimensionado');
+
+        // 3. Avanzar stages hasta operations/dimensionado vía una transición sintética
+        // Como la API de transición valida transiciones contiguas, mejor mover
+        // directo en la BD vía un PATCH a un endpoint custom. Para mantener simple,
+        // recorremos las transiciones encadenadas:
+        const chain: Array<{ action: string; data?: Record<string, unknown> }> = [
+          { action: 'sales_to_levantamiento', data: { client_phone: str('client_phone') ?? str('client_name') ?? 'pendiente' } },
+          { action: 'sales_to_propuesta', data: { invoice_kwh_mensual: num('invoice_kwh_mensual') ?? 0, invoice_valor_cop: 0, client_address: str('client_address') ?? 'pendiente', client_city: str('client_city') ?? 'pendiente' } },
+          { action: 'sales_to_contrato', data: { propuesta_kwp: num('diseno_kwp') ?? 0, propuesta_valor_cop: 0 } },
+          { action: 'sales_to_firmado', data: { contrato_signed_at: new Date().toISOString().slice(0, 10) } },
+          { action: 'sales_handoff_engineering' },
+          { action: 'engineering_pending_to_prefactibilidad_ok' },
+          { action: 'engineering_to_dimensionamiento' },
+          { action: 'engineering_to_aprobacion', data: { diseno_kwp: num('diseno_kwp') ?? 0, diseno_paneles: num('diseno_paneles') ?? 0 } },
+          { action: 'engineering_aprobar', data: { diseno_aprobado_por: str('diseno_aprobado_por') ?? userEmail } },
+        ];
+        for (const step of chain) {
+          const tr = await fetch(`/api/crm/projects/${created.id}/transition`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: step.action, actor_email: userEmail, ...(step.data ?? {}) }),
+          });
+          if (!tr.ok) {
+            const tj = await tr.json();
+            console.warn(`Transition ${step.action} falló:`, tj.error);
+            // No abortar — algunas pueden fallar si ya están en ese estado; mostrar resultado final
+          }
+        }
+      }
+      onCreated(created);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
-      <div className="glass-panel" style={{ width: '100%', maxWidth: 480, padding: 24 }} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ margin: 0, fontSize: '1.05rem', marginBottom: 14 }}>Nuevo proyecto</h2>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: isOps ? 720 : 480, maxHeight: '90vh', overflowY: 'auto', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ margin: 0, fontSize: '1.05rem', marginBottom: 6 }}>
+          {isOps ? 'Nuevo proyecto en Operaciones (Dimensionado)' : 'Nuevo proyecto'}
+        </h2>
+        {isOps && (
+          <p style={{ margin: '0 0 14px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+            El proyecto entra directo a la etapa de Dimensionado. Las etapas previas (Ventas + Ingeniería) se marcan como completadas automáticamente.
+          </p>
+        )}
         {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div>
-            <label className="input-label" style={{ fontSize: '0.78rem' }}>Título <span style={{ color: '#ef4444' }}>*</span></label>
-            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Casa Andrés Sánchez - Cali" />
+
+        {!isOps ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <FormField label="Título" required value={form.title ?? ''} onChange={(v) => set('title', v)} placeholder="Casa Andrés Sánchez - Cali" />
+            <FormField label="Cliente (nombre)" value={form.client_name ?? ''} onChange={(v) => set('client_name', v)} />
+            <FormField label="Ciudad" value={form.client_city ?? ''} onChange={(v) => set('client_city', v)} />
           </div>
-          <div>
-            <label className="input-label" style={{ fontSize: '0.78rem' }}>Cliente (nombre)</label>
-            <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} />
-          </div>
-          <div>
-            <label className="input-label" style={{ fontSize: '0.78rem' }}>Ciudad</label>
-            <input type="text" value={clientCity} onChange={(e) => setClientCity(e.target.value)} />
-          </div>
-        </div>
+        ) : (
+          <>
+            <FormSection title="Identificación">
+              <FormField label="Título del proyecto" required value={form.title ?? ''} onChange={(v) => set('title', v)} placeholder="CONDOMINIO BOSQUES DE PANCE-1 (NOMBRE-CC)" fullWidth />
+            </FormSection>
+
+            <FormSection title="Cliente">
+              <FormField label="Cliente (nombre)" required value={form.client_name ?? ''} onChange={(v) => set('client_name', v)} placeholder="ERIKA VANESSA BECERRA" />
+              <FormField label="Ciudad" value={form.client_city ?? ''} onChange={(v) => set('client_city', v)} placeholder="Cali" />
+              <FormField label="Conjunto" value={form.conjunto ?? ''} onChange={(v) => set('conjunto', v)} placeholder="CONDOMINIO BOSQUES DE PANCE" />
+              <FormField label="Dirección" value={form.client_address ?? ''} onChange={(v) => set('client_address', v)} placeholder="Calle 16b 124 80" />
+              <FormField label="Estrato" type="number" value={form.estrato ?? ''} onChange={(v) => set('estrato', v)} placeholder="6" />
+              <FormField label="Casa #" value={form.casa_numero ?? ''} onChange={(v) => set('casa_numero', v)} placeholder="1" />
+              <FormFieldSelect label="Carga carro eléctrico" value={form.carga_carro_electrico ?? ''} onChange={(v) => set('carga_carro_electrico', v)}
+                options={['No tenemos carro eléctrico', 'Sí - Wallbox 7 kW', 'Sí - Wallbox 11 kW', 'Sí - Wallbox 22 kW', 'Sí - otro']} fullWidth />
+            </FormSection>
+
+            <FormSection title="Dimensionado">
+              <FormField label="Promedio consumo (kWh/mes)" type="number" value={form.invoice_kwh_mensual ?? ''} onChange={(v) => set('invoice_kwh_mensual', v)} placeholder="440" />
+              <FormField label="Autosuficiencia objetivo (%)" type="number" value={form.autosuficiencia_objetivo_pct ?? ''} onChange={(v) => set('autosuficiencia_objetivo_pct', v)} placeholder="90" />
+              <FormField label="kWp diseño" type="number" value={form.diseno_kwp ?? ''} onChange={(v) => set('diseno_kwp', v)} placeholder="6" />
+              <FormField label="Paneles (cantidad)" type="number" value={form.diseno_paneles ?? ''} onChange={(v) => set('diseno_paneles', v)} placeholder="6" />
+              <FormField label="Baterías (cantidad)" type="number" value={form.diseno_baterias_cantidad ?? ''} onChange={(v) => set('diseno_baterias_cantidad', v)} placeholder="2" />
+              <FormField label="Responsable" required value={form.diseno_aprobado_por ?? ''} onChange={(v) => set('diseno_aprobado_por', v)} placeholder="Santiago Andrés Osorio Huertas" />
+              <FormField label="Notas del diseño" value={form.diseno_notes ?? ''} onChange={(v) => set('diseno_notes', v)} placeholder="Paneles JA Solar 595W · Inversor Livoltek 10K · Baterías Livoltek" fullWidth />
+            </FormSection>
+          </>
+        )}
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
           <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
           <button onClick={submit} className="primary-btn" disabled={saving}>{saving ? 'Creando…' : 'Crear proyecto'}</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* Helpers de formulario reutilizables (sólo para CreateProjectModal por ahora) */
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{title}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>{children}</div>
+    </div>
+  );
+}
+function FormField({ label, value, onChange, required, placeholder, type, fullWidth }: { label: string; value: string; onChange: (v: string) => void; required?: boolean; placeholder?: string; type?: string; fullWidth?: boolean }) {
+  return (
+    <div style={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
+      <label className="input-label" style={{ fontSize: '0.74rem' }}>{label}{required && <span style={{ color: '#ef4444' }}> *</span>}</label>
+      <input type={type === 'number' ? 'text' : (type ?? 'text')} inputMode={type === 'number' ? 'decimal' : undefined} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+    </div>
+  );
+}
+function FormFieldSelect({ label, value, onChange, options, fullWidth }: { label: string; value: string; onChange: (v: string) => void; options: string[]; fullWidth?: boolean }) {
+  return (
+    <div style={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
+      <label className="input-label" style={{ fontSize: '0.74rem' }}>{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">— Selecciona —</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
     </div>
   );
 }

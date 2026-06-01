@@ -1,36 +1,27 @@
-import nodemailer, { type Transporter } from 'nodemailer';
+import { Resend } from 'resend';
 
 /**
- * Transporter SMTP — single-process cache. La primera llamada lo crea con las
- * env vars y las siguientes lo reusan (Node.js conserva el módulo entre
- * invocaciones de la misma Function en Vercel).
+ * Cliente Resend cacheado en el proceso. Resend es un servicio HTTPS REST,
+ * no requiere SMTP AUTH del tenant ni firewalls custom — solo una API key
+ * y un dominio verificado.
  *
  * Env vars requeridas:
- *   SMTP_HOST  — ej. smtp.office365.com
- *   SMTP_PORT  — ej. 587
- *   SMTP_USER  — usuario completo (ej. notificaciones@gdo.com.co)
- *   SMTP_PASS  — password o app password
- *   SMTP_FROM  — opcional: "Nombre <email@dominio>" (default = SMTP_USER)
+ *   RESEND_API_KEY  — API key generada en resend.com/api-keys
+ *   EMAIL_FROM      — "Nombre <noreply@tudominio.com>" — el dominio
+ *                     (tudominio.com) DEBE estar verificado en resend.com/domains.
+ *                     Si no está verificado, Resend rechaza con error 422.
+ *                     Para pruebas iniciales puedes usar
+ *                     "onboarding@resend.dev" pero SOLO se envía al email
+ *                     dueño de la cuenta Resend (sandbox).
  */
-let transporter: Transporter | null = null;
+let client: Resend | null = null;
 
-function getTransporter(): Transporter | null {
-  if (transporter) return transporter;
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT ?? 587);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null; // no configurado, no-op
-  transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465, // 465 = TLS implícito; 587 = STARTTLS
-    auth: { user, pass },
-    // Office365: requiere STARTTLS en 587. La opción por defecto de nodemailer
-    // (requireTLS si secure=false) ya cubre esto.
-    requireTLS: port === 587,
-  });
-  return transporter;
+function getClient(): Resend | null {
+  if (client) return client;
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return null;
+  client = new Resend(key);
+  return client;
 }
 
 export interface MailMessage {
@@ -40,34 +31,40 @@ export interface MailMessage {
   text?: string;
 }
 
-export async function sendEmail(msg: MailMessage): Promise<{ ok: boolean; reason?: string; messageId?: string; accepted?: string[]; rejected?: string[] }> {
-  const t = getTransporter();
-  if (!t) {
+export async function sendEmail(msg: MailMessage): Promise<{ ok: boolean; reason?: string; messageId?: string }> {
+  const c = getClient();
+  if (!c) {
     const missing: string[] = [];
-    if (!process.env.SMTP_HOST) missing.push('SMTP_HOST');
-    if (!process.env.SMTP_USER) missing.push('SMTP_USER');
-    if (!process.env.SMTP_PASS) missing.push('SMTP_PASS');
-    return { ok: false, reason: `SMTP no configurado (faltan: ${missing.join(', ') || 'desconocido'})` };
+    if (!process.env.RESEND_API_KEY) missing.push('RESEND_API_KEY');
+    if (!process.env.EMAIL_FROM) missing.push('EMAIL_FROM');
+    return { ok: false, reason: `Resend no configurado (faltan: ${missing.join(', ') || 'desconocido'})` };
   }
-  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER!;
+  const from = process.env.EMAIL_FROM;
+  if (!from) {
+    return { ok: false, reason: 'EMAIL_FROM no está definido' };
+  }
   console.log('[mailer] sendEmail →', msg.to, '| subject:', msg.subject, '| from:', from);
   try {
-    const info = await t.sendMail({
+    const res = await c.emails.send({
       from,
       to: msg.to,
       subject: msg.subject,
       html: msg.html,
       text: msg.text ?? msg.html.replace(/<[^>]+>/g, ''),
     });
-    console.log('[mailer] OK messageId=', info.messageId, '| accepted=', info.accepted, '| rejected=', info.rejected, '| response=', info.response);
-    return { ok: true, messageId: info.messageId, accepted: info.accepted as string[], rejected: info.rejected as string[] };
+    if (res.error) {
+      console.error('[mailer] Resend error', res.error);
+      return { ok: false, reason: `${res.error.name}: ${res.error.message}` };
+    }
+    console.log('[mailer] OK id=', res.data?.id);
+    return { ok: true, messageId: res.data?.id };
   } catch (err) {
-    console.error('[mailer] ERROR', err);
+    console.error('[mailer] EXCEPTION', err);
     return { ok: false, reason: err instanceof Error ? `${err.name}: ${err.message}` : 'Error desconocido' };
   }
 }
 
-/** Detecta si una cadena parece email (validación liviana, lo suficientemente buena para gating) */
+/** Detecta si una cadena parece email (validación liviana) */
 export function looksLikeEmail(s: string | null | undefined): boolean {
   if (!s) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());

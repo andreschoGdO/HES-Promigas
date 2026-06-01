@@ -2,12 +2,10 @@ import { NextResponse } from 'next/server';
 import { sendEmail } from '@/lib/mailer';
 
 /**
- * GET /api/_debug/test-email?to=email@dominio
+ * GET /api/debug/test-email?to=email@dominio
  * Envía un email de prueba al destinatario indicado. Devuelve toda la
- * info del transport (messageId, accepted, rejected, response) para
- * diagnosticar problemas SMTP rápido.
- *
- * También devuelve el estado de las env vars (sin exponer el password).
+ * info del envío (messageId, error) y el estado de las env vars
+ * (sin exponer la API key) para diagnosticar problemas rápido.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -21,11 +19,11 @@ export async function GET(request: Request) {
 
   const result = await sendEmail({
     to,
-    subject: '✅ Test SMTP — SUNNY APP',
+    subject: '✅ Test email — SUNNY APP',
     html: `<p>Este es un correo de prueba enviado desde el endpoint de diagnóstico.</p>
-           <p>Si lo recibes, el SMTP de Office 365 funciona correctamente.</p>
+           <p>Si lo recibes, Resend está funcionando correctamente.</p>
            <p style="color:#94a3b8;font-size:12px">Timestamp: ${new Date().toISOString()}</p>`,
-    text: 'Test SMTP - SUNNY APP. Si recibes este correo, el SMTP funciona.',
+    text: 'Test email - SUNNY APP. Si recibes este correo, Resend funciona.',
   });
 
   return NextResponse.json({
@@ -37,12 +35,10 @@ export async function GET(request: Request) {
 
 function envStatus() {
   return {
-    SMTP_HOST: process.env.SMTP_HOST ?? null,
-    SMTP_PORT: process.env.SMTP_PORT ?? null,
-    SMTP_USER: process.env.SMTP_USER ?? null,
-    SMTP_PASS_set: !!process.env.SMTP_PASS,
-    SMTP_PASS_length: process.env.SMTP_PASS?.length ?? 0,
-    SMTP_FROM: process.env.SMTP_FROM ?? null,
+    RESEND_API_KEY_set: !!process.env.RESEND_API_KEY,
+    RESEND_API_KEY_length: process.env.RESEND_API_KEY?.length ?? 0,
+    RESEND_API_KEY_prefix: process.env.RESEND_API_KEY?.slice(0, 6) ?? null,
+    EMAIL_FROM: process.env.EMAIL_FROM ?? null,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL ?? null,
   };
 }

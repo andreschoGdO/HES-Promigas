@@ -1,15 +1,16 @@
 "use client";
 import { supabase } from '@/lib/supabase';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp, BarChart3, Cpu, AlertTriangle, Bell } from 'lucide-react';
+import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp, BarChart3, Cpu, AlertTriangle, AlertCircle, Bell, Info, Lightbulb } from 'lucide-react';
 import { VARIABLES, findVariable, type VariableMeta } from '@/lib/variables-dict';
+import { findVariableMeta, formatValue, ALERT_CATEGORIES } from '@/lib/alert-variables';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush,
   PieChart, Pie, Cell,
 } from 'recharts';
 import { classifyDevice } from '@/lib/classify-device';
 
-type Tab = 'cierres' | 'alertas' | 'reactiva' | 'control';
+type Tab = 'cierres' | 'nar' | 'reactiva' | 'control';
 type TypeFilter = 'all' | 'meter' | 'inverter' | 'gateway' | 'other';
 
 interface DeviceOption {
@@ -430,7 +431,7 @@ export default function DashboardPage() {
   const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof BarChart3; description: string }> = {
     cierres:  { label: 'Vista Granular',         color: '#07c5a8', Icon: Activity,       description: 'Series de tiempo de Metrum por dispositivo. Multi-select de casas, zoom interactivo y tabla diaria/puntos.' },
     reactiva: { label: 'Reactiva vs Activa (CREG)', color: '#f59e0b', Icon: AlertTriangle, description: 'Ratio mensual de reactiva sobre activa para detectar penalización CREG 015-2018.' },
-    alertas:  { label: 'Alertas por Casa',       color: '#ef4444', Icon: Bell,            description: 'Eventos agrupados por casa con severidad, generados por las reglas configuradas.' },
+    nar:      { label: 'NAR',                    color: '#ef4444', Icon: Bell,            description: 'Notificaciones, Alertas y Recomendaciones de la flota. Eventos accionables por casa + sugerencias proactivas derivadas del patrón.' },
     control:  { label: 'Control Manual Inversor', color: '#8b5cf6', Icon: Play,           description: 'Envío de comandos al inversor (cos φ, Q, P_max, modo) — stub hasta credenciales OEM.' },
   };
   const meta = TAB_META[tab];
@@ -490,7 +491,7 @@ export default function DashboardPage() {
 
       {tab === 'cierres' && <CierresGranularTab devices={devices} />}
       {tab === 'reactiva' && <ReactivaTab />}
-      {tab === 'alertas' && <AlertasCasaTab />}
+      {tab === 'nar' && <NarTab />}
       {tab === 'control' && <ControlManualTab devices={devices} />}
     </>
   );
@@ -1817,7 +1818,7 @@ function ConsumosTab() {
   );
 }
 
-/* ---------------- TAB: Alertas por Casa ---------------- */
+/* ---------------- TAB: NAR (Notificaciones, Alertas y Recomendaciones) ---------------- */
 
 interface AlertEventRow {
   id: string;
@@ -1831,7 +1832,7 @@ interface AlertEventRow {
   message: string;
   fired_at: string;
   acknowledged: boolean;
-  alert_rules: { name: string } | null;
+  alert_rules: { name: string; description: string | null } | null;
 }
 
 const SEV_META: Record<string, { label: string; color: string }> = {
@@ -1839,6 +1840,16 @@ const SEV_META: Record<string, { label: string; color: string }> = {
   medium: { label: 'Medio', color: '#f59e0b' },
   low: { label: 'Bajo', color: '#3b82f6' },
 };
+
+type NarSub = 'notificaciones' | 'alertas' | 'recomendaciones';
+
+const NAR_SUB_META: Record<NarSub, { label: string; color: string; icon: typeof Bell; description: string }> = {
+  notificaciones: { label: 'Notificaciones', color: '#3b82f6', icon: Info, description: 'Eventos informativos (severidad baja).' },
+  alertas:        { label: 'Alertas',        color: '#ef4444', icon: AlertCircle, description: 'Eventos accionables (severidad media o alta).' },
+  recomendaciones:{ label: 'Recomendaciones', color: '#10b981', icon: Lightbulb, description: 'Sugerencias derivadas del patrón: ajustes, visitas, control reactiva.' },
+};
+
+const opSymbolNar = (op: string) => ({ gt: '>', gte: '≥', lt: '<', lte: '≤', eq: '=' }[op] ?? op);
 
 /* ---------------- TAB: Reactiva vs Activa (penalización CREG Colombia) ---------------- */
 
@@ -2433,20 +2444,19 @@ interface TopAlertRow {
   first_fired_at: string;
 }
 
-function AlertasCasaTab() {
+function NarTab() {
   const [events, setEvents] = useState<AlertEventRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterAck, setFilterAck] = useState<'all' | 'pending'>('pending');
+  const [sub, setSub] = useState<NarSub>('alertas');
 
-  // Estado para la tabla de "Alertas más frecuentes"
+  // Top alerts (para "Recomendaciones" y para banda de info)
   const [topAlerts, setTopAlerts] = useState<TopAlertRow[]>([]);
   const [topLoading, setTopLoading] = useState(true);
   const [topDays, setTopDays] = useState<1 | 7 | 30>(7);
 
   const load = async () => {
     setLoading(true);
-    const url = filterAck === 'pending' ? '/api/alerts/events?acknowledged=false' : '/api/alerts/events';
-    const r = await fetch(url);
+    const r = await fetch('/api/alerts/events?acknowledged=false');
     const j = await r.json();
     setEvents(j.events ?? []);
     setLoading(false);
@@ -2454,16 +2464,209 @@ function AlertasCasaTab() {
 
   const loadTop = async () => {
     setTopLoading(true);
-    const r = await fetch(`/api/alerts/top?days=${topDays}&limit=50`);
+    const r = await fetch(`/api/alerts/top?days=${topDays}&limit=100`);
     const j = await r.json();
     setTopAlerts(j.items ?? []);
     setTopLoading(false);
   };
 
-  useEffect(() => { load(); }, [filterAck]);
+  useEffect(() => { load(); }, []);
   useEffect(() => { loadTop(); }, [topDays]);
 
-  // Agrupar por casa
+  // ── Separar por sección NAR
+  const notiEvents  = useMemo(() => events.filter((e) => e.severity === 'low'), [events]);
+  const alertEvents = useMemo(() => events.filter((e) => e.severity === 'high' || e.severity === 'medium'), [events]);
+
+  // Conteos por severidad (total no-ack)
+  const totals = useMemo(() => {
+    const t = { high: 0, medium: 0, low: 0 };
+    for (const ev of events) t[ev.severity]++;
+    return t;
+  }, [events]);
+
+  // ── Recomendaciones derivadas de topAlerts
+  type Reco = { id: string; kind: 'tune' | 'visit' | 'reactiva'; title: string; body: string; sev: 'high' | 'medium' | 'low'; details?: string };
+  const recommendations = useMemo<Reco[]>(() => {
+    const out: Reco[] = [];
+    const repeated = topAlerts.filter((t) => t.count >= 3);
+    const byCasaMap = new Map<string, TopAlertRow[]>();
+    for (const r of repeated) {
+      if (!byCasaMap.has(r.casa)) byCasaMap.set(r.casa, []);
+      byCasaMap.get(r.casa)!.push(r);
+    }
+    for (const [casa, list] of byCasaMap.entries()) {
+      const total = list.reduce((s, r) => s + r.count, 0);
+      const top = list[0];
+      const sev: 'high' | 'medium' = list.some((r) => r.severity === 'high') ? 'high' : 'medium';
+      out.push({
+        id: `rep-${casa}`,
+        kind: total >= 10 ? 'visit' : 'tune',
+        title: `${casa} — ${total} disparos en ${topDays === 1 ? '24h' : `${topDays} días`}`,
+        body: total >= 10
+          ? `Recurrencia muy alta. Recomendamos visita en sitio. Regla principal: «${top.rule_name}» (${top.count}× ${top.severity}).`
+          : `Las reglas están disparándose con frecuencia. Revisa umbral o sitio. Regla: «${top.rule_name}» (${top.count}× ${top.severity}).`,
+        sev,
+        details: list.map((r) => `· ${r.rule_name} (${r.count}× ${r.severity})`).join('\n'),
+      });
+    }
+
+    // Reactiva CREG activa
+    const reactiveActive = events.some((e) => {
+      const cat = findVariableMeta(e.variable)?.category;
+      return cat === 'reactiva' && (e.severity === 'high' || e.severity === 'medium');
+    });
+    if (reactiveActive) {
+      out.push({
+        id: 'reactiva',
+        kind: 'reactiva',
+        title: 'Penalización CREG activa',
+        body: 'Hay casas con reactiva fuera de rango. Considera enviar comando set_power_factor=0.95 desde "Control Manual Inversor".',
+        sev: 'high',
+      });
+    }
+    return out.sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.sev] - { high: 0, medium: 1, low: 2 }[b.sev]));
+  }, [topAlerts, events, topDays]);
+
+  return (
+    <>
+      {/* Banda de resumen — 3 cards severidad + sub-pills */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        {(['high','medium','low'] as const).map((sev) => (
+          <div key={sev} className="glass-panel" style={{ flex: '1 1 160px', padding: '12px 16px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{SEV_META[sev].label}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: SEV_META[sev].color }} />
+              <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>{totals[sev]}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Sub-pills NAR */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+        {(Object.keys(NAR_SUB_META) as NarSub[]).map((k) => {
+          const m = NAR_SUB_META[k];
+          const Icon = m.icon;
+          const count = k === 'notificaciones' ? notiEvents.length : k === 'alertas' ? alertEvents.length : recommendations.length;
+          return (
+            <button key={k} onClick={() => setSub(k)} className={`chip ${sub === k ? 'active' : ''}`}
+              style={{ fontSize: '0.82rem', padding: '8px 12px', borderLeft: `3px solid ${m.color}`, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Icon size={13} /> {m.label} <span style={{ opacity: 0.7 }}>({count})</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="glass-panel" style={{ padding: 10, borderLeft: `3px solid ${NAR_SUB_META[sub].color}`, marginBottom: 14 }}>
+        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{NAR_SUB_META[sub].description}</p>
+      </div>
+
+      {/* CONTENIDO */}
+      {(sub === 'notificaciones' || sub === 'alertas') && (
+        <NarEventsList
+          events={sub === 'notificaciones' ? notiEvents : alertEvents}
+          loading={loading}
+          onAck={load}
+          emptyText={sub === 'notificaciones'
+            ? 'No hay notificaciones pendientes.'
+            : '✓ Ninguna alerta activa. El sistema está operando dentro de los umbrales configurados.'}
+          kind={sub}
+        />
+      )}
+
+      {sub === 'recomendaciones' && (
+        <div>
+          {/* Selector ventana temporal */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, justifyContent: 'flex-end' }}>
+            <button className={`chip ${topDays === 1 ? 'active' : ''}`} onClick={() => setTopDays(1)}>24 h</button>
+            <button className={`chip ${topDays === 7 ? 'active' : ''}`} onClick={() => setTopDays(7)}>7 días</button>
+            <button className={`chip ${topDays === 30 ? 'active' : ''}`} onClick={() => setTopDays(30)}>30 días</button>
+          </div>
+
+          {topLoading ? (
+            <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
+          ) : recommendations.length === 0 ? (
+            <div className="alert-success" style={{ fontSize: '0.85rem' }}>
+              ✓ No hay recomendaciones nuevas. La operación está estable.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {recommendations.map((r) => {
+                const sm = SEV_META[r.sev];
+                return (
+                  <div key={r.id} className="glass-panel" style={{ padding: '12px 16px', borderLeft: `4px solid ${sm.color}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 8, background: sm.color + '20', color: sm.color, fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        {r.kind === 'tune' ? 'Ajustar umbral' : r.kind === 'visit' ? 'Visita técnica' : 'Control reactiva'}
+                      </span>
+                      <strong style={{ fontSize: '0.92rem' }}>{r.title}</strong>
+                    </div>
+                    <p style={{ margin: '4px 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>{r.body}</p>
+                    {r.details && (
+                      <pre style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', fontSize: '0.72rem', fontFamily: 'ui-monospace, monospace', color: 'var(--text-muted)', margin: '4px 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{r.details}</pre>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Tabla cruda de alertas más frecuentes — sigue siendo útil como referencia */}
+          <div className="glass-panel" style={{ padding: 14, marginTop: 14 }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: '0.95rem' }}>Alertas más frecuentes (datos crudos)</h3>
+            <p style={{ margin: '0 0 10px', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+              Conteo por regla y casa en los últimos {topDays === 1 ? '24 h' : `${topDays} días`}.
+            </p>
+            {topAlerts.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Sin datos en la ventana.</div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      <th style={{ padding: '6px 8px', width: 60 }}>Sev</th>
+                      <th style={{ padding: '6px 8px' }}>Casa</th>
+                      <th style={{ padding: '6px 8px' }}>Regla</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>Eventos</th>
+                      <th style={{ padding: '6px 8px' }}>Última</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topAlerts.slice(0, 20).map((row) => {
+                      const sev = SEV_META[row.severity];
+                      const isRep = row.count >= 3;
+                      return (
+                        <tr key={`${row.rule_id}|${row.casa}`} style={{ borderTop: '1px solid var(--border)', background: isRep ? sev.color + '08' : undefined }}>
+                          <td style={{ padding: '6px 8px' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: 8, background: sev.color + '20', color: sev.color, fontSize: '0.68rem', fontWeight: 700 }}>{sev.label}</span>
+                          </td>
+                          <td style={{ padding: '6px 8px', fontWeight: 600 }}>{row.casa}</td>
+                          <td style={{ padding: '6px 8px' }}>{row.rule_name}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 700, color: isRep ? sev.color : 'var(--text-primary)' }}>
+                            {row.count}{isRep && '×'}
+                          </td>
+                          <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace' }}>
+                            {new Date(row.last_fired_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* Reusable list de eventos agrupados por casa para NAR */
+function NarEventsList({ events, loading, onAck, emptyText, kind }: {
+  events: AlertEventRow[]; loading: boolean; onAck: () => void; emptyText: string;
+  kind: 'notificaciones' | 'alertas';
+}) {
   const byCasa = useMemo(() => {
     const m = new Map<string, AlertEventRow[]>();
     for (const ev of events) {
@@ -2471,170 +2674,84 @@ function AlertasCasaTab() {
       m.get(ev.casa)!.push(ev);
     }
     return Array.from(m.entries()).sort((a, b) => {
-      // Casas con eventos high primero
-      const sa = a[1].filter(e => e.severity === 'high').length;
-      const sb = b[1].filter(e => e.severity === 'high').length;
+      const sa = a[1].filter((e) => e.severity === 'high').length;
+      const sb = b[1].filter((e) => e.severity === 'high').length;
       if (sa !== sb) return sb - sa;
       return b[1].length - a[1].length;
     });
   }, [events]);
 
-  const totals = useMemo(() => {
-    const t = { high: 0, medium: 0, low: 0 };
-    for (const ev of events) t[ev.severity]++;
-    return t;
-  }, [events]);
+  if (loading) return <div className="glass-panel" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>Cargando…</div>;
+  if (byCasa.length === 0) {
+    return <div className={kind === 'alertas' ? 'alert-success' : 'glass-panel'} style={{ fontSize: '0.85rem', padding: kind === 'alertas' ? undefined : 20, textAlign: kind === 'notificaciones' ? 'center' : undefined, color: kind === 'notificaciones' ? 'var(--text-muted)' : undefined }}>{emptyText}</div>;
+  }
 
   return (
-    <>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        {(['high','medium','low'] as const).map((sev) => (
-          <div key={sev} className="glass-panel" style={{ flex: '1 1 180px', padding: '14px 18px' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{SEV_META[sev].label}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: SEV_META[sev].color }} />
-              <span style={{ fontSize: '1.6rem', fontWeight: 700 }}>{totals[sev]}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {byCasa.map(([casa, list]) => {
+        const high = list.filter((e) => e.severity === 'high').length;
+        const med = list.filter((e) => e.severity === 'medium').length;
+        const low = list.filter((e) => e.severity === 'low').length;
+        const topSev = high > 0 ? 'high' : med > 0 ? 'medium' : 'low';
+        return (
+          <div key={casa} className="glass-panel" style={{ padding: '14px 20px', borderLeft: `4px solid ${SEV_META[topSev].color}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+              <h3 style={{ margin: 0, fontSize: '1rem' }}>{casa}</h3>
+              <div style={{ display: 'flex', gap: 6, fontSize: '0.75rem' }}>
+                {high > 0 && <span style={{ padding: '2px 8px', borderRadius: 8, background: SEV_META.high.color + '20', color: SEV_META.high.color, fontWeight: 600 }}>{high} alto</span>}
+                {med > 0 && <span style={{ padding: '2px 8px', borderRadius: 8, background: SEV_META.medium.color + '20', color: SEV_META.medium.color, fontWeight: 600 }}>{med} medio</span>}
+                {low > 0 && <span style={{ padding: '2px 8px', borderRadius: 8, background: SEV_META.low.color + '20', color: SEV_META.low.color, fontWeight: 600 }}>{low} bajo</span>}
+              </div>
             </div>
-          </div>
-        ))}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-          <button className={`chip ${filterAck === 'pending' ? 'active' : ''}`} onClick={() => setFilterAck('pending')}>Pendientes</button>
-          <button className={`chip ${filterAck === 'all' ? 'active' : ''}`} onClick={() => setFilterAck('all')}>Todas</button>
-        </div>
-      </div>
-
-      {/* Tabla de alertas más frecuentes — agrupa por (regla, casa) y muestra conteo */}
-      <div className="glass-panel" style={{ padding: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-          <div>
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>Alertas más frecuentes</h3>
-            <p style={{ margin: '2px 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-              Conteo por regla y casa. Los primeros son los que más se están repitiendo — probablemente requieren ajuste de umbral o intervención en sitio.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className={`chip ${topDays === 1 ? 'active' : ''}`} onClick={() => setTopDays(1)}>24 h</button>
-            <button className={`chip ${topDays === 7 ? 'active' : ''}`} onClick={() => setTopDays(7)}>7 días</button>
-            <button className={`chip ${topDays === 30 ? 'active' : ''}`} onClick={() => setTopDays(30)}>30 días</button>
-          </div>
-        </div>
-        {topLoading ? (
-          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 16, fontSize: '0.85rem' }}>Cargando…</div>
-        ) : topAlerts.length === 0 ? (
-          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '8px 0' }}>
-            Ninguna alerta disparada en los últimos {topDays === 1 ? '24 h' : `${topDays} días`}.
-          </div>
-        ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', fontSize: '0.82rem' }}>
+            <table style={{ width: '100%', fontSize: '0.78rem' }}>
               <thead>
                 <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  <th style={{ padding: '6px 8px', width: 60 }}>Severidad</th>
-                  <th style={{ padding: '6px 8px' }}>Casa</th>
-                  <th style={{ padding: '6px 8px' }}>Regla</th>
-                  <th style={{ padding: '6px 8px', textAlign: 'right' }}>Eventos</th>
-                  <th style={{ padding: '6px 8px' }}>Primera</th>
-                  <th style={{ padding: '6px 8px' }}>Última</th>
+                  <th style={{ padding: '4px 8px' }}>Fecha</th>
+                  <th style={{ padding: '4px 8px' }}>Regla</th>
+                  <th style={{ padding: '4px 8px' }}>Variable</th>
+                  <th style={{ padding: '4px 8px' }}>Lectura</th>
+                  <th style={{ padding: '4px 8px' }}>Umbral</th>
+                  <th style={{ padding: '4px 8px' }}></th>
                 </tr>
               </thead>
               <tbody>
-                {topAlerts.map((row) => {
-                  const sev = SEV_META[row.severity];
-                  const isRepeating = row.count >= 3;
+                {list.map((ev) => {
+                  const meta = findVariableMeta(ev.variable);
+                  const catMeta = meta ? ALERT_CATEGORIES[meta.category] : null;
                   return (
-                    <tr key={`${row.rule_id}|${row.casa}`}
-                      style={{ borderTop: '1px solid var(--border)', background: isRepeating ? sev.color + '08' : undefined }}>
+                    <tr key={ev.id} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: '6px 8px', fontFamily: 'ui-monospace, monospace', fontSize: '0.74rem' }}>{ev.record_date}</td>
                       <td style={{ padding: '6px 8px' }}>
-                        <span style={{ padding: '2px 8px', borderRadius: 8, background: sev.color + '20', color: sev.color, fontSize: '0.7rem', fontWeight: 700 }}>{sev.label}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                            {catMeta && <span style={{ fontSize: '0.68rem', padding: '1px 6px', borderRadius: 8, background: catMeta.color + '20', color: catMeta.color, fontWeight: 600 }}>{catMeta.icon}</span>}
+                            <strong style={{ fontSize: '0.82rem' }}>{ev.alert_rules?.name ?? ev.variable}</strong>
+                          </span>
+                          {ev.alert_rules?.description && (
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{ev.alert_rules.description}</span>
+                          )}
+                        </div>
                       </td>
-                      <td style={{ padding: '6px 8px', fontWeight: 600 }}>{row.casa}</td>
+                      <td style={{ padding: '6px 8px', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{meta?.label ?? ev.variable}</td>
+                      <td style={{ padding: '6px 8px', fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem', fontWeight: 600 }}>{formatValue(Number(ev.value), ev.variable)}</td>
+                      <td style={{ padding: '6px 8px', fontFamily: 'ui-monospace, monospace', fontSize: '0.74rem', color: 'var(--text-muted)' }}>{opSymbolNar(ev.operator)} {formatValue(Number(ev.threshold), ev.variable)}</td>
                       <td style={{ padding: '6px 8px' }}>
-                        {row.rule_name}
-                        {row.variable && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace' }}>{row.variable}</span>}
-                      </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 700, color: isRepeating ? sev.color : 'var(--text-primary)' }}>
-                        {row.count}{isRepeating && '×'}
-                      </td>
-                      <td style={{ padding: '6px 8px', fontSize: '0.74rem', color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace' }}>
-                        {new Date(row.first_fired_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
-                      </td>
-                      <td style={{ padding: '6px 8px', fontSize: '0.74rem', color: 'var(--text-secondary)', fontFamily: 'ui-monospace, monospace' }}>
-                        {new Date(row.last_fired_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                        <button
+                          onClick={async () => { await fetch('/api/alerts/events', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ev.id, acknowledged: true }) }); onAck(); }}
+                          style={{ fontSize: '0.7rem', padding: '2px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-elevated)', cursor: 'pointer' }}
+                        >
+                          {kind === 'alertas' ? 'Resolver' : 'OK'}
+                        </button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            <p style={{ marginTop: 10, fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-              Filas con <strong>3 o más eventos</strong> aparecen resaltadas — son las que vale la pena revisar primero (probablemente requieren ajuste de umbral, calibración o visita técnica).
-            </p>
           </div>
-        )}
-      </div>
-
-      {loading ? (
-        <div className="glass-panel" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 24 }}>Cargando…</div>
-      ) : byCasa.length === 0 ? (
-        <div className="alert-success" style={{ fontSize: '0.85rem' }}>
-          ✓ Ninguna alerta activa. El sistema está operando dentro de los umbrales configurados.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {byCasa.map(([casa, list]) => {
-            const high = list.filter(e => e.severity === 'high').length;
-            const med = list.filter(e => e.severity === 'medium').length;
-            const low = list.filter(e => e.severity === 'low').length;
-            const topSev = high > 0 ? 'high' : med > 0 ? 'medium' : 'low';
-            return (
-              <div key={casa} className="glass-panel" style={{ padding: '14px 20px', borderLeft: `4px solid ${SEV_META[topSev].color}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-                  <h3 style={{ margin: 0, fontSize: '1rem' }}>{casa}</h3>
-                  <div style={{ display: 'flex', gap: 6, fontSize: '0.75rem' }}>
-                    {high > 0 && <span style={{ padding: '2px 8px', borderRadius: 8, background: SEV_META.high.color + '20', color: SEV_META.high.color, fontWeight: 600 }}>{high} alto</span>}
-                    {med > 0 && <span style={{ padding: '2px 8px', borderRadius: 8, background: SEV_META.medium.color + '20', color: SEV_META.medium.color, fontWeight: 600 }}>{med} medio</span>}
-                    {low > 0 && <span style={{ padding: '2px 8px', borderRadius: 8, background: SEV_META.low.color + '20', color: SEV_META.low.color, fontWeight: 600 }}>{low} bajo</span>}
-                  </div>
-                </div>
-                <table style={{ width: '100%', fontSize: '0.78rem' }}>
-                  <thead>
-                    <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      <th style={{ padding: '4px 8px' }}>Fecha</th>
-                      <th style={{ padding: '4px 8px' }}>Regla</th>
-                      <th style={{ padding: '4px 8px' }}>Detalle</th>
-                      <th style={{ padding: '4px 8px' }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {list.map((ev) => (
-                      <tr key={ev.id} style={{ opacity: ev.acknowledged ? 0.5 : 1, borderTop: '1px solid var(--border)' }}>
-                        <td style={{ padding: '6px 8px' }}>{ev.record_date}</td>
-                        <td style={{ padding: '6px 8px' }}>{ev.alert_rules?.name ?? ev.variable}</td>
-                        <td style={{ padding: '6px 8px', fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                          {ev.variable} = {Number(ev.value).toFixed(2)} {ev.operator} {ev.threshold}
-                        </td>
-                        <td style={{ padding: '6px 8px' }}>
-                          {ev.acknowledged ? (
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>✓</span>
-                          ) : (
-                            <button
-                              onClick={async () => { await fetch('/api/alerts/events', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ev.id, acknowledged: true }) }); load(); }}
-                              style={{ fontSize: '0.7rem', padding: '2px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg-elevated)', cursor: 'pointer' }}
-                            >
-                              Ack
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </>
+        );
+      })}
+    </div>
   );
 }
 

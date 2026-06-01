@@ -82,8 +82,33 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const body = await request.json() as RuleInput;
   if (!body.id) return NextResponse.json({ error: 'id requerido' }, { status: 400 });
-  const updates: Partial<RuleInput> = { ...body, updated_at: new Date().toISOString() } as Partial<RuleInput> & { updated_at: string };
-  delete updates.id;
+
+  // Construir updates sólo con campos conocidos + validar los que vienen
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (body.name !== undefined) {
+    if (!body.name) return NextResponse.json({ error: 'name no puede ser vacío' }, { status: 400 });
+    updates.name = body.name;
+  }
+  if (body.description !== undefined) updates.description = body.description;
+  if (body.variable !== undefined) {
+    if (!isAllowedVariable(body.variable)) return NextResponse.json({ error: 'variable inválida' }, { status: 400 });
+    updates.variable = body.variable;
+  }
+  if (body.operator !== undefined) {
+    if (!ALLOWED_OPERATORS.includes(body.operator)) return NextResponse.json({ error: `operator inválido (${ALLOWED_OPERATORS.join('|')})` }, { status: 400 });
+    updates.operator = body.operator;
+  }
+  if (body.threshold !== undefined) {
+    if (typeof body.threshold !== 'number' || !Number.isFinite(body.threshold)) return NextResponse.json({ error: 'threshold debe ser número' }, { status: 400 });
+    updates.threshold = body.threshold;
+  }
+  if (body.severity !== undefined) {
+    if (!ALLOWED_SEVERITIES.includes(body.severity)) return NextResponse.json({ error: `severity inválida (${ALLOWED_SEVERITIES.join('|')})` }, { status: 400 });
+    updates.severity = body.severity;
+  }
+  if (body.enabled !== undefined) updates.enabled = !!body.enabled;
+  if (body.scope !== undefined) updates.scope = body.scope ?? 'all';
+
   const { data, error } = await supabaseAdmin.from('alert_rules').update(updates).eq('id', body.id).select('*').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ rule: data });

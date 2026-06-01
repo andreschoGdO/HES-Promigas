@@ -110,25 +110,9 @@ function ApiDocsCard() {
       {expanded && (
         <>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '8px 0 16px' }}>
-            Referencia de integración para conectar otras herramientas con SUNNY APP. Si la otra app necesita crear proyectos en el CRM o leer datos, esta es la guía.
+            API externa para la integración con el módulo de <strong>Operaciones</strong>. Permite que otra app cree cards directo en Dimensionado y lea la cola de proyectos por etapa.
           </p>
-
-          {/* Sub-tabs */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-            <button className={`chip ${section === 'external' ? 'active' : ''}`} onClick={() => setSection('external')}>
-              <Plug size={12} /> API externa (entrada)
-            </button>
-            <button className={`chip ${section === 'internal' ? 'active' : ''}`} onClick={() => setSection('internal')}>
-              <Server size={12} /> Endpoints internos
-            </button>
-            <button className={`chip ${section === 'modules' ? 'active' : ''}`} onClick={() => setSection('modules')}>
-              <Code size={12} /> Módulos y arquitectura
-            </button>
-          </div>
-
-          {section === 'external' && <ExternalApiSection />}
-          {section === 'internal' && <InternalApiSection isModuleVisible={isModuleVisible} />}
-          {section === 'modules' && <ModulesSection isModuleVisible={isModuleVisible} />}
+          <ExternalApiSection />
         </>
       )}
     </div>

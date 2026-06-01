@@ -25,7 +25,7 @@ const MODULES: Module[] = [
       'Cierres y Vista Granular: lectura diaria por casa con métricas calculadas (yield, PR, fp)',
       'Consumo por Dispositivo: tabla completa según diccionario (37 cols) + sub-tab de gráficas',
       'Reactiva vs Activa (CREG 015-2018): análisis mensual de penalización + gráficas comparativas',
-      'Alertas por Casa con tabla "Alertas más frecuentes" para detectar repetidoras',
+      'NAR (Notificaciones, Alertas y Recomendaciones) — eventos por casa + recomendaciones automáticas (visita, ajuste umbral, control reactiva)',
       'Control Manual Inversor: envío de comandos cos φ, Q, P_max, modo (stub hasta tener credenciales OEM)',
     ],
   },
@@ -120,8 +120,8 @@ const MODULES: Module[] = [
   },
   {
     href: '/alertas',
-    title: 'Configuración Alertas',
-    description: 'Reglas evaluadas automáticamente sobre las variables del sistema.',
+    title: 'NAR — Notificaciones, Alertas y Recomendaciones',
+    description: 'Centro único: eventos informativos (notificaciones), accionables (alertas) y sugerencias derivadas del patrón (recomendaciones).',
     Icon: Bell,
     color: '#f59e0b',
     details: [

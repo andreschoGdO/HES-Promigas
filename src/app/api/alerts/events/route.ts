@@ -12,7 +12,7 @@ export async function GET(request: Request) {
 
   let q = supabaseAdmin
     .from('alert_events')
-    .select('id, rule_id, house_id, casa, record_date, variable, value, threshold, operator, severity, message, fired_at, acknowledged, alert_rules(name)')
+    .select('id, rule_id, house_id, casa, record_date, variable, value, threshold, operator, severity, message, fired_at, acknowledged, alert_rules(name, description)')
     .order('fired_at', { ascending: false })
     .limit(500);
   if (severity) q = q.eq('severity', severity);

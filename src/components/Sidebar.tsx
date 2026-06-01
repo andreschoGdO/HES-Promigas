@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat, TrendingUp, PanelLeftClose, PanelLeftOpen, FileBarChart } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat, TrendingUp, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { readVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
 
@@ -97,9 +97,10 @@ export function Sidebar() {
     { id: 'visitas',     label: 'Visitas en Campo', path: '/visitas', icon: ClipboardCheck },
     { id: 'inventario',  label: 'Inventario', path: '/inventario', icon: Package },
     { id: 'reportes',    label: 'Reportes', path: '/reportes', icon: FileBarChart },
+    { id: 'planner',     label: 'Planner', path: '/planner', icon: CalendarRange },
   ];
   const adminItemsAll = [
-    { id: 'alertas',       label: 'Configuración Alertas', path: '/alertas', icon: Bell },
+    { id: 'alertas',       label: 'NAR', path: '/alertas', icon: Bell },
     { id: 'configuracion', label: 'Configuración API', path: '/configuracion', icon: Settings },
   ];
   const navItems = navItemsAll.filter((i) => isItemVisible(i.id, visibility));

@@ -41,40 +41,111 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/crm/projects
- * Crea un proyecto nuevo en sales/prospecto.
- * Body: { title, created_by, ...campos opcionales }
+ * Crea un proyecto. Por defecto en sales/prospecto.
+ * Body soporta:
+ *   - title (requerido)
+ *   - module: sales | engineering | operations (default sales)
+ *   - stage: etapa específica del módulo destino (default según módulo)
+ *   - cualquier campo de crm_projects (cliente, dimensionamiento, contractor, etc.)
  */
+const num = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+const str = (v: unknown): string | null => {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return s === '' ? null : s;
+};
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     if (!body.title) return NextResponse.json({ error: 'title requerido' }, { status: 400 });
 
-    const payload = {
-      title: body.title,
-      client_name: body.client_name ?? null,
-      client_email: body.client_email ?? null,
-      client_phone: body.client_phone ?? null,
-      client_address: body.client_address ?? null,
-      client_city: body.client_city ?? null,
-      created_by: body.created_by ?? null,
-      assigned_to: body.assigned_to ?? body.created_by ?? null,
-      notes: body.notes ?? null,
+    const targetModule = (str(body.module) ?? 'sales') as 'sales' | 'engineering' | 'operations';
+    const targetStage = str(body.stage);
+    if (!['sales', 'engineering', 'operations'].includes(targetModule)) {
+      return NextResponse.json({ error: `module inválido: ${targetModule}` }, { status: 400 });
+    }
+
+    const initialSalesStage = targetModule === 'sales' ? (targetStage ?? 'prospecto') : 'completado';
+    const initialEngStage = targetModule === 'sales' ? 'pending'
+      : targetModule === 'engineering' ? (targetStage ?? 'pending') : 'completado';
+    const initialOpsStage = targetModule === 'operations' ? (targetStage ?? 'dimensionado') : 'pending';
+
+    const payload: Record<string, unknown> = {
+      title: String(body.title).trim(),
+      current_module: targetModule,
+      sales_stage: initialSalesStage,
+      engineering_stage: initialEngStage,
+      operations_stage: initialOpsStage,
+      // Cliente
+      client_name: str(body.client_name),
+      client_email: str(body.client_email),
+      client_phone: str(body.client_phone),
+      client_address: str(body.client_address),
+      client_city: str(body.client_city),
+      client_doc_type: str(body.client_doc_type),
+      client_doc_number: str(body.client_doc_number),
+      estrato: num(body.estrato),
+      tipo_vivienda: str(body.tipo_vivienda),
+      lat: num(body.lat),
+      lng: num(body.lng),
+      conjunto: str(body.conjunto),
+      casa_numero: str(body.casa_numero),
+      carga_carro_electrico: str(body.carga_carro_electrico),
+      autosuficiencia_objetivo_pct: num(body.autosuficiencia_objetivo_pct),
+      // Comercial
+      invoice_kwh_mensual: num(body.invoice_kwh_mensual),
+      invoice_valor_cop: num(body.invoice_valor_cop),
+      propuesta_kwp: num(body.propuesta_kwp),
+      propuesta_valor_cop: num(body.propuesta_valor_cop),
+      propuesta_url: str(body.propuesta_url),
+      contrato_url: str(body.contrato_url),
+      oferta_url: str(body.oferta_url),
+      // Dimensionamiento
+      diseno_kwp: num(body.diseno_kwp),
+      diseno_paneles: num(body.diseno_paneles),
+      diseno_baterias_cantidad: num(body.diseno_baterias_cantidad),
+      diseno_inversor_categoria_id: str(body.diseno_inversor_categoria_id),
+      diseno_panel_categoria_id: str(body.diseno_panel_categoria_id),
+      diseno_bateria_categoria_id: str(body.diseno_bateria_categoria_id),
+      diseno_yield_estimado_kwh_mes: num(body.diseno_yield_estimado_kwh_mes),
+      diseno_notes: str(body.diseno_notes),
+      diseno_aprobado_por: str(body.diseno_aprobado_por),
+      diseno_aprobado_at: (str(body.diseno_aprobado_por) && (targetModule === 'operations' || targetStage === 'aprobado')) ? new Date().toISOString() : null,
+      // Operación
+      contractor_name: str(body.contractor_name),
+      contractor_email: str(body.contractor_email),
+      installation_date: str(body.installation_date),
+      // Metadata
+      created_by: str(body.created_by),
+      assigned_to: str(body.assigned_to) ?? str(body.created_by),
+      notes: str(body.notes),
     };
+
+    // Limpiar nulls para que la BD aplique sus defaults
+    for (const k of Object.keys(payload)) if (payload[k] === null || payload[k] === undefined) delete payload[k];
 
     const { data, error } = await supabaseAdmin
       .from('crm_projects')
       .insert(payload)
       .select('*')
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error('crm_projects insert error', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     await supabaseAdmin.from('crm_project_events').insert({
       project_id: data.id,
       event_type: 'created',
-      to_module: 'sales',
-      to_stage: 'prospecto',
-      actor_email: body.created_by ?? null,
-      notes: 'Proyecto creado',
+      to_module: targetModule,
+      to_stage: targetModule === 'sales' ? initialSalesStage : targetModule === 'engineering' ? initialEngStage : initialOpsStage,
+      actor_email: str(body.created_by),
+      notes: targetModule === 'operations' ? 'Proyecto creado directo en Operaciones' : 'Proyecto creado',
     });
 
     return NextResponse.json({ project: data });
@@ -86,22 +157,55 @@ export async function POST(request: Request) {
 /**
  * PATCH /api/crm/projects
  * Body: { id, ...campos a actualizar (sin tocar stages/module) }
+ *   + opcionales meta-fields: actor_email, note (van al audit log, NO a la tabla)
  * Para cambio de etapa usar /api/crm/projects/[id]/transition
  */
+
+// Allow-list de columnas que PATCH puede tocar. Cualquier otro campo del body
+// se descarta para no romper si el cliente envía campos meta o derivados (ej.
+// actor_email, note, custom_data, current_module, *_stage, code, *_at).
+const PATCHABLE_COLUMNS = new Set<string>([
+  // Cliente
+  'client_name', 'client_email', 'client_phone', 'client_address', 'client_city',
+  'client_doc_type', 'client_doc_number', 'estrato', 'tipo_vivienda', 'lat', 'lng',
+  'conjunto', 'casa_numero', 'carga_carro_electrico', 'autosuficiencia_objetivo_pct',
+  // Comercial / Propuesta
+  'invoice_kwh_mensual', 'invoice_valor_cop',
+  'propuesta_kwp', 'propuesta_valor_cop', 'propuesta_url',
+  'contrato_url', 'oferta_url', 'contrato_sent_at', 'contrato_signed_at',
+  // Diseño / Ingeniería
+  'diseno_kwp', 'diseno_paneles', 'diseno_baterias_cantidad',
+  'diseno_inversor_categoria_id', 'diseno_panel_categoria_id', 'diseno_bateria_categoria_id',
+  'diseno_yield_estimado_kwh_mes', 'diseno_notes', 'diseno_aprobado_por', 'diseno_aprobado_at',
+  // Operación / Instalación
+  'visita_previa_id', 'visita_instalacion_id', 'reservation_id', 'house_id',
+  'contractor_name', 'contractor_email', 'installation_date', 'lectura_inicial_kwh',
+  'operativo_at', 'legalizado_at',
+  // Metadata editable
+  'title', 'assigned_to', 'notes',
+]);
+
 export async function PATCH(request: Request) {
   try {
     const body = await request.json();
     if (!body.id) return NextResponse.json({ error: 'id requerido' }, { status: 400 });
 
-    const updates = { ...body };
-    delete updates.id;
-    // Stages y current_module solo se cambian vía transition
-    delete updates.sales_stage;
-    delete updates.engineering_stage;
-    delete updates.operations_stage;
-    delete updates.current_module;
-    delete updates.code;
-    delete updates.created_at;
+    // Filtrar updates al allow-list de columnas. Stages, current_module, code,
+    // created_at, updated_at, *_at se mantienen fuera del set, igual que meta
+    // fields (actor_email, note).
+    const updates: Record<string, unknown> = {};
+    for (const k of Object.keys(body)) {
+      if (PATCHABLE_COLUMNS.has(k)) updates[k] = body[k];
+    }
+    // Coerción de strings vacíos a null para columnas numéricas / FK uuid.
+    // (Postgres rechaza '' donde espera numeric o uuid.)
+    for (const k of Object.keys(updates)) {
+      if (updates[k] === '') updates[k] = null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'sin campos válidos para actualizar' }, { status: 400 });
+    }
 
     const { data, error } = await supabaseAdmin
       .from('crm_projects')
@@ -109,7 +213,10 @@ export async function PATCH(request: Request) {
       .eq('id', body.id)
       .select('*')
       .single();
-    if (error) throw error;
+    if (error) {
+      console.error('crm_projects PATCH error', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 
     await supabaseAdmin.from('crm_project_events').insert({
       project_id: body.id,

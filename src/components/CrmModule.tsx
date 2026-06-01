@@ -801,90 +801,30 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
     if (isOps && !form.client_name?.trim()) { setErr('Nombre del cliente obligatorio para crear en Operaciones'); return; }
     setSaving(true);
     try {
-      // 1. Crear proyecto base (queda en sales/prospecto por defecto)
+      // Un solo POST con module=operations + stage=dimensionado + todos los campos.
+      // El endpoint inserta el proyecto directo en el estado deseado, sin chain de transiciones.
+      const body: Record<string, unknown> = {
+        title: form.title,
+        created_by: userEmail,
+      };
+      if (isOps) {
+        body.module = 'operations';
+        body.stage = 'dimensionado';
+      }
+      // Pasar todos los campos del form al payload (el endpoint los coerce y descarta vacíos)
+      for (const [k, v] of Object.entries(form)) {
+        if (k === 'title') continue;
+        if (v === '' || v === undefined || v === null) continue;
+        body[k] = v;
+      }
+
       const r = await fetch('/api/crm/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: form.title,
-          client_name: form.client_name || null,
-          client_city: form.client_city || null,
-          created_by: userEmail,
-        }),
+        body: JSON.stringify(body),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? 'Error');
-      const created = j.project as CrmProject;
-
-      // 2. Si la creación es para operations, hacer PATCH con TODOS los campos
-      // y mover stages a operations/dimensionado
-      if (isOps) {
-        const num = (k: string): number | null => {
-          const v = form[k];
-          if (!v) return null;
-          const n = Number(v);
-          return Number.isFinite(n) ? n : null;
-        };
-        const str = (k: string): string | null => form[k]?.trim() || null;
-        const patchBody = {
-          id: created.id,
-          // Cliente
-          client_name: str('client_name'),
-          client_email: str('client_email'),
-          client_phone: str('client_phone'),
-          client_address: str('client_address'),
-          client_city: str('client_city'),
-          estrato: num('estrato'),
-          conjunto: str('conjunto'),
-          casa_numero: str('casa_numero'),
-          carga_carro_electrico: str('carga_carro_electrico'),
-          tipo_vivienda: str('tipo_vivienda'),
-          // Dimensionamiento
-          invoice_kwh_mensual: num('invoice_kwh_mensual'),
-          autosuficiencia_objetivo_pct: num('autosuficiencia_objetivo_pct'),
-          diseno_kwp: num('diseno_kwp'),
-          diseno_paneles: num('diseno_paneles'),
-          diseno_baterias_cantidad: num('diseno_baterias_cantidad'),
-          diseno_notes: str('diseno_notes'),
-          diseno_aprobado_por: str('diseno_aprobado_por'),
-          notes: str('notes'),
-          actor_email: userEmail,
-          note: 'Creado directamente en Operaciones',
-        };
-        const r2 = await fetch('/api/crm/projects', {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(patchBody),
-        });
-        const j2 = await r2.json();
-        if (!r2.ok) throw new Error(j2.error ?? 'Error al guardar dimensionado');
-
-        // 3. Avanzar stages hasta operations/dimensionado vía una transición sintética
-        // Como la API de transición valida transiciones contiguas, mejor mover
-        // directo en la BD vía un PATCH a un endpoint custom. Para mantener simple,
-        // recorremos las transiciones encadenadas:
-        const chain: Array<{ action: string; data?: Record<string, unknown> }> = [
-          { action: 'sales_to_levantamiento', data: { client_phone: str('client_phone') ?? str('client_name') ?? 'pendiente' } },
-          { action: 'sales_to_propuesta', data: { invoice_kwh_mensual: num('invoice_kwh_mensual') ?? 0, invoice_valor_cop: 0, client_address: str('client_address') ?? 'pendiente', client_city: str('client_city') ?? 'pendiente' } },
-          { action: 'sales_to_contrato', data: { propuesta_kwp: num('diseno_kwp') ?? 0, propuesta_valor_cop: 0 } },
-          { action: 'sales_to_firmado', data: { contrato_signed_at: new Date().toISOString().slice(0, 10) } },
-          { action: 'sales_handoff_engineering' },
-          { action: 'engineering_pending_to_prefactibilidad_ok' },
-          { action: 'engineering_to_dimensionamiento' },
-          { action: 'engineering_to_aprobacion', data: { diseno_kwp: num('diseno_kwp') ?? 0, diseno_paneles: num('diseno_paneles') ?? 0 } },
-          { action: 'engineering_aprobar', data: { diseno_aprobado_por: str('diseno_aprobado_por') ?? userEmail } },
-        ];
-        for (const step of chain) {
-          const tr = await fetch(`/api/crm/projects/${created.id}/transition`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: step.action, actor_email: userEmail, ...(step.data ?? {}) }),
-          });
-          if (!tr.ok) {
-            const tj = await tr.json();
-            console.warn(`Transition ${step.action} falló:`, tj.error);
-            // No abortar — algunas pueden fallar si ya están en ese estado; mostrar resultado final
-          }
-        }
-      }
-      onCreated(created);
+      onCreated(j.project as CrmProject);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error');
     } finally {

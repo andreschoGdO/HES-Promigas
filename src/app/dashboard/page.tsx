@@ -890,16 +890,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '14px', alignItems: 'end' }}>
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label className="input-label">Dispositivo</label>
-            <select value={selectedDevice} onChange={(e) => setSelectedDevice(e.target.value)}>
-              <option value="">Todos ({filteredDevices.length})</option>
-              {filteredDevices.map((d) => (
-                <option key={d.id} value={d.id}>{deviceLabel(d)}</option>
-              ))}
-            </select>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', alignItems: 'end', marginBottom: 14 }}>
           <div className="input-group" style={{ marginBottom: 0 }}>
             <label className="input-label">Desde</label>
             <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -907,6 +898,42 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           <div className="input-group" style={{ marginBottom: 0 }}>
             <label className="input-label">Hasta</label>
             <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+        </div>
+
+        {/* Selector multi-device: click para añadir/quitar. Activos quedan resaltados. */}
+        <div className="input-group" style={{ marginBottom: 0 }}>
+          <label className="input-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <span>Dispositivos ({granularDeviceIds.size} seleccionados)</span>
+            {granularDeviceIds.size > 0 && (
+              <button onClick={() => { setGranularDeviceIds(new Set()); setSelectedDevice(''); }}
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}>
+                Limpiar selección
+              </button>
+            )}
+          </label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 120, overflowY: 'auto', padding: 6, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-surface)' }}>
+            {filteredDevices.length === 0 ? (
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: 4 }}>Ajusta los filtros de tipo o ubicación para ver dispositivos</span>
+            ) : filteredDevices.map((d) => {
+              const active = granularDeviceIds.has(d.id);
+              return (
+                <button
+                  key={d.id}
+                  onClick={() => {
+                    toggleGranularDevice(d.id);
+                    // Sincronizar el "selectedDevice" individual con el último click
+                    // (lo necesita el bloque de cierre diario aunque esté oculto, y carga keys de Metrum)
+                    setSelectedDevice(active ? '' : d.id);
+                  }}
+                  className={`chip ${active ? 'active' : ''}`}
+                  style={{ fontSize: '0.74rem' }}
+                  title={d.name}
+                >
+                  {deviceLabel(d)}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -1031,27 +1058,8 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           </button>
         </div>
 
-        {selectedMetrumId && (
+        {granularDeviceIds.size > 0 && (
           <>
-            {/* Multi-select de dispositivos para comparar varios en la misma gráfica */}
-            <div style={{ marginBottom: 16 }}>
-              <label className="input-label" style={{ display: 'block', marginBottom: 8 }}>
-                Dispositivos a graficar <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({granularDeviceIds.size} seleccionados — máx 8 recomendado)</span>
-              </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 96, overflowY: 'auto', padding: 4 }}>
-                {filteredDevices.map((d) => (
-                  <button key={d.id}
-                    onClick={() => toggleGranularDevice(d.id)}
-                    className={`chip ${granularDeviceIds.has(d.id) ? 'active' : ''}`}
-                    style={{ fontSize: '0.74rem' }}
-                    title={d.name}
-                  >
-                    {d.casa ?? d.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '16px' }}>
               <div>
                 <label className="input-label" style={{ display: 'block', marginBottom: '8px' }}>Intervalo</label>

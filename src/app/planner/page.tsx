@@ -225,35 +225,41 @@ export default function PlannerPage() {
 
       {/* FILTROS — una sola fila, todo inline */}
       <div className="glass-panel" style={{ marginTop: 10, padding: '8px 10px' }}>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 180 }}>
-            <Search size={12} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <Search size={12} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', zIndex: 1 }} />
             <input
               type="text"
               placeholder="Buscar…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ width: '100%', paddingLeft: 26, paddingTop: 4, paddingBottom: 4, fontSize: '0.8rem' }}
+              style={{ paddingLeft: 26, paddingTop: 5, paddingBottom: 5, fontSize: '0.8rem' }}
             />
           </div>
-          <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}
-            style={{ minWidth: 150, fontSize: '0.8rem', padding: '4px 6px' }}>
-            <option value="">Todos los responsables</option>
-            {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <select value={filterUrgency} onChange={(e) => setFilterUrgency(e.target.value as Urgency | 'all')}
-            style={{ minWidth: 120, fontSize: '0.8rem', padding: '4px 6px' }}>
-            <option value="all">Urgencia: todas</option>
-            {URGENCY_ORDER.map((u) => <option key={u} value={u}>{URGENCY_META[u].label}</option>)}
-          </select>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as Status | 'all')}
-            style={{ minWidth: 130, fontSize: '0.8rem', padding: '4px 6px' }}>
-            <option value="all">Estado: todos</option>
-            {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
-          </select>
+          <div style={{ width: 200, flexShrink: 0 }}>
+            <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}
+              style={{ fontSize: '0.8rem', paddingTop: 5, paddingBottom: 5 }}>
+              <option value="">Todos los responsables</option>
+              {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <div style={{ width: 170, flexShrink: 0 }}>
+            <select value={filterUrgency} onChange={(e) => setFilterUrgency(e.target.value as Urgency | 'all')}
+              style={{ fontSize: '0.8rem', paddingTop: 5, paddingBottom: 5 }}>
+              <option value="all">Urgencia: todas</option>
+              {URGENCY_ORDER.map((u) => <option key={u} value={u}>{URGENCY_META[u].label}</option>)}
+            </select>
+          </div>
+          <div style={{ width: 170, flexShrink: 0 }}>
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as Status | 'all')}
+              style={{ fontSize: '0.8rem', paddingTop: 5, paddingBottom: 5 }}>
+              <option value="all">Estado: todos</option>
+              {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
+            </select>
+          </div>
           {(filterUrgency !== 'all' || filterStatus !== 'all' || filterAssignee !== '' || search !== '') && (
             <button onClick={() => { setFilterUrgency('all'); setFilterStatus('all'); setFilterAssignee(''); setSearch(''); }}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.74rem', padding: '2px 6px' }}>
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.74rem', padding: '2px 6px', whiteSpace: 'nowrap' }}>
               Limpiar · {filtered.length}/{tasks.length}
             </button>
           )}
@@ -385,7 +391,8 @@ function KanbanView({ tasks, onEdit, onStatusChange }: {
   };
 
   return (
-    <div style={{ display: 'flex', gap: 12, overflowX: 'auto', overflowY: 'visible', paddingBottom: 8 }}>
+    <div style={{ width: '100%', maxWidth: '100%', overflowX: 'auto', overflowY: 'visible', paddingBottom: 8 }}>
+      <div style={{ display: 'flex', gap: 12, minWidth: 'min-content' }}>
       {STATUS_ORDER.map((s) => {
         const sm = STATUS_META[s];
         const SIcon = sm.icon;
@@ -401,8 +408,11 @@ function KanbanView({ tasks, onEdit, onStatusChange }: {
               padding: 12,
               borderTop: `4px solid ${sm.color}`,
               minHeight: 820,
-              width: 300,
+              width: 280,
+              minWidth: 280,
+              maxWidth: 280,
               flexShrink: 0,
+              flexGrow: 0,
               background: isDropping ? `${sm.color}10` : undefined,
               outline: isDropping ? `2px dashed ${sm.color}` : undefined,
               outlineOffset: -2,
@@ -494,6 +504,7 @@ function KanbanView({ tasks, onEdit, onStatusChange }: {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

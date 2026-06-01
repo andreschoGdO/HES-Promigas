@@ -12,11 +12,12 @@ interface ThingsBoardEntity {
 
 // Inversores Livoltek viejos reemplazados por DEYE + medidor solar duplicado.
 // Estas entidades siguen existiendo en Metrum pero no representan equipo activo.
+// NOTA: HP310K2HWC290023 fue movido a Casa 102p (originalmente Casa 76) y vuelve
+// a estar activo — removido de la lista negra → suma 1 inversor (29º total).
 const EXCLUDED_METRUM_IDS = new Set<string>([
   '97b87d30-bbf4-11f0-8b36-d3bdd5e2064a', // HP315K2HWC290041 — Casa 10 (Livoltek viejo)
   'fee67980-d83c-11f0-8b36-d3bdd5e2064a', // HP315K2HWC290038 — Casa 74 (Livoltek viejo)
   'bb97f160-e0cd-11f0-8b36-d3bdd5e2064a', // HP315K2HWC290042 — Casa 99 (Livoltek viejo)
-  'a593f520-c553-11f0-8b36-d3bdd5e2064a', // HP310K2HWC290023 — Casa 76 (Livoltek huérfano)
   'd48d9bf0-bbf4-11f0-8b36-d3bdd5e2064a', // 2223005638 — Casa 10 (medidor solar duplicado)
 ]);
 

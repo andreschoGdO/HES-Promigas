@@ -520,14 +520,27 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const [maxCurrents, setMaxCurrents] = useState<Record<string, number | null | 'loading'>>({});
 
   // --- Estado Granular ---
-  const [allKeys, setAllKeys] = useState<string[]>([]);
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  // Keys por device — cada equipo expone sus propias keys (un meter rojo tiene
+  // voltageA/currentA/powerAI; un inversor tiene CenergyAE/SOC/etc.)
+  const [keysByDevice, setKeysByDevice] = useState<Record<string, string[]>>({});
+  const [selectedKeysByDevice, setSelectedKeysByDevice] = useState<Record<string, Set<string>>>({});
   const [keysLoading, setKeysLoading] = useState(false);
   const [keysError, setKeysError] = useState<string | null>(null);
   const [intervalLabel, setIntervalLabel] = useState<string>('1 hora');
   const [agg, setAgg] = useState<Agg>('AVG');
   // Multi-device: el usuario puede graficar varios devices a la vez en la sección granular
   const [granularDeviceIds, setGranularDeviceIds] = useState<Set<string>>(new Set());
+  // Para diccionario y stats agregados de keys disponibles (union de todos los devices seleccionados)
+  const allKeys = useMemo<string[]>(() => {
+    const s = new Set<string>();
+    for (const ks of Object.values(keysByDevice)) for (const k of ks) s.add(k);
+    return Array.from(s).sort();
+  }, [keysByDevice]);
+  // Helper combinado: ¿hay alguna key seleccionada en cualquier device?
+  const totalSelectedKeysCount = useMemo(
+    () => Object.values(selectedKeysByDevice).reduce((sum, s) => sum + s.size, 0),
+    [selectedKeysByDevice],
+  );
   // granData ahora se indexa por deviceId → key → puntos
   const [granData, setGranData] = useState<Record<string, Record<string, { ts: number; value: string | number }[]>>>({});
   const [granLoading, setGranLoading] = useState(false);
@@ -704,7 +717,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   }, [selectedDevice]);
 
   const fetchGranular = async () => {
-    if (granularDeviceIds.size === 0 || selectedKeys.size === 0) return;
+    if (granularDeviceIds.size === 0 || totalSelectedKeysCount === 0) return;
     setGranLoading(true);
     setGranError(null);
     setGranData({});
@@ -716,13 +729,15 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       }
       const preset = PRESETS.find((p) => p.label === intervalLabel)!;
       const next: Record<string, Record<string, { ts: number; value: string | number }[]>> = {};
-      // Fetch en paralelo para todos los devices seleccionados
+      // Fetch en paralelo: cada device pide SU propia lista de keys (selectedKeysByDevice)
       await Promise.all(Array.from(granularDeviceIds).map(async (devId) => {
         const dev = devices.find((d) => d.id === devId);
         if (!dev) return;
+        const devKeys = selectedKeysByDevice[devId];
+        if (!devKeys || devKeys.size === 0) return; // este device no tiene keys seleccionadas, skip
         const params = new URLSearchParams({
           metrumId: dev.metrum_id,
-          keys: Array.from(selectedKeys).join(','),
+          keys: Array.from(devKeys).join(','),
           startTs: String(startTs),
           endTs: String(endTs),
           agg: preset.ms === null ? 'NONE' : agg,
@@ -758,34 +773,66 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDevice, typeFilter, selectedLocation, startDate, endDate]);
 
-  // Load granular keys when device changes
+  // Load granular keys cuando cambia la selección de devices.
+  // Trae las keys solo para los devices que aún no tenemos cacheados, y elimina
+  // del cache los que ya no están seleccionados. Cada device pide sus keys
+  // específicas (un meter rojo y un inversor exponen variables muy distintas).
   useEffect(() => {
-    if (!selectedMetrumId) {
-      setAllKeys([]);
-      setSelectedKeys(new Set());
-      return;
-    }
+    const currentIds = Array.from(granularDeviceIds);
+    // Limpiar cache de devices que ya no están seleccionados
+    setKeysByDevice((prev) => {
+      const next: Record<string, string[]> = {};
+      for (const id of currentIds) if (prev[id]) next[id] = prev[id];
+      return next;
+    });
+    setSelectedKeysByDevice((prev) => {
+      const next: Record<string, Set<string>> = {};
+      for (const id of currentIds) if (prev[id]) next[id] = prev[id];
+      return next;
+    });
+
+    // Cargar keys para devices nuevos en la selección
+    const missing = currentIds.filter((id) => !keysByDevice[id]);
+    if (missing.length === 0) return;
     setKeysLoading(true);
     setKeysError(null);
-    setAllKeys([]);
-    setSelectedKeys(new Set());
-    fetch(`/api/metrum/keys?metrumId=${encodeURIComponent(selectedMetrumId)}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (!json.ok) throw new Error(json.error ?? 'Error');
-        const keys: string[] = json.keys ?? [];
-        setAllKeys(keys);
-        setSelectedKeys(new Set(keys.slice(0, 2)));
-      })
-      .catch((e) => setKeysError(e.message))
-      .finally(() => setKeysLoading(false));
-  }, [selectedMetrumId]);
+    Promise.all(missing.map(async (devId) => {
+      const dev = devices.find((d) => d.id === devId);
+      if (!dev) return { devId, keys: [] as string[] };
+      try {
+        const r = await fetch(`/api/metrum/keys?metrumId=${encodeURIComponent(dev.metrum_id)}`);
+        const json = await r.json();
+        if (!json.ok) return { devId, keys: [] as string[], err: json.error };
+        return { devId, keys: (json.keys ?? []) as string[] };
+      } catch (e) {
+        return { devId, keys: [] as string[], err: e instanceof Error ? e.message : 'Error' };
+      }
+    })).then((results) => {
+      setKeysByDevice((prev) => {
+        const next = { ...prev };
+        for (const r of results) next[r.devId] = r.keys;
+        return next;
+      });
+      // Seed: para cada device nuevo, pre-seleccionar las 2 primeras keys
+      setSelectedKeysByDevice((prev) => {
+        const next = { ...prev };
+        for (const r of results) {
+          if (!next[r.devId]) next[r.devId] = new Set(r.keys.slice(0, 2));
+        }
+        return next;
+      });
+      const failed = results.filter((r) => 'err' in r);
+      if (failed.length > 0) setKeysError(`Algunas keys no cargaron: ${failed.map((f) => (f as { err: string }).err).join(', ')}`);
+    }).finally(() => setKeysLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [granularDeviceIds, devices]);
 
-  const toggleKey = (k: string) => {
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
+  const toggleDeviceKey = (devId: string, k: string) => {
+    setSelectedKeysByDevice((prev) => {
+      const cur = prev[devId] ?? new Set();
+      const next = new Set(cur);
       if (next.has(k)) next.delete(k); else next.add(k);
-      return next;
+      return { ...prev, [devId]: next };
     });
   };
 
@@ -801,12 +848,14 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     const out: Array<{ key: string; label: string; deviceId: string; baseKey: string }> = [];
     for (const dev of granularDevicesMeta) {
       const devLabel = dev.casa ?? dev.name;
-      for (const k of selectedKeys) {
+      const devKeys = selectedKeysByDevice[dev.id];
+      if (!devKeys) continue;
+      for (const k of devKeys) {
         out.push({ key: `${dev.id}__${k}`, label: `${devLabel} · ${k}`, deviceId: dev.id, baseKey: k });
       }
     }
     return out;
-  }, [granularDevicesMeta, selectedKeys]);
+  }, [granularDevicesMeta, selectedKeysByDevice]);
 
   const chartData = useMemo(() => {
     const byTs = new Map<number, Record<string, number | null>>();
@@ -823,7 +872,6 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     }
     return Array.from(byTs.entries()).map(([ts, vals]) => ({ ts, ...vals })).sort((a, b) => a.ts - b.ts);
   }, [granData]);
-  const selectedKeysList = Array.from(selectedKeys);
 
   // Agregación diaria (min/avg/max) por device+key
   const dailyData = useMemo(() => {
@@ -874,7 +922,6 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                 { id: 'meter' as const, label: `Medidores (${devices.filter((d) => classifyDevice(d) === 'meter').length})` },
                 { id: 'inverter' as const, label: `Inversores (${devices.filter((d) => classifyDevice(d) === 'inverter').length})` },
                 { id: 'gateway' as const, label: `Módems (${devices.filter((d) => classifyDevice(d) === 'gateway').length})` },
-                { id: 'other' as const, label: `Otros (${devices.filter((d) => classifyDevice(d) === 'other').length})` },
               ]).map((t) => (
                 <button key={t.id} className={`chip ${typeFilter === t.id ? 'active' : ''}`} onClick={() => setTypeFilter(t.id)}>
                   {t.label}
@@ -1083,7 +1130,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           <button
             className="primary-btn"
             onClick={fetchGranular}
-            disabled={granLoading || granularDeviceIds.size === 0 || selectedKeys.size === 0}
+            disabled={granLoading || granularDeviceIds.size === 0 || totalSelectedKeysCount === 0}
           >
             <Play size={14} /> {granLoading ? 'Cargando...' : 'Consultar'}
           </button>
@@ -1118,19 +1165,62 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
               )}
             </div>
 
+            {/* Keys disponibles AGRUPADAS POR DEVICE — cada equipo expone sus propias variables */}
             <div style={{ marginBottom: '16px' }}>
               <label className="input-label" style={{ display: 'block', marginBottom: '8px' }}>
-                Keys disponibles {allKeys.length > 0 && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({allKeys.length})</span>}
+                Keys disponibles por dispositivo {totalSelectedKeysCount > 0 && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({totalSelectedKeysCount} seleccionadas en total)</span>}
               </label>
-              {keysLoading && <p style={{ color: 'var(--text-muted)' }}>Cargando keys...</p>}
+              {keysLoading && <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Cargando keys...</p>}
               {keysError && <div className="alert-error">{keysError}</div>}
-              {allKeys.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {allKeys.map((k) => (
-                    <button key={k} onClick={() => toggleKey(k)} className={`chip ${selectedKeys.has(k) ? 'active' : ''}`}>{k}</button>
-                  ))}
-                </div>
+              {granularDevicesMeta.length === 0 && !keysLoading && (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Selecciona uno o más dispositivos arriba para ver sus keys.</p>
               )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {granularDevicesMeta.map((dev) => {
+                  const devKeys = keysByDevice[dev.id] ?? [];
+                  const devSelected = selectedKeysByDevice[dev.id] ?? new Set<string>();
+                  const devLabel = deviceLabel(dev);
+                  return (
+                    <div key={dev.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10, background: 'var(--bg-surface)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, gap: 8, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                          {devLabel}
+                          <span style={{ marginLeft: 6, color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.74rem' }}>
+                            ({devKeys.length} keys · {devSelected.size} seleccionadas)
+                          </span>
+                        </div>
+                        {devKeys.length > 0 && (
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => setSelectedKeysByDevice((p) => ({ ...p, [dev.id]: new Set(devKeys) }))}
+                              style={{ background: 'transparent', border: 'none', color: 'var(--accent)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}>
+                              Todas
+                            </button>
+                            <button onClick={() => setSelectedKeysByDevice((p) => ({ ...p, [dev.id]: new Set() }))}
+                              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}>
+                              Ninguna
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {devKeys.length === 0 ? (
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontStyle: 'italic', margin: 0 }}>
+                          {keysLoading ? 'Cargando…' : 'Este dispositivo no expone keys de timeseries.'}
+                        </p>
+                      ) : (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 140, overflowY: 'auto' }}>
+                          {devKeys.map((k) => (
+                            <button key={k} onClick={() => toggleDeviceKey(dev.id, k)}
+                              className={`chip ${devSelected.has(k) ? 'active' : ''}`}
+                              style={{ fontSize: '0.72rem' }}>
+                              {k}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {granError && <div className="alert-error">{granError}</div>}

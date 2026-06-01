@@ -91,12 +91,28 @@ export default function PlannerPage() {
 
   useEffect(() => { load(); loadUsers(); }, []);
 
-  // Lista de asignados únicos para el dropdown de filtro
+  // Mapa email→nombre para mostrar nombres en lugar de correos
+  const nameByEmail = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const u of users) {
+      if (u.email && u.name) m.set(u.email.toLowerCase(), u.name);
+    }
+    return m;
+  }, [users]);
+
+  const displayAssignee = (val: string | null | undefined): string => {
+    if (!val) return '';
+    const lower = val.toLowerCase();
+    return nameByEmail.get(lower) ?? val;
+  };
+
+  // Lista de asignados únicos para el dropdown de filtro (mostrando nombres)
   const assignees = useMemo(() => {
     const set = new Set<string>();
     for (const t of tasks) if (t.assigned_to) set.add(t.assigned_to);
-    return Array.from(set).sort();
-  }, [tasks]);
+    return Array.from(set).sort((a, b) => displayAssignee(a).localeCompare(displayAssignee(b)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks, nameByEmail]);
 
   // Aplicar filtros
   const filtered = useMemo(() => {
@@ -240,7 +256,7 @@ export default function PlannerPage() {
             <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}
               style={{ fontSize: '0.8rem', paddingTop: 5, paddingBottom: 5 }}>
               <option value="">Todos los responsables</option>
-              {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
+              {assignees.map((a) => <option key={a} value={a}>{displayAssignee(a)}</option>)}
             </select>
           </div>
           <div style={{ width: 170, flexShrink: 0 }}>
@@ -289,7 +305,7 @@ export default function PlannerPage() {
           {tasks.length === 0 ? 'No hay tareas. Crea la primera con "Nueva tarea" o importa un CSV.' : 'Ninguna tarea coincide con los filtros actuales.'}
         </div>
       ) : view === 'kanban' ? (
-        <KanbanView tasks={filtered} onEdit={setEditing} onStatusChange={async (task, next) => {
+        <KanbanView tasks={filtered} onEdit={setEditing} displayAssignee={displayAssignee} onStatusChange={async (task, next) => {
           const r = await fetch('/api/planner/tasks', {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: task.id, status: next }),
@@ -299,11 +315,11 @@ export default function PlannerPage() {
           setTasks((cur) => cur.map((t) => (t.id === task.id ? j.task : t)));
         }} />
       ) : view === 'lista' ? (
-        <TaskListView tasks={filtered} onEdit={setEditing} onDelete={onDelete} onCycleStatus={onCycleStatus} />
+        <TaskListView tasks={filtered} onEdit={setEditing} onDelete={onDelete} onCycleStatus={onCycleStatus} displayAssignee={displayAssignee} />
       ) : view === 'gantt' ? (
-        <GanttView tasks={filtered} onEdit={setEditing} />
+        <GanttView tasks={filtered} onEdit={setEditing} displayAssignee={displayAssignee} />
       ) : (
-        <CalendarView tasks={filtered} onEdit={setEditing} />
+        <CalendarView tasks={filtered} onEdit={setEditing} displayAssignee={displayAssignee} />
       )}
 
       {/* MODALS */}
@@ -353,10 +369,11 @@ function StatCard({ color, label, value, highlight }: { color: string; label: st
 }
 
 /* ─────────────── Vista Kanban ─────────────── */
-function KanbanView({ tasks, onEdit, onStatusChange }: {
+function KanbanView({ tasks, onEdit, onStatusChange, displayAssignee }: {
   tasks: PlannerTask[];
   onEdit: (t: PlannerTask) => void;
   onStatusChange: (t: PlannerTask, next: Status) => void;
+  displayAssignee: (val: string | null | undefined) => string;
 }) {
   // Agrupar tareas por status; dentro de cada columna ordenar por urgencia y luego due_date
   const urgencyRank: Record<Urgency, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -407,7 +424,6 @@ function KanbanView({ tasks, onEdit, onStatusChange }: {
             style={{
               padding: 12,
               borderTop: `4px solid ${sm.color}`,
-              minHeight: 820,
               width: 280,
               minWidth: 280,
               maxWidth: 280,
@@ -489,7 +505,7 @@ function KanbanView({ tasks, onEdit, onStatusChange }: {
                     {/* Footer: responsable + fecha */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, fontSize: '0.72rem', marginTop: 2 }}>
                       <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                        {t.assigned_to ?? <em style={{ opacity: 0.6 }}>sin asignar</em>}
+                        {t.assigned_to ? displayAssignee(t.assigned_to) : <em style={{ opacity: 0.6 }}>sin asignar</em>}
                       </span>
                       {t.due_date && (
                         <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem', color: overdue ? '#ef4444' : 'var(--text-secondary)', fontWeight: overdue ? 700 : 400 }}>
@@ -510,11 +526,12 @@ function KanbanView({ tasks, onEdit, onStatusChange }: {
 }
 
 /* ─────────────── Vista Lista ─────────────── */
-function TaskListView({ tasks, onEdit, onDelete, onCycleStatus }: {
+function TaskListView({ tasks, onEdit, onDelete, onCycleStatus, displayAssignee }: {
   tasks: PlannerTask[];
   onEdit: (t: PlannerTask) => void;
   onDelete: (id: string) => void;
   onCycleStatus: (t: PlannerTask) => void;
+  displayAssignee: (val: string | null | undefined) => string;
 }) {
   type SortKey = 'due_date' | 'urgency' | 'title' | 'assignee' | 'status';
   const [sortKey, setSortKey] = useState<SortKey>('due_date');
@@ -613,7 +630,7 @@ function TaskListView({ tasks, onEdit, onDelete, onCycleStatus }: {
                       )}
                     </div>
                   </td>
-                  <td style={{ fontSize: '0.82rem' }}>{t.assigned_to ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                  <td style={{ fontSize: '0.82rem' }}>{t.assigned_to ? displayAssignee(t.assigned_to) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                   <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem', color: overdue ? '#ef4444' : undefined, fontWeight: overdue ? 700 : 400 }}>
                     {t.due_date ?? <span style={{ color: 'var(--text-muted)' }}>—</span>}
                     {overdue && <div style={{ fontSize: '0.66rem', color: '#ef4444' }}>vencida</div>}
@@ -644,7 +661,11 @@ function TaskListView({ tasks, onEdit, onDelete, onCycleStatus }: {
 }
 
 /* ─────────────── Vista Gantt ─────────────── */
-function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: PlannerTask) => void }) {
+function GanttView({ tasks, onEdit, displayAssignee }: {
+  tasks: PlannerTask[];
+  onEdit: (t: PlannerTask) => void;
+  displayAssignee: (val: string | null | undefined) => string;
+}) {
   const dayWidth = 56; // px por día
   const rowHeight = 48;
   const labelWidth = 280;
@@ -725,13 +746,11 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
   }
 
   const totalWidth = totalDays * dayWidth;
-  const PANEL_MIN_HEIGHT = 820; // mismo alto que la vista Calendario
-  const innerHeight = Math.max(PANEL_MIN_HEIGHT - 60 /* legend bottom */, headerHeight + sorted.length * rowHeight);
 
   return (
-    <div className="glass-panel" style={{ padding: 0, overflow: 'hidden', minHeight: PANEL_MIN_HEIGHT, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: innerHeight }}>
-        <div style={{ display: 'flex', minWidth: labelWidth + totalWidth, minHeight: innerHeight }}>
+    <div className="glass-panel" style={{ padding: 0 }}>
+      <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+        <div style={{ display: 'flex', minWidth: labelWidth + totalWidth }}>
           {/* Columna de etiquetas */}
           <div style={{ width: labelWidth, flexShrink: 0, borderRight: '1px solid var(--border)' }}>
             <div style={{ height: headerHeight, padding: '0 14px', display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -747,7 +766,7 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
                   </span>
                   {t.assigned_to && (
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {t.assigned_to}
+                      {displayAssignee(t.assigned_to)}
                     </span>
                   )}
                 </div>
@@ -798,7 +817,7 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
               return (
                 <div key={t.id}
                   onClick={() => onEdit(t)}
-                  title={`${t.title}\n${start} → ${end}\n${t.assigned_to ?? 'sin asignar'} · ${URGENCY_META[t.urgency].label} · ${STATUS_META[t.status].label}`}
+                  title={`${t.title}\n${start} → ${end}\n${t.assigned_to ? displayAssignee(t.assigned_to) : 'sin asignar'} · ${URGENCY_META[t.urgency].label} · ${STATUS_META[t.status].label}`}
                   style={{
                     position: 'absolute', left, top: y, width, height: barHeight,
                     background: isDone ? `${um.color}40` : um.color,
@@ -842,7 +861,11 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
 }
 
 /* ─────────────── Vista Calendario ─────────────── */
-function CalendarView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: PlannerTask) => void }) {
+function CalendarView({ tasks, onEdit, displayAssignee }: {
+  tasks: PlannerTask[];
+  onEdit: (t: PlannerTask) => void;
+  displayAssignee: (val: string | null | undefined) => string;
+}) {
   const [cursor, setCursor] = useState<Date>(() => {
     const d = new Date();
     return new Date(Date.UTC(d.getFullYear(), d.getMonth(), 1));
@@ -937,7 +960,7 @@ function CalendarView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Pla
                 const um = URGENCY_META[t.urgency];
                 const isOverdue = isPast && t.status !== 'done' && t.due_date === key;
                 return (
-                  <button key={t.id} onClick={() => onEdit(t)} title={`${t.title}${t.assigned_to ? ' · ' + t.assigned_to : ''}`}
+                  <button key={t.id} onClick={() => onEdit(t)} title={`${t.title}${t.assigned_to ? ' · ' + displayAssignee(t.assigned_to) : ''}`}
                     style={{
                       textAlign: 'left',
                       padding: '3px 6px',
@@ -965,7 +988,7 @@ function CalendarView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Pla
                         color: 'var(--text-muted)',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
-                        {t.assigned_to}
+                        {displayAssignee(t.assigned_to)}
                       </span>
                     )}
                   </button>

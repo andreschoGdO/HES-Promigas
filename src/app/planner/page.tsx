@@ -963,7 +963,8 @@ function CalendarView({ tasks, onEdit, displayAssignee }: {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 0, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(110px, 1fr))', gap: 0, minWidth: 770 }}>
         {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d) => (
           <div key={d} style={{ padding: '8px 10px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)', textAlign: 'center' }}>
             {d}
@@ -1043,6 +1044,7 @@ function CalendarView({ tasks, onEdit, displayAssignee }: {
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

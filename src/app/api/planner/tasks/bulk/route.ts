@@ -1,5 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sendTaskAssignedEmail } from '@/lib/planner-emails';
+
+const appUrl = (req: Request): string => {
+  const v = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  if (v) return v.startsWith('http') ? v : `https://${v}`;
+  return new URL(req.url).origin;
+};
 
 const ALLOWED_URGENCIES = new Set(['low', 'medium', 'high', 'critical']);
 const ALLOWED_STATUSES = new Set(['todo', 'in_progress', 'done', 'blocked']);
@@ -162,8 +169,26 @@ export async function POST(request: Request) {
     const { data, error } = await supabaseAdmin
       .from('planner_tasks')
       .insert(payload)
-      .select('id');
+      .select('*');
     if (error) return NextResponse.json({ error: error.message, errors }, { status: 500 });
+
+    // Notificar a cada responsable con email válido. Fire-and-forget.
+    const base = appUrl(request);
+    for (const t of data ?? []) {
+      if (!t.assigned_to) continue;
+      void sendTaskAssignedEmail({
+        title: t.title,
+        description: t.description,
+        assignedTo: t.assigned_to,
+        urgency: t.urgency,
+        dueDate: t.due_date,
+        startDate: t.start_date,
+        createdBy: t.created_by,
+        taskId: t.id,
+      }, base).then((r) => {
+        if (!r.ok) console.warn('Bulk task email skipped/failed:', r.reason);
+      });
+    }
 
     return NextResponse.json({ inserted: data?.length ?? 0, errors });
   } catch (err) {

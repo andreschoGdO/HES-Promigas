@@ -1,5 +1,13 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sendTaskAssignedEmail } from '@/lib/planner-emails';
+
+const appUrl = (req: Request): string => {
+  // Vercel deployment URL prevalece; en local cae al origin del request.
+  const v = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  if (v) return v.startsWith('http') ? v : `https://${v}`;
+  return new URL(req.url).origin;
+};
 
 const ALLOWED_URGENCIES = ['low', 'medium', 'high', 'critical'];
 const ALLOWED_STATUSES = ['todo', 'in_progress', 'done', 'blocked'];
@@ -105,6 +113,24 @@ export async function POST(request: Request) {
       console.error('planner_tasks insert error', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Notificar al responsable si tiene email. Fire-and-forget — el response
+    // al cliente no espera al envío SMTP.
+    if (data.assigned_to) {
+      void sendTaskAssignedEmail({
+        title: data.title,
+        description: data.description,
+        assignedTo: data.assigned_to,
+        urgency: data.urgency,
+        dueDate: data.due_date,
+        startDate: data.start_date,
+        createdBy: data.created_by,
+        taskId: data.id,
+      }, appUrl(request)).then((r) => {
+        if (!r.ok) console.warn('Task email skipped/failed:', r.reason);
+      });
+    }
+
     return NextResponse.json({ task: data });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
@@ -157,6 +183,13 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'sin campos válidos para actualizar' }, { status: 400 });
     }
 
+    // Capturar assigned_to anterior para detectar si cambió (notificar solo cuando es nuevo responsable)
+    const { data: prev } = await supabaseAdmin
+      .from('planner_tasks')
+      .select('assigned_to')
+      .eq('id', body.id)
+      .maybeSingle();
+
     const { data, error } = await supabaseAdmin
       .from('planner_tasks')
       .update(updates)
@@ -164,6 +197,25 @@ export async function PATCH(request: Request) {
       .select('*')
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Notificar al nuevo responsable si cambió
+    const oldAssignee = (prev?.assigned_to ?? '').toLowerCase();
+    const newAssignee = (data.assigned_to ?? '').toLowerCase();
+    if (newAssignee && newAssignee !== oldAssignee) {
+      void sendTaskAssignedEmail({
+        title: data.title,
+        description: data.description,
+        assignedTo: data.assigned_to,
+        urgency: data.urgency,
+        dueDate: data.due_date,
+        startDate: data.start_date,
+        createdBy: data.created_by,
+        taskId: data.id,
+      }, appUrl(request)).then((r) => {
+        if (!r.ok) console.warn('Task reassign email skipped/failed:', r.reason);
+      });
+    }
+
     return NextResponse.json({ task: data });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });

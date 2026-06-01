@@ -400,7 +400,7 @@ function KanbanView({ tasks, onEdit, onStatusChange }: {
             style={{
               padding: 12,
               borderTop: `4px solid ${sm.color}`,
-              minHeight: 420,
+              minHeight: 820,
               width: 300,
               flexShrink: 0,
               background: isDropping ? `${sm.color}10` : undefined,
@@ -714,11 +714,13 @@ function GanttView({ tasks, onEdit }: { tasks: PlannerTask[]; onEdit: (t: Planne
   }
 
   const totalWidth = totalDays * dayWidth;
+  const PANEL_MIN_HEIGHT = 820; // mismo alto que la vista Calendario
+  const innerHeight = Math.max(PANEL_MIN_HEIGHT - 60 /* legend bottom */, headerHeight + sorted.length * rowHeight);
 
   return (
-    <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
-        <div style={{ display: 'flex', minWidth: labelWidth + totalWidth }}>
+    <div className="glass-panel" style={{ padding: 0, overflow: 'hidden', minHeight: PANEL_MIN_HEIGHT, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ overflowX: 'auto', overflowY: 'auto', flex: 1, minHeight: innerHeight }}>
+        <div style={{ display: 'flex', minWidth: labelWidth + totalWidth, minHeight: innerHeight }}>
           {/* Columna de etiquetas */}
           <div style={{ width: labelWidth, flexShrink: 0, borderRight: '1px solid var(--border)' }}>
             <div style={{ height: headerHeight, padding: '0 14px', display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>

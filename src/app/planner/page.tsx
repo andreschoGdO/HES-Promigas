@@ -408,8 +408,7 @@ function KanbanView({ tasks, onEdit, onStatusChange, displayAssignee }: {
   };
 
   return (
-    <div style={{ width: '100%', maxWidth: '100%', overflowX: 'auto', overflowY: 'visible', paddingBottom: 8 }}>
-      <div style={{ display: 'flex', gap: 12, minWidth: 'min-content' }}>
+    <div style={{ display: 'flex', gap: 12, paddingBottom: 8, flexWrap: 'nowrap' }}>
       {STATUS_ORDER.map((s) => {
         const sm = STATUS_META[s];
         const SIcon = sm.icon;
@@ -520,7 +519,6 @@ function KanbanView({ tasks, onEdit, onStatusChange, displayAssignee }: {
           </div>
         );
       })}
-      </div>
     </div>
   );
 }

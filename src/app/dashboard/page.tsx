@@ -428,7 +428,7 @@ export default function DashboardPage() {
   }, []);
 
   const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof BarChart3; description: string }> = {
-    cierres:  { label: 'Cierres y Granular',     color: '#07c5a8', Icon: Activity,       description: 'Lectura diaria por casa con energía, yield, performance ratio y vista granular por device.' },
+    cierres:  { label: 'Vista Granular',         color: '#07c5a8', Icon: Activity,       description: 'Series de tiempo de Metrum por dispositivo. Multi-select de casas, zoom interactivo y tabla diaria/puntos.' },
     reactiva: { label: 'Reactiva vs Activa (CREG)', color: '#f59e0b', Icon: AlertTriangle, description: 'Ratio mensual de reactiva sobre activa para detectar penalización CREG 015-2018.' },
     alertas:  { label: 'Alertas por Casa',       color: '#ef4444', Icon: Bell,            description: 'Eventos agrupados por casa con severidad, generados por las reglas configuradas.' },
     control:  { label: 'Control Manual Inversor', color: '#8b5cf6', Icon: Play,           description: 'Envío de comandos al inversor (cos φ, Q, P_max, modo) — stub hasta credenciales OEM.' },
@@ -525,7 +525,10 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const [keysError, setKeysError] = useState<string | null>(null);
   const [intervalLabel, setIntervalLabel] = useState<string>('1 hora');
   const [agg, setAgg] = useState<Agg>('AVG');
-  const [granData, setGranData] = useState<Record<string, { ts: number; value: string | number }[]>>({});
+  // Multi-device: el usuario puede graficar varios devices a la vez en la sección granular
+  const [granularDeviceIds, setGranularDeviceIds] = useState<Set<string>>(new Set());
+  // granData ahora se indexa por deviceId → key → puntos
+  const [granData, setGranData] = useState<Record<string, Record<string, { ts: number; value: string | number }[]>>>({});
   const [granLoading, setGranLoading] = useState(false);
   const [granError, setGranError] = useState<string | null>(null);
   const [showDataTable, setShowDataTable] = useState(false);
@@ -689,9 +692,18 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     }
   };
 
-  // --- Fetch Granular ---
+  // --- Fetch Granular (multi-device) ---
+  // Cuando el usuario cambia selectedDevice (en el dropdown), lo agregamos automáticamente
+  // a granularDeviceIds para que la primera selección no requiera doble click.
+  useEffect(() => {
+    if (selectedDevice && !granularDeviceIds.has(selectedDevice)) {
+      setGranularDeviceIds((prev) => new Set(prev).add(selectedDevice));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDevice]);
+
   const fetchGranular = async () => {
-    if (!selectedMetrumId || selectedKeys.size === 0) return;
+    if (granularDeviceIds.size === 0 || selectedKeys.size === 0) return;
     setGranLoading(true);
     setGranError(null);
     setGranData({});
@@ -702,23 +714,41 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         throw new Error('Rango inválido');
       }
       const preset = PRESETS.find((p) => p.label === intervalLabel)!;
-      const params = new URLSearchParams({
-        metrumId: selectedMetrumId,
-        keys: Array.from(selectedKeys).join(','),
-        startTs: String(startTs),
-        endTs: String(endTs),
-        agg: preset.ms === null ? 'NONE' : agg,
-      });
-      if (preset.ms !== null) params.set('interval', String(preset.ms));
-      const res = await fetch(`/api/metrum/timeseries?${params.toString()}`);
-      const json = await res.json();
-      if (!res.ok || !json.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      setGranData(json.raw ?? {});
+      const next: Record<string, Record<string, { ts: number; value: string | number }[]>> = {};
+      // Fetch en paralelo para todos los devices seleccionados
+      await Promise.all(Array.from(granularDeviceIds).map(async (devId) => {
+        const dev = devices.find((d) => d.id === devId);
+        if (!dev) return;
+        const params = new URLSearchParams({
+          metrumId: dev.metrum_id,
+          keys: Array.from(selectedKeys).join(','),
+          startTs: String(startTs),
+          endTs: String(endTs),
+          agg: preset.ms === null ? 'NONE' : agg,
+        });
+        if (preset.ms !== null) params.set('interval', String(preset.ms));
+        const res = await fetch(`/api/metrum/timeseries?${params.toString()}`);
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          console.error('granular fetch fail for', dev.name, json.error);
+          return;
+        }
+        next[devId] = json.raw ?? {};
+      }));
+      setGranData(next);
     } catch (e) {
       setGranError(e instanceof Error ? e.message : 'Error');
     } finally {
       setGranLoading(false);
     }
+  };
+
+  const toggleGranularDevice = (devId: string) => {
+    setGranularDeviceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(devId)) next.delete(devId); else next.add(devId);
+      return next;
+    });
   };
 
   // Auto-fetch closures on shared filter change
@@ -758,40 +788,64 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     });
   };
 
-  // Granular chart data (puntos crudos como vienen del fetch)
+  // Granular chart data (puntos crudos como vienen del fetch, ahora multi-device)
+  // Series compuesta = `${deviceShortName} · ${key}` para distinguir varias casas en una sola gráfica
+  const granularDevicesMeta = useMemo(() => {
+    return Array.from(granularDeviceIds)
+      .map((id) => devices.find((d) => d.id === id))
+      .filter((d): d is NonNullable<typeof d> => Boolean(d));
+  }, [granularDeviceIds, devices]);
+
+  const seriesKeys = useMemo(() => {
+    const out: Array<{ key: string; label: string; deviceId: string; baseKey: string }> = [];
+    for (const dev of granularDevicesMeta) {
+      const devLabel = dev.casa ?? dev.name;
+      for (const k of selectedKeys) {
+        out.push({ key: `${dev.id}__${k}`, label: `${devLabel} · ${k}`, deviceId: dev.id, baseKey: k });
+      }
+    }
+    return out;
+  }, [granularDevicesMeta, selectedKeys]);
+
   const chartData = useMemo(() => {
     const byTs = new Map<number, Record<string, number | null>>();
-    for (const [key, points] of Object.entries(granData)) {
-      for (const p of points) {
-        const num = Number(p.value);
-        const row = byTs.get(p.ts) ?? {};
-        row[key] = Number.isFinite(num) ? num : null;
-        byTs.set(p.ts, row);
+    for (const [devId, byKey] of Object.entries(granData)) {
+      for (const [key, points] of Object.entries(byKey)) {
+        const seriesKey = `${devId}__${key}`;
+        for (const p of points) {
+          const num = Number(p.value);
+          const row = byTs.get(p.ts) ?? {};
+          row[seriesKey] = Number.isFinite(num) ? num : null;
+          byTs.set(p.ts, row);
+        }
       }
     }
     return Array.from(byTs.entries()).map(([ts, vals]) => ({ ts, ...vals })).sort((a, b) => a.ts - b.ts);
   }, [granData]);
   const selectedKeysList = Array.from(selectedKeys);
 
-  // Agregación diaria — promedio por clave para cada día (zona Colombia approx UTC-5)
+  // Agregación diaria (min/avg/max) por device+key
   const dailyData = useMemo(() => {
     const dayKey = (ts: number): string => {
-      const d = new Date(ts - 5 * 3600 * 1000); // shift a UTC-5
+      const d = new Date(ts - 5 * 3600 * 1000);
       return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
     };
     interface Agg { count: Record<string, number>; sum: Record<string, number>; min: Record<string, number>; max: Record<string, number>; }
     const byDay = new Map<string, Agg>();
-    for (const [key, points] of Object.entries(granData)) {
-      for (const p of points) {
-        const num = Number(p.value);
-        if (!Number.isFinite(num)) continue;
-        const d = dayKey(p.ts);
-        let g = byDay.get(d);
-        if (!g) { g = { count: {}, sum: {}, min: {}, max: {} }; byDay.set(d, g); }
-        g.count[key] = (g.count[key] ?? 0) + 1;
-        g.sum[key] = (g.sum[key] ?? 0) + num;
-        g.min[key] = g.min[key] === undefined ? num : Math.min(g.min[key], num);
-        g.max[key] = g.max[key] === undefined ? num : Math.max(g.max[key], num);
+    for (const [devId, byKey] of Object.entries(granData)) {
+      for (const [key, points] of Object.entries(byKey)) {
+        const seriesKey = `${devId}__${key}`;
+        for (const p of points) {
+          const num = Number(p.value);
+          if (!Number.isFinite(num)) continue;
+          const d = dayKey(p.ts);
+          let g = byDay.get(d);
+          if (!g) { g = { count: {}, sum: {}, min: {}, max: {} }; byDay.set(d, g); }
+          g.count[seriesKey] = (g.count[seriesKey] ?? 0) + 1;
+          g.sum[seriesKey] = (g.sum[seriesKey] ?? 0) + num;
+          g.min[seriesKey] = g.min[seriesKey] === undefined ? num : Math.min(g.min[seriesKey], num);
+          g.max[seriesKey] = g.max[seriesKey] === undefined ? num : Math.max(g.max[seriesKey], num);
+        }
       }
     }
     return Array.from(byDay.entries())
@@ -857,20 +911,10 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         </div>
       </div>
 
-      {/* Sub-tabs */}
-      <div className="tabs">
-        {([
-          { id: 'cierre' as const, label: 'Cierre Diario' },
-          { id: 'granular' as const, label: 'Vista Granular' },
-        ]).map((t) => (
-          <button key={t.id} onClick={() => setSubTab(t.id)} className={`tab ${subTab === t.id ? 'active' : ''}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* === CIERRE DIARIO (vista por CASA por DÍA) === */}
-      {subTab === 'cierre' && (
+      {/* Cierre Diario eliminado por petición del usuario — se conserva la lógica
+          pero no se renderiza (el bloque queda gated en `false`). Se puede
+          rehabilitar cambiando false → true si se necesita volver a verla. */}
+      {false && (
       <>
       <VariablesDictionary
         title="Diccionario — columnas del Cierre Diario"
@@ -968,8 +1012,8 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       </>
       )}
 
-      {/* ===== SECCIÓN: GRANULAR ===== */}
-      {subTab === 'granular' && (
+      {/* ===== SECCIÓN: GRANULAR (única vista ahora) ===== */}
+      {true && (
       <>
       {allKeys.length > 0 && <VariablesDictionary title="Diccionario — keys de Metrum disponibles" keys={allKeys} />}
       <div className="glass-panel">
@@ -981,7 +1025,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           <button
             className="primary-btn"
             onClick={fetchGranular}
-            disabled={granLoading || !selectedMetrumId || selectedKeys.size === 0}
+            disabled={granLoading || granularDeviceIds.size === 0 || selectedKeys.size === 0}
           >
             <Play size={14} /> {granLoading ? 'Cargando...' : 'Consultar'}
           </button>
@@ -989,6 +1033,25 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
 
         {selectedMetrumId && (
           <>
+            {/* Multi-select de dispositivos para comparar varios en la misma gráfica */}
+            <div style={{ marginBottom: 16 }}>
+              <label className="input-label" style={{ display: 'block', marginBottom: 8 }}>
+                Dispositivos a graficar <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({granularDeviceIds.size} seleccionados — máx 8 recomendado)</span>
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 96, overflowY: 'auto', padding: 4 }}>
+                {filteredDevices.map((d) => (
+                  <button key={d.id}
+                    onClick={() => toggleGranularDevice(d.id)}
+                    className={`chip ${granularDeviceIds.has(d.id) ? 'active' : ''}`}
+                    style={{ fontSize: '0.74rem' }}
+                    title={d.name}
+                  >
+                    {d.casa ?? d.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '16px' }}>
               <div>
                 <label className="input-label" style={{ display: 'block', marginBottom: '8px' }}>Intervalo</label>
@@ -1053,8 +1116,8 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                         contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.78rem' }}
                       />
                       <Legend wrapperStyle={{ fontSize: '0.78rem', cursor: 'pointer' }} />
-                      {selectedKeysList.map((k, i) => (
-                        <Line key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]}
+                      {seriesKeys.map((s, i) => (
+                        <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={COLORS[i % COLORS.length]}
                           dot={{ r: 2.5, strokeWidth: 0, fill: COLORS[i % COLORS.length] }}
                           activeDot={{ r: 5, stroke: 'white', strokeWidth: 2 }}
                           strokeWidth={2} connectNulls isAnimationActive={false} />
@@ -1099,14 +1162,14 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                         <thead>
                           <tr>
                             <th style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'left' }}>Día</th>
-                            {selectedKeysList.map((k) => (
-                              <th key={k} colSpan={3} style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>{k}</th>
+                            {seriesKeys.map((s) => (
+                              <th key={s.key} colSpan={3} style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>{s.label}</th>
                             ))}
                           </tr>
                           <tr>
                             <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)' }}></th>
-                            {selectedKeysList.map((k) => (
-                              <React.Fragment key={k}>
+                            {seriesKeys.map((s) => (
+                              <React.Fragment key={s.key}>
                                 <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)' }}>min</th>
                                 <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)' }}>prom</th>
                                 <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)' }}>max</th>
@@ -1118,14 +1181,14 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                           {dailyData.map((d) => (
                             <tr key={d.dia}>
                               <td style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{d.dia}</td>
-                              {selectedKeysList.map((k) => {
-                                const cnt = d.count[k] ?? 0;
-                                const avg = cnt > 0 ? d.sum[k] / cnt : null;
-                                const mn = d.min[k];
-                                const mx = d.max[k];
+                              {seriesKeys.map((s) => {
+                                const cnt = d.count[s.key] ?? 0;
+                                const avg = cnt > 0 ? d.sum[s.key] / cnt : null;
+                                const mn = d.min[s.key];
+                                const mx = d.max[s.key];
                                 const fmt = (n: number | undefined) => n === undefined ? '—' : n.toLocaleString('es-CO', { maximumFractionDigits: 2 });
                                 return (
-                                  <React.Fragment key={k}>
+                                  <React.Fragment key={s.key}>
                                     <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: 'var(--text-muted)' }}>{fmt(mn)}</td>
                                     <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{avg === null ? '—' : fmt(avg)}</td>
                                     <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: 'var(--text-muted)' }}>{fmt(mx)}</td>
@@ -1147,8 +1210,8 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                         <thead>
                           <tr>
                             <th style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'left' }}>Fecha / Hora</th>
-                            {selectedKeysList.map((k) => (
-                              <th key={k} style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'right' }}>{k}</th>
+                            {seriesKeys.map((s) => (
+                              <th key={s.key} style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem' }}>{s.label}</th>
                             ))}
                           </tr>
                         </thead>
@@ -1160,9 +1223,9 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                                 <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.74rem' }}>
                                   {new Date(r.ts as number).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
                                 </td>
-                                {selectedKeysList.map((k) => (
-                                  <td key={k} style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace' }}>
-                                    {r[k] === null || r[k] === undefined ? '—' : Number(r[k]).toLocaleString('es-CO', { maximumFractionDigits: 3 })}
+                                {seriesKeys.map((s) => (
+                                  <td key={s.key} style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace' }}>
+                                    {r[s.key] === null || r[s.key] === undefined ? '—' : Number(r[s.key]).toLocaleString('es-CO', { maximumFractionDigits: 3 })}
                                   </td>
                                 ))}
                               </tr>

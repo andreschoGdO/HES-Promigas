@@ -112,7 +112,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
         </div>
         {(module === 'sales' || module === 'operations') && (
           <button onClick={() => setShowCreate(true)} className="primary-btn" style={{ padding: '10px 16px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600, background: color, border: 'none' }}>
-            <Plus size={15} /> Nuevo proyecto
+            <Plus size={15} /> {module === 'operations' ? 'Nueva card manual' : 'Nuevo proyecto'}
           </button>
         )}
       </div>

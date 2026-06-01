@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat, TrendingUp, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
+import { readVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -30,6 +31,18 @@ export function Sidebar() {
     window.dispatchEvent(new CustomEvent('sidebar-collapsed-change', { detail: collapsed }));
     document.documentElement.classList.toggle('sidebar-collapsed', collapsed);
   }, [collapsed]);
+
+  // Visibility per-item (configurable desde /configuracion)
+  const [visibility, setVisibility] = useState<SidebarVisibility>({});
+  useEffect(() => {
+    setVisibility(readVisibility());
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<SidebarVisibility>).detail;
+      setVisibility(detail ?? readVisibility());
+    };
+    window.addEventListener('sidebar-visibility-change', handler);
+    return () => window.removeEventListener('sidebar-visibility-change', handler);
+  }, []);
 
   // Escuchar el botón hamburguesa del topbar
   useEffect(() => {
@@ -74,21 +87,22 @@ export function Sidebar() {
   // No renderizar sidebar en rutas de auth
   if (pathname.startsWith('/login') || pathname.startsWith('/auth')) return null;
 
-  const navItems = [
-    { label: 'Inicio', path: '/inicio', icon: Home },
-    { label: 'HES Head End System', path: '/dashboard', icon: BarChart3 },
-    { label: 'CRM Ventas', path: '/ventas', icon: ShoppingCart },
-    { label: 'Ingeniería', path: '/ingenieria', icon: Ruler },
-    { label: 'Operaciones', path: '/operaciones', icon: HardHat },
-    { label: 'Funnel', path: '/funnel', icon: TrendingUp },
-    { label: 'Visitas en Campo', path: '/visitas', icon: ClipboardCheck },
-    { label: 'Inventario', path: '/inventario', icon: Package },
+  const navItemsAll = [
+    { id: 'inicio',      label: 'Inicio', path: '/inicio', icon: Home },
+    { id: 'dashboard',   label: 'HES Head End System', path: '/dashboard', icon: BarChart3 },
+    { id: 'ventas',      label: 'CRM Ventas', path: '/ventas', icon: ShoppingCart },
+    { id: 'ingenieria',  label: 'Ingeniería', path: '/ingenieria', icon: Ruler },
+    { id: 'operaciones', label: 'Operaciones', path: '/operaciones', icon: HardHat },
+    { id: 'funnel',      label: 'Funnel', path: '/funnel', icon: TrendingUp },
+    { id: 'visitas',     label: 'Visitas en Campo', path: '/visitas', icon: ClipboardCheck },
+    { id: 'inventario',  label: 'Inventario', path: '/inventario', icon: Package },
   ];
-
-  const adminItems = [
-    { label: 'Configuración Alertas', path: '/alertas', icon: Bell },
-    { label: 'Configuración API', path: '/configuracion', icon: Settings },
+  const adminItemsAll = [
+    { id: 'alertas',       label: 'Configuración Alertas', path: '/alertas', icon: Bell },
+    { id: 'configuracion', label: 'Configuración API', path: '/configuracion', icon: Settings },
   ];
+  const navItems = navItemsAll.filter((i) => isItemVisible(i.id, visibility));
+  const adminItems = adminItemsAll.filter((i) => isItemVisible(i.id, visibility));
 
   return (
     <>

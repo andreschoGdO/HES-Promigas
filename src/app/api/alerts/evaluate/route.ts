@@ -40,6 +40,12 @@ const INSTANT_VARS = new Set([
   'frequency_hz',
 ]);
 
+// Variables agregadas sobre una ventana de 24h en instant_metrics
+const AGG_24H_VARS = new Set([
+  'batt_soc_min_24h',
+  'batt_soc_max_24h',
+]);
+
 const TARIFA_DEFAULT_COP = 130;
 const UMBRAL_CREG = 0.5;
 
@@ -147,8 +153,12 @@ export async function GET() {
     const alarmRules = rules.filter((r) => r.variable.startsWith('alarm_'));
     const mtdRules = rules.filter((r) => MTD_VARS.has(r.variable));
     const instantRules = rules.filter((r) => INSTANT_VARS.has(r.variable));
+    const aggRules = rules.filter((r) => AGG_24H_VARS.has(r.variable));
     const dailyRules = rules.filter((r) =>
-      !r.variable.startsWith('alarm_') && !MTD_VARS.has(r.variable) && !INSTANT_VARS.has(r.variable)
+      !r.variable.startsWith('alarm_')
+      && !MTD_VARS.has(r.variable)
+      && !INSTANT_VARS.has(r.variable)
+      && !AGG_24H_VARS.has(r.variable)
     );
 
     interface AlertEventInsert {
@@ -271,6 +281,45 @@ export async function GET() {
             variable: rule.variable, value, threshold: Number(rule.threshold),
             operator: rule.operator, severity: rule.severity,
             message: `${rule.name} — ${d.casa} · ${d.name}`,
+          });
+        }
+      }
+    }
+
+    // ─── 5. AGREGADOS 24h: batt_soc_min_24h / batt_soc_max_24h ───
+    if (aggRules.length > 0) {
+      const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const { data: hist } = await supabaseAdmin
+        .from('instant_metrics')
+        .select('house_id, casa, batt_soc_pct')
+        .gte('recorded_at', since)
+        .not('batt_soc_pct', 'is', null);
+
+      // Agregamos min/max por casa
+      interface Acc { house_id: string | null; casa: string; min: number; max: number; }
+      const byCasa = new Map<string, Acc>();
+      for (const row of (hist ?? []) as Array<{ house_id: string | null; casa: string | null; batt_soc_pct: number | string | null }>) {
+        if (!row.casa) continue;
+        const soc = Number(row.batt_soc_pct);
+        if (!Number.isFinite(soc)) continue;
+        let acc = byCasa.get(row.casa);
+        if (!acc) { acc = { house_id: row.house_id, casa: row.casa, min: soc, max: soc }; byCasa.set(row.casa, acc); }
+        else { acc.min = Math.min(acc.min, soc); acc.max = Math.max(acc.max, soc); }
+      }
+
+      const dateToday = new Date().toISOString().slice(0, 10);
+      for (const rule of aggRules) {
+        const scope = byCasa.values();
+        for (const acc of scope) {
+          if (rule.scope !== 'all' && rule.scope !== acc.casa) continue;
+          const value = rule.variable === 'batt_soc_min_24h' ? acc.min : acc.max;
+          if (!Number.isFinite(value)) continue;
+          if (!compare(value, rule.operator, Number(rule.threshold))) continue;
+          events.push({
+            rule_id: rule.id, house_id: acc.house_id, casa: acc.casa, record_date: dateToday,
+            variable: rule.variable, value, threshold: Number(rule.threshold),
+            operator: rule.operator, severity: rule.severity,
+            message: `${rule.name} — ${acc.casa} (SOC ${value.toFixed(0)}% en 24h)`,
           });
         }
       }

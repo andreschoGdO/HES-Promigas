@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Server, Key, CheckCircle2, AlertCircle, Clock, RefreshCw } from 'lucide-react';
+import { Server, Key, CheckCircle2, AlertCircle, Clock, RefreshCw, EyeOff, Eye } from 'lucide-react';
 import { classifyDevice } from '@/lib/classify-device';
+import { readVisibility, writeVisibility, MENU_ITEM_CATALOG, ALWAYS_VISIBLE_IDS, type SidebarVisibility } from '@/lib/sidebar-visibility';
 
 export default function Configuracion() {
   return (
@@ -12,13 +13,111 @@ export default function Configuracion() {
         <div>
           <h1>Configuración del Sistema</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Administración de credenciales y sincronización con la API Metrum.
+            Administración de credenciales, sincronización con Metrum y visibilidad del menú lateral.
           </p>
         </div>
       </div>
 
       <ConexionTab />
+      <SidebarVisibilityCard />
     </>
+  );
+}
+
+/* ---------------- Visibility del menú lateral ---------------- */
+function SidebarVisibilityCard() {
+  const [vis, setVis] = useState<SidebarVisibility>({});
+
+  useEffect(() => { setVis(readVisibility()); }, []);
+
+  const toggle = (id: keyof SidebarVisibility) => {
+    if (ALWAYS_VISIBLE_IDS.has(id)) return;
+    const cur = (vis[id] !== false);
+    const next = { ...vis, [id]: !cur };
+    setVis(next);
+    writeVisibility(next);
+  };
+
+  const resetAll = () => {
+    const empty: SidebarVisibility = {};
+    setVis(empty);
+    writeVisibility(empty);
+  };
+
+  const general = MENU_ITEM_CATALOG.filter((i) => i.group === 'general');
+  const sistema = MENU_ITEM_CATALOG.filter((i) => i.group === 'sistema');
+
+  return (
+    <div className="glass-panel" style={{ marginTop: 20 }}>
+      <div className="card-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Eye size={18} style={{ color: 'var(--text-secondary)' }} />
+          <h2 className="card-title">Visibilidad del menú lateral</h2>
+        </div>
+      </div>
+      <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
+        Oculta secciones que no usas para tener un menú más limpio. Esta preferencia se guarda en este navegador. Inicio y Configuración API siempre quedan visibles (escape hatch).
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 18 }}>
+        <VisibilityGroup label="General" items={general} vis={vis} onToggle={toggle} />
+        <VisibilityGroup label="Sistema" items={sistema} vis={vis} onToggle={toggle} />
+      </div>
+
+      <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end' }}>
+        <button onClick={resetAll} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px' }}>
+          <RefreshCw size={12} /> Mostrar todos
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function VisibilityGroup({ label, items, vis, onToggle }: {
+  label: string;
+  items: typeof MENU_ITEM_CATALOG;
+  vis: SidebarVisibility;
+  onToggle: (id: keyof SidebarVisibility) => void;
+}) {
+  return (
+    <div>
+      <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{label}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {items.map((it) => {
+          const locked = ALWAYS_VISIBLE_IDS.has(it.id);
+          const visible = vis[it.id] !== false;
+          return (
+            <label key={it.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 12px',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              cursor: locked ? 'not-allowed' : 'pointer',
+              opacity: locked ? 0.6 : 1,
+            }}>
+              <input
+                type="checkbox"
+                checked={visible}
+                disabled={locked}
+                onChange={() => onToggle(it.id)}
+                style={{ width: 16, height: 16 }}
+              />
+              <span style={{ flex: 1, fontSize: '0.86rem', fontWeight: visible ? 600 : 500, color: visible ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                {it.label}
+              </span>
+              {locked ? (
+                <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600 }}>Siempre visible</span>
+              ) : visible ? (
+                <Eye size={14} style={{ color: 'var(--accent)' }} />
+              ) : (
+                <EyeOff size={14} style={{ color: 'var(--text-muted)' }} />
+              )}
+            </label>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

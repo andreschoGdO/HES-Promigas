@@ -99,6 +99,10 @@ export const ALERT_VARIABLES: AlertVariableMeta[] = [
     description: 'Segundos totales que la batería estuvo entregando energía durante el día.' },
   { key: 'batt_soc_pct', label: 'Carga batería en vivo (SOC)', unit: '%', category: 'bateria', frequency: '15min', format: 'pct',
     description: 'State of Charge — % de carga actual del banco. Si baja de 15% perdiste respaldo ante un corte.' },
+  { key: 'batt_soc_min_24h', label: 'SOC mínimo últimas 24h', unit: '%', category: 'bateria', frequency: '15min', format: 'pct',
+    description: 'Mínimo SOC alcanzado en las últimas 24 horas (agregado de instant_metrics). Si > 20%, la batería no se descargó hasta el límite saludable — probablemente no está ciclando.' },
+  { key: 'batt_soc_max_24h', label: 'SOC máximo últimas 24h', unit: '%', category: 'bateria', frequency: '15min', format: 'pct',
+    description: 'Máximo SOC alcanzado en las últimas 24 horas. Si < 80%, la batería no se cargó hasta el límite saludable — la generación solar no está aprovechándose para cargarla.' },
 
   // ───── Conexión / Estado ─────
   { key: 'gateway_offline_min', label: 'Tiempo Pulsar offline', unit: 'min', category: 'conexion', frequency: '15min', format: 'num',

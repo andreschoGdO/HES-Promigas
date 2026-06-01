@@ -1,15 +1,15 @@
 "use client";
 import { supabase } from '@/lib/supabase';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp, BarChart3, Cpu, AlertTriangle, Bell } from 'lucide-react';
 import { VARIABLES, findVariable, type VariableMeta } from '@/lib/variables-dict';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush,
   PieChart, Pie, Cell,
 } from 'recharts';
 import { classifyDevice } from '@/lib/classify-device';
 
-type Tab = 'cierres' | 'consumos' | 'alertas' | 'reactiva' | 'control';
+type Tab = 'cierres' | 'alertas' | 'reactiva' | 'control';
 type TypeFilter = 'all' | 'meter' | 'inverter' | 'gateway' | 'other';
 
 interface DeviceOption {
@@ -429,7 +429,6 @@ export default function DashboardPage() {
 
   const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof BarChart3; description: string }> = {
     cierres:  { label: 'Cierres y Granular',     color: '#07c5a8', Icon: Activity,       description: 'Lectura diaria por casa con energía, yield, performance ratio y vista granular por device.' },
-    consumos: { label: 'Consumo por Dispositivo', color: '#3b82f6', Icon: Cpu,            description: 'Las 37 columnas del diccionario por device y día. Con sub-tab de gráficas para inspección.' },
     reactiva: { label: 'Reactiva vs Activa (CREG)', color: '#f59e0b', Icon: AlertTriangle, description: 'Ratio mensual de reactiva sobre activa para detectar penalización CREG 015-2018.' },
     alertas:  { label: 'Alertas por Casa',       color: '#ef4444', Icon: Bell,            description: 'Eventos agrupados por casa con severidad, generados por las reglas configuradas.' },
     control:  { label: 'Control Manual Inversor', color: '#8b5cf6', Icon: Play,           description: 'Envío de comandos al inversor (cos φ, Q, P_max, modo) — stub hasta credenciales OEM.' },
@@ -490,7 +489,6 @@ export default function DashboardPage() {
       </div>
 
       {tab === 'cierres' && <CierresGranularTab devices={devices} />}
-      {tab === 'consumos' && <ConsumosTab />}
       {tab === 'reactiva' && <ReactivaTab />}
       {tab === 'alertas' && <AlertasCasaTab />}
       {tab === 'control' && <ControlManualTab devices={devices} />}
@@ -530,6 +528,8 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const [granData, setGranData] = useState<Record<string, { ts: number; value: string | number }[]>>({});
   const [granLoading, setGranLoading] = useState(false);
   const [granError, setGranError] = useState<string | null>(null);
+  const [showDataTable, setShowDataTable] = useState(false);
+  const [dataTableMode, setDataTableMode] = useState<'puntos' | 'diario'>('diario');
 
   const filteredDevices = useMemo(() => {
     let list = filterByType(devices, typeFilter);
@@ -758,7 +758,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     });
   };
 
-  // Granular chart data
+  // Granular chart data (puntos crudos como vienen del fetch)
   const chartData = useMemo(() => {
     const byTs = new Map<number, Record<string, number | null>>();
     for (const [key, points] of Object.entries(granData)) {
@@ -772,6 +772,32 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     return Array.from(byTs.entries()).map(([ts, vals]) => ({ ts, ...vals })).sort((a, b) => a.ts - b.ts);
   }, [granData]);
   const selectedKeysList = Array.from(selectedKeys);
+
+  // Agregación diaria — promedio por clave para cada día (zona Colombia approx UTC-5)
+  const dailyData = useMemo(() => {
+    const dayKey = (ts: number): string => {
+      const d = new Date(ts - 5 * 3600 * 1000); // shift a UTC-5
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    };
+    interface Agg { count: Record<string, number>; sum: Record<string, number>; min: Record<string, number>; max: Record<string, number>; }
+    const byDay = new Map<string, Agg>();
+    for (const [key, points] of Object.entries(granData)) {
+      for (const p of points) {
+        const num = Number(p.value);
+        if (!Number.isFinite(num)) continue;
+        const d = dayKey(p.ts);
+        let g = byDay.get(d);
+        if (!g) { g = { count: {}, sum: {}, min: {}, max: {} }; byDay.set(d, g); }
+        g.count[key] = (g.count[key] ?? 0) + 1;
+        g.sum[key] = (g.sum[key] ?? 0) + num;
+        g.min[key] = g.min[key] === undefined ? num : Math.min(g.min[key], num);
+        g.max[key] = g.max[key] === undefined ? num : Math.max(g.max[key], num);
+      }
+    }
+    return Array.from(byDay.entries())
+      .map(([dia, g]) => ({ dia, ...g }))
+      .sort((a, b) => a.dia.localeCompare(b.dia));
+  }, [granData]);
 
   return (
     <>
@@ -1008,27 +1034,146 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
             {granError && <div className="alert-error">{granError}</div>}
 
             {chartData.length > 0 && (
-              <div style={{ width: '100%', height: 320 }}>
-                <ResponsiveContainer>
-                  <LineChart data={chartData}>
-                    <CartesianGrid stroke="rgba(0,0,0,0.06)" />
-                    <XAxis
-                      dataKey="ts"
-                      tickFormatter={(v) => new Date(v).toLocaleString([], { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                      stroke="var(--text-muted)" fontSize={11}
-                    />
-                    <YAxis stroke="var(--text-muted)" fontSize={11} />
-                    <Tooltip
-                      labelFormatter={(v) => new Date(Number(v)).toLocaleString()}
-                      contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8 }}
-                    />
-                    <Legend />
-                    {selectedKeysList.map((k, i) => (
-                      <Line key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]} dot={false} strokeWidth={2} connectNulls />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <>
+                <div style={{ width: '100%', height: 360 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                      <CartesianGrid stroke="rgba(0,0,0,0.06)" />
+                      <XAxis
+                        dataKey="ts"
+                        type="number"
+                        domain={['dataMin', 'dataMax']}
+                        scale="time"
+                        tickFormatter={(v) => new Date(v).toLocaleString('es-CO', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        stroke="var(--text-muted)" fontSize={11}
+                      />
+                      <YAxis stroke="var(--text-muted)" fontSize={11} />
+                      <Tooltip
+                        labelFormatter={(v) => new Date(Number(v)).toLocaleString('es-CO')}
+                        contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.78rem' }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '0.78rem', cursor: 'pointer' }} />
+                      {selectedKeysList.map((k, i) => (
+                        <Line key={k} type="monotone" dataKey={k} stroke={COLORS[i % COLORS.length]}
+                          dot={{ r: 2.5, strokeWidth: 0, fill: COLORS[i % COLORS.length] }}
+                          activeDot={{ r: 5, stroke: 'white', strokeWidth: 2 }}
+                          strokeWidth={2} connectNulls isAnimationActive={false} />
+                      ))}
+                      {/* Brush para zoom interactivo: arrastra los handles para seleccionar un rango */}
+                      <Brush dataKey="ts" height={28} stroke="#07c5a8" fill="rgba(7,197,168,0.08)"
+                        travellerWidth={10}
+                        tickFormatter={(v) => new Date(v).toLocaleDateString('es-CO', { month: 'short', day: '2-digit' })} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, flexWrap: 'wrap', gap: 10 }}>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                    {chartData.length} puntos · {dailyData.length} día{dailyData.length === 1 ? '' : 's'} · Hover sobre el chart para ver valores · arrastra los bordes del mini-eje inferior para zoom
+                  </div>
+                  <div style={{ display: 'inline-flex', gap: 6 }}>
+                    <button onClick={() => setShowDataTable((v) => !v)} className="secondary-btn" style={{ fontSize: '0.74rem', padding: '6px 10px' }}>
+                      {showDataTable ? 'Ocultar tabla' : 'Ver tabla de datos'}
+                    </button>
+                    {showDataTable && (
+                      <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', borderRadius: 6, padding: 2, border: '1px solid var(--border)' }}>
+                        <button onClick={() => setDataTableMode('diario')} style={{
+                          padding: '5px 10px', fontSize: '0.74rem', fontWeight: 600, borderRadius: 4, border: 'none', cursor: 'pointer',
+                          background: dataTableMode === 'diario' ? 'var(--bg-surface)' : 'transparent',
+                          color: dataTableMode === 'diario' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        }}>Por día</button>
+                        <button onClick={() => setDataTableMode('puntos')} style={{
+                          padding: '5px 10px', fontSize: '0.74rem', fontWeight: 600, borderRadius: 4, border: 'none', cursor: 'pointer',
+                          background: dataTableMode === 'puntos' ? 'var(--bg-surface)' : 'transparent',
+                          color: dataTableMode === 'puntos' ? 'var(--text-primary)' : 'var(--text-muted)',
+                        }}>Puntos</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {showDataTable && dataTableMode === 'diario' && dailyData.length > 0 && (
+                  <div className="glass-panel" style={{ padding: 0, marginTop: 12, overflow: 'hidden' }}>
+                    <div style={{ overflowX: 'auto', maxHeight: 380 }}>
+                      <table style={{ width: '100%', fontSize: '0.78rem' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'left' }}>Día</th>
+                            {selectedKeysList.map((k) => (
+                              <th key={k} colSpan={3} style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>{k}</th>
+                            ))}
+                          </tr>
+                          <tr>
+                            <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)' }}></th>
+                            {selectedKeysList.map((k) => (
+                              <React.Fragment key={k}>
+                                <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)' }}>min</th>
+                                <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)' }}>prom</th>
+                                <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)' }}>max</th>
+                              </React.Fragment>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dailyData.map((d) => (
+                            <tr key={d.dia}>
+                              <td style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{d.dia}</td>
+                              {selectedKeysList.map((k) => {
+                                const cnt = d.count[k] ?? 0;
+                                const avg = cnt > 0 ? d.sum[k] / cnt : null;
+                                const mn = d.min[k];
+                                const mx = d.max[k];
+                                const fmt = (n: number | undefined) => n === undefined ? '—' : n.toLocaleString('es-CO', { maximumFractionDigits: 2 });
+                                return (
+                                  <React.Fragment key={k}>
+                                    <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: 'var(--text-muted)' }}>{fmt(mn)}</td>
+                                    <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{avg === null ? '—' : fmt(avg)}</td>
+                                    <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: 'var(--text-muted)' }}>{fmt(mx)}</td>
+                                  </React.Fragment>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {showDataTable && dataTableMode === 'puntos' && (
+                  <div className="glass-panel" style={{ padding: 0, marginTop: 12, overflow: 'hidden' }}>
+                    <div style={{ overflowX: 'auto', maxHeight: 380 }}>
+                      <table style={{ width: '100%', fontSize: '0.78rem' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'left' }}>Fecha / Hora</th>
+                            {selectedKeysList.map((k) => (
+                              <th key={k} style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'right' }}>{k}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {chartData.map((row) => {
+                            const r = row as Record<string, number | null>;
+                            return (
+                              <tr key={r.ts as number}>
+                                <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.74rem' }}>
+                                  {new Date(r.ts as number).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                                </td>
+                                {selectedKeysList.map((k) => (
+                                  <td key={k} style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace' }}>
+                                    {r[k] === null || r[k] === undefined ? '—' : Number(r[k]).toLocaleString('es-CO', { maximumFractionDigits: 3 })}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

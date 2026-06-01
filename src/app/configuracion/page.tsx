@@ -35,34 +35,37 @@ interface EndpointDef {
   auth: 'none' | 'session' | 'key';
   desc: string;
   notes?: string;
+  /** ID del módulo del menú lateral al que pertenece este endpoint.
+   *  Si está oculto en la sidebar, este endpoint se omite del listado. */
+  module?: keyof SidebarVisibility;
 }
 
 const ENDPOINTS_PUBLIC: EndpointDef[] = [
-  { method: 'POST', path: '/api/external/crm/projects', auth: 'key', desc: 'Crear card (proyecto) en el CRM desde otra app. Cae en /ventas etapa Prospecto.', notes: 'Idempotente vía external_id.' },
-  { method: 'GET',  path: '/api/external/crm/projects', auth: 'key', desc: 'Listar proyectos. Filtros: module, stage, updated_since, limit. Usar module=operations para leer la cola de Operaciones.' },
-  { method: 'GET',  path: '/api/external/crm/projects?meta=1', auth: 'key', desc: 'Metadata del endpoint (modulos, etapas disponibles).' },
-  { method: 'GET',  path: '/api/external/crm/projects/[id]', auth: 'key', desc: 'Detalle de un proyecto con visitas + reserva + items asignados. ?include_events=1 anexa audit log.' },
+  { method: 'POST', path: '/api/external/crm/projects', auth: 'key', module: 'ventas', desc: 'Crear card (proyecto) en el CRM desde otra app. Cae en /ventas etapa Prospecto.', notes: 'Idempotente vía external_id.' },
+  { method: 'GET',  path: '/api/external/crm/projects', auth: 'key', module: 'ventas', desc: 'Listar proyectos. Filtros: module, stage, updated_since, limit. Usar module=operations para leer la cola de Operaciones.' },
+  { method: 'GET',  path: '/api/external/crm/projects?meta=1', auth: 'key', module: 'ventas', desc: 'Metadata del endpoint (modulos, etapas disponibles).' },
+  { method: 'GET',  path: '/api/external/crm/projects/[id]', auth: 'key', module: 'ventas', desc: 'Detalle de un proyecto con visitas + reserva + items asignados. ?include_events=1 anexa audit log.' },
 ];
 
 const ENDPOINTS_INTERNAL: EndpointDef[] = [
-  { method: 'GET',  path: '/api/sync/status',                   auth: 'none', desc: 'Timestamps de la última escritura de cada cron (15min, daily, devices).' },
-  { method: 'POST', path: '/api/cron/sync?quick=1',             auth: 'key',  desc: 'Disparo manual de sincronización rápida (devices + lazo instantáneo). Auth: header Authorization: Bearer $CRON_SECRET.' },
-  { method: 'POST', path: '/api/cron/instant-check',            auth: 'key',  desc: 'Lazo de 15 min: lee Metrum, escribe instant_metrics, evalúa alertas.' },
-  { method: 'GET',  path: '/api/crm/projects',                  auth: 'session', desc: 'Lista proyectos CRM (filtro por module/stage/q).' },
-  { method: 'POST', path: '/api/crm/projects/[id]/transition',  auth: 'session', desc: 'Avanza etapa de un proyecto con campos requeridos.' },
-  { method: 'GET',  path: '/api/crm/funnel',                    auth: 'session', desc: 'Agregados de pipeline + lista de proyectos para reporting.' },
-  { method: 'GET',  path: '/api/crm/stage-fields',              auth: 'session', desc: 'Configuración de campos por etapa (con seed automático en primer uso).' },
-  { method: 'GET',  path: '/api/reports?type=...',              auth: 'session', desc: 'Genera reportes (operacion, reactiva, alertas, inventario, pipeline, ejecutivo).' },
-  { method: 'GET',  path: '/api/inventory/items',               auth: 'session', desc: 'Catálogo de equipos serializados con filtros.' },
-  { method: 'GET',  path: '/api/inventory/movements',           auth: 'session', desc: 'Audit log de movimientos de inventario.' },
-  { method: 'POST', path: '/api/inventory/reservations',        auth: 'session', desc: 'Crear reserva de equipos para una visita planeada.' },
-  { method: 'GET',  path: '/api/alerts/events',                 auth: 'session', desc: 'Eventos de alertas disparadas.' },
-  { method: 'GET',  path: '/api/alerts/top?days=N',             auth: 'session', desc: 'Top alertas más frecuentes en N días por regla+casa.' },
-  { method: 'GET',  path: '/api/alerts/rules',                  auth: 'session', desc: 'CRUD de reglas de alerta.' },
-  { method: 'GET',  path: '/api/visits',                        auth: 'session', desc: 'CRUD de visitas en campo (previa, instalación, emergencia, normalización).' },
-  { method: 'GET',  path: '/api/metrum/devices',                auth: 'session', desc: 'Listado raw de devices desde Metrum (proxy).' },
-  { method: 'GET',  path: '/api/metrum/timeseries',             auth: 'session', desc: 'Series de tiempo crudas desde Metrum para granular charts.' },
-  { method: 'GET',  path: '/api/metrum/keys',                   auth: 'session', desc: 'Lista las keys de timeseries disponibles para un device.' },
+  { method: 'GET',  path: '/api/sync/status',                   auth: 'none', module: 'dashboard',     desc: 'Timestamps de la última escritura de cada cron (15min, daily, devices).' },
+  { method: 'POST', path: '/api/cron/sync?quick=1',             auth: 'key',  module: 'dashboard',     desc: 'Disparo manual de sincronización rápida (devices + lazo instantáneo). Auth: header Authorization: Bearer $CRON_SECRET.' },
+  { method: 'POST', path: '/api/cron/instant-check',            auth: 'key',  module: 'dashboard',     desc: 'Lazo de 15 min: lee Metrum, escribe instant_metrics, evalúa alertas.' },
+  { method: 'GET',  path: '/api/crm/projects',                  auth: 'session', module: 'ventas',     desc: 'Lista proyectos CRM (filtro por module/stage/q).' },
+  { method: 'POST', path: '/api/crm/projects/[id]/transition',  auth: 'session', module: 'ventas',     desc: 'Avanza etapa de un proyecto con campos requeridos.' },
+  { method: 'GET',  path: '/api/crm/funnel',                    auth: 'session', module: 'funnel',     desc: 'Agregados de pipeline + lista de proyectos para reporting.' },
+  { method: 'GET',  path: '/api/crm/stage-fields',              auth: 'session', module: 'ventas',     desc: 'Configuración de campos por etapa (con seed automático en primer uso).' },
+  { method: 'GET',  path: '/api/reports?type=...',              auth: 'session', module: 'reportes',   desc: 'Genera reportes (operacion, reactiva, alertas, inventario, pipeline, ejecutivo).' },
+  { method: 'GET',  path: '/api/inventory/items',               auth: 'session', module: 'inventario', desc: 'Catálogo de equipos serializados con filtros.' },
+  { method: 'GET',  path: '/api/inventory/movements',           auth: 'session', module: 'inventario', desc: 'Audit log de movimientos de inventario.' },
+  { method: 'POST', path: '/api/inventory/reservations',        auth: 'session', module: 'inventario', desc: 'Crear reserva de equipos para una visita planeada.' },
+  { method: 'GET',  path: '/api/alerts/events',                 auth: 'session', module: 'alertas',    desc: 'Eventos de alertas disparadas.' },
+  { method: 'GET',  path: '/api/alerts/top?days=N',             auth: 'session', module: 'alertas',    desc: 'Top alertas más frecuentes en N días por regla+casa.' },
+  { method: 'GET',  path: '/api/alerts/rules',                  auth: 'session', module: 'alertas',    desc: 'CRUD de reglas de alerta.' },
+  { method: 'GET',  path: '/api/visits',                        auth: 'session', module: 'visitas',    desc: 'CRUD de visitas en campo (previa, instalación, emergencia, normalización).' },
+  { method: 'GET',  path: '/api/metrum/devices',                auth: 'session', module: 'dashboard',  desc: 'Listado raw de devices desde Metrum (proxy).' },
+  { method: 'GET',  path: '/api/metrum/timeseries',             auth: 'session', module: 'dashboard',  desc: 'Series de tiempo crudas desde Metrum para granular charts.' },
+  { method: 'GET',  path: '/api/metrum/keys',                   auth: 'session', module: 'dashboard',  desc: 'Lista las keys de timeseries disponibles para un device.' },
 ];
 
 function methodColor(m: string): string {
@@ -72,6 +75,19 @@ function methodColor(m: string): string {
 function ApiDocsCard() {
   const [section, setSection] = useState<'external' | 'internal' | 'modules'>('external');
   const [expanded, setExpanded] = useState(true);
+  const [vis, setVis] = useState<SidebarVisibility>({});
+  useEffect(() => {
+    setVis(readVisibility());
+    const handler = () => setVis(readVisibility());
+    window.addEventListener('sidebar-visibility-change', handler);
+    return () => window.removeEventListener('sidebar-visibility-change', handler);
+  }, []);
+  // Función que decide si un endpoint/módulo está activo
+  const isModuleVisible = (id: keyof SidebarVisibility | undefined): boolean => {
+    if (!id) return true; // sin tag = neutral, no filtrar
+    if (ALWAYS_VISIBLE_IDS.has(id as string)) return true;
+    return vis[id] !== false;
+  };
 
   return (
     <div className="glass-panel" style={{ marginTop: 20 }}>
@@ -111,8 +127,8 @@ function ApiDocsCard() {
           </div>
 
           {section === 'external' && <ExternalApiSection />}
-          {section === 'internal' && <InternalApiSection />}
-          {section === 'modules' && <ModulesSection />}
+          {section === 'internal' && <InternalApiSection isModuleVisible={isModuleVisible} />}
+          {section === 'modules' && <ModulesSection isModuleVisible={isModuleVisible} />}
         </>
       )}
     </div>
@@ -410,18 +426,43 @@ curl '${typeof window !== 'undefined' ? window.location.origin : 'https://sunnyh
 }
 
 /* ───── Sección 2: lista de endpoints internos ───── */
-function InternalApiSection() {
+function InternalApiSection({ isModuleVisible }: { isModuleVisible: (id: keyof SidebarVisibility | undefined) => boolean }) {
+  const filteredPublic = ENDPOINTS_PUBLIC.filter((e) => isModuleVisible(e.module));
+  const filteredInternal = ENDPOINTS_INTERNAL.filter((e) => isModuleVisible(e.module));
+  const hiddenPublic = ENDPOINTS_PUBLIC.length - filteredPublic.length;
+  const hiddenInternal = ENDPOINTS_INTERNAL.length - filteredInternal.length;
+  const totalHidden = hiddenPublic + hiddenInternal;
+
   return (
     <div>
       <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '0 0 12px' }}>
-        Endpoints que la app usa internamente. <strong>session</strong> = requiere sesión de usuario activa en SUNNY APP (cookies de Supabase Auth). <strong>key</strong> = requiere env var como <code>CRON_SECRET</code> o <code>CRM_API_KEY</code>. <strong>none</strong> = público.
+        Endpoints que la app usa internamente. <strong>session</strong> = requiere sesión de usuario activa en SUNNY APP. <strong>key</strong> = requiere env var como <code>CRON_SECRET</code> o <code>CRM_API_KEY</code>. <strong>none</strong> = público.
       </p>
+      {totalHidden > 0 && (
+        <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '0 0 12px', fontStyle: 'italic' }}>
+          Filtrado por menús activos: {totalHidden} endpoint{totalHidden === 1 ? '' : 's'} oculto{totalHidden === 1 ? '' : 's'} (pertenece{totalHidden === 1 ? '' : 'n'} a módulos deshabilitados en la sidebar).
+        </p>
+      )}
 
-      <h3 style={{ fontSize: '0.92rem', margin: '14px 0 6px' }}>Externos (key-based)</h3>
-      <EndpointTable endpoints={ENDPOINTS_PUBLIC} />
+      {filteredPublic.length > 0 && (
+        <>
+          <h3 style={{ fontSize: '0.92rem', margin: '14px 0 6px' }}>Externos (key-based)</h3>
+          <EndpointTable endpoints={filteredPublic} />
+        </>
+      )}
 
-      <h3 style={{ fontSize: '0.92rem', margin: '20px 0 6px' }}>Internos (session-based)</h3>
-      <EndpointTable endpoints={ENDPOINTS_INTERNAL} />
+      {filteredInternal.length > 0 && (
+        <>
+          <h3 style={{ fontSize: '0.92rem', margin: '20px 0 6px' }}>Internos (session-based)</h3>
+          <EndpointTable endpoints={filteredInternal} />
+        </>
+      )}
+
+      {filteredPublic.length === 0 && filteredInternal.length === 0 && (
+        <div className="alert-warning" style={{ fontSize: '0.82rem' }}>
+          Todos los endpoints están ocultos porque sus módulos están deshabilitados en la sidebar. Vuelve a activar módulos en "Visibilidad del menú lateral".
+        </div>
+      )}
 
       <div className="alert-warning" style={{ fontSize: '0.78rem', marginTop: 14 }}>
         <strong>Nota:</strong> los endpoints internos usan cookies de sesión Supabase. No se pueden llamar desde otra app sin un usuario autenticado. Si necesitas un endpoint público para integrar, usa <code>/api/external/...</code> o pídeme que cree uno con auth de key.
@@ -467,7 +508,23 @@ function EndpointTable({ endpoints }: { endpoints: EndpointDef[] }) {
 }
 
 /* ───── Sección 3: módulos y arquitectura ───── */
-function ModulesSection() {
+function ModulesSection({ isModuleVisible }: { isModuleVisible: (id: keyof SidebarVisibility | undefined) => boolean }) {
+  const allModules: Array<{ id: keyof SidebarVisibility; path: string; name: string; desc: string }> = [
+    { id: 'inicio',        path: '/inicio',        name: 'Inicio',                  desc: 'Landing con diagramas de arquitectura + flujos + widget de status de crons en vivo.' },
+    { id: 'dashboard',     path: '/dashboard',     name: 'HES Head End System',     desc: 'Operación diaria de la flota: vista granular multi-device, CREG mensual, alertas por casa, control manual de inversor.' },
+    { id: 'ventas',        path: '/ventas',        name: 'CRM Ventas',              desc: 'Kanban Pipefy-style de 5 etapas. Al firmar, handoff automático a Ingeniería.' },
+    { id: 'ingenieria',    path: '/ingenieria',    name: 'Ingeniería',              desc: 'Calculadora de dimensionamiento + workflow de 5 etapas. Solicita visita previa a Operaciones, aprueba diseño.' },
+    { id: 'operaciones',   path: '/operaciones',   name: 'Operaciones',             desc: 'Dimensionado, alistamiento de inventario (reserva auto), instalación con contratista, operativo.' },
+    { id: 'funnel',        path: '/funnel',        name: 'Funnel',                  desc: 'Vista agregada de todos los proyectos: KPIs, tasas de conversión, distribución por etapa.' },
+    { id: 'visitas',       path: '/visitas',       name: 'Visitas en Campo',        desc: '4 tipos de acta (previa, instalación, emergencia, normalización) con fotos, GPS, PDF y handoff bidireccional con inventario.' },
+    { id: 'inventario',    path: '/inventario',    name: 'Inventario (WMS-lite)',   desc: 'Equipos por serial, consumibles con stock bajo, ubicaciones jerárquicas, reservas por visita, audit log completo.' },
+    { id: 'reportes',      path: '/reportes',      name: 'Reportes',                desc: '6 reportes (ejecutivo, operación, CREG, alertas, inventario, pipeline) con descarga CSV + vista imprimible.' },
+    { id: 'alertas',       path: '/alertas',       name: 'Configuración Alertas',   desc: 'CRUD de reglas. 40+ variables agrupadas en 6 categorías. Evaluador automático cada 15 min y diario.' },
+    { id: 'configuracion', path: '/configuracion', name: 'Configuración API',       desc: 'Conexión Metrum, visibilidad del menú, esta documentación.' },
+  ];
+  const visibleModules = allModules.filter((m) => isModuleVisible(m.id));
+  const totalHidden = allModules.length - visibleModules.length;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <DocBlock title="Stack">
@@ -482,7 +539,12 @@ function ModulesSection() {
         </ul>
       </DocBlock>
 
-      <DocBlock title="Módulos">
+      <DocBlock title={`Módulos (${visibleModules.length} activos${totalHidden > 0 ? ` · ${totalHidden} ocultos` : ''})`}>
+        {totalHidden > 0 && (
+          <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '0 0 8px', fontStyle: 'italic' }}>
+            Solo se muestran los módulos visibles en la sidebar. Para ver todos, activa más en "Visibilidad del menú lateral".
+          </p>
+        )}
         <table style={{ width: '100%', fontSize: '0.78rem', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: 'var(--bg-elevated)' }}>
@@ -492,17 +554,9 @@ function ModulesSection() {
             </tr>
           </thead>
           <tbody>
-            <ModRow path="/inicio" name="Inicio">Landing con diagramas de arquitectura + flujos + widget de status de crons en vivo.</ModRow>
-            <ModRow path="/dashboard" name="HES Head End System">Operación diaria de la flota: cierres, vista granular interactiva, CREG mensual, alertas por casa, control manual de inversor.</ModRow>
-            <ModRow path="/ventas" name="CRM Ventas">Kanban Pipefy-style de 5 etapas. Al firmar, handoff automático a Ingeniería.</ModRow>
-            <ModRow path="/ingenieria" name="Ingeniería">Calculadora de dimensionamiento + workflow de 5 etapas. Solicita visita previa a Operaciones, aprueba diseño.</ModRow>
-            <ModRow path="/operaciones" name="Operaciones">Visita previa, alistamiento de inventario (reserva auto), instalación con contratista, operativo, legalizado.</ModRow>
-            <ModRow path="/funnel" name="Funnel">Vista agregada de todos los proyectos: KPIs, tasas de conversión, distribución por etapa.</ModRow>
-            <ModRow path="/visitas" name="Visitas en Campo">4 tipos de acta (previa, instalación, emergencia, normalización) con fotos, GPS, PDF y handoff bidireccional con inventario.</ModRow>
-            <ModRow path="/inventario" name="Inventario (WMS-lite)">Equipos por serial, consumibles con stock bajo, ubicaciones jerárquicas, reservas por visita, audit log completo.</ModRow>
-            <ModRow path="/reportes" name="Reportes">6 reportes (ejecutivo, operación, CREG, alertas, inventario, pipeline) con descarga CSV + vista imprimible.</ModRow>
-            <ModRow path="/alertas" name="Configuración Alertas">CRUD de reglas. 40+ variables agrupadas en 6 categorías. Evaluador automático cada 15 min y diario.</ModRow>
-            <ModRow path="/configuracion" name="Configuración API">Conexión Metrum, visibilidad del menú, esta documentación.</ModRow>
+            {visibleModules.map((m) => (
+              <ModRow key={m.id} path={m.path} name={m.name}>{m.desc}</ModRow>
+            ))}
           </tbody>
         </table>
       </DocBlock>
@@ -513,7 +567,7 @@ function ModulesSection() {
           <li><strong>Cada 15 min:</strong> GitHub Actions → /api/cron/instant-check → trae powerAI/RI, corrientes, voltajes, SOC batería; calcula cos φ y desbalances; evalúa reglas instantáneas + agregadas 24h.</li>
           <li><strong>Visita instalación completada:</strong> el evaluador busca seriales del form, los marca como installed en la casa + crea movimiento en inventory_movements.</li>
           <li><strong>Reserva confirmada + visita instalación:</strong> al cerrar la visita, los items reservados pasan directo a installed (no hay que tipear seriales).</li>
-          <li><strong>Sales firmado:</strong> handoff automático a Engineering. Engineering pide previa → Operations. Operations cierra → Engineering. Engineering aprueba → Operations. Operations legaliza → Closed.</li>
+          <li><strong>Sales firmado:</strong> handoff automático a Engineering. Engineering aprueba → Operations dimensionado → alistamiento → instalación → operativo → cerrado.</li>
         </ul>
       </DocBlock>
     </div>

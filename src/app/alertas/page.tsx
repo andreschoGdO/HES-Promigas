@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Bell, Plus, Trash2, AlertTriangle, AlertCircle, Info, Power, Lightbulb, Sparkles, Settings2, Wrench, TrendingUp } from 'lucide-react';
+import { Bell, Plus, Trash2, AlertTriangle, AlertCircle, Info, Power, Lightbulb, Sparkles, Settings2, Wrench, TrendingUp, Zap } from 'lucide-react';
 import { ALERT_VARIABLES, ALERT_CATEGORIES, findVariableMeta, formatValue, type AlertCategory } from '@/lib/alert-variables';
+import { ReactivaCREG } from '@/components/ReactivaCREG';
 
 interface AlertRule {
   id: string;
@@ -70,7 +71,7 @@ const SEVERITIES: Array<{ key: 'high' | 'medium' | 'low'; label: string; color: 
 ];
 const sevMeta = (s: string) => SEVERITIES.find((x) => x.key === s) ?? SEVERITIES[2];
 
-type NarTab = 'notificaciones' | 'alertas' | 'recomendaciones' | 'reglas';
+type NarTab = 'notificaciones' | 'alertas' | 'recomendaciones' | 'reactiva' | 'reglas';
 
 const NAR_META: Record<NarTab, { label: string; color: string; icon: typeof Bell; description: string }> = {
   notificaciones: {
@@ -90,6 +91,12 @@ const NAR_META: Record<NarTab, { label: string; color: string; icon: typeof Bell
     color: '#10b981',
     icon: Lightbulb,
     description: 'Sugerencias inteligentes derivadas del patrón de eventos: ajustar umbrales, programar visitas, activar control de cos φ, habilitar reglas faltantes.',
+  },
+  reactiva: {
+    label: 'Reactiva (CREG)',
+    color: '#f59e0b',
+    icon: Zap,
+    description: 'Análisis mensual de reactiva vs activa según Resolución CREG 015-2018. Detecta casas en riesgo de penalización (cos φ < 0.9) y estima el costo COP.',
   },
   reglas: {
     label: 'Reglas',
@@ -275,10 +282,11 @@ export default function NarPage() {
     return { out, otras };
   }, [rules, filterCategory]);
 
-  const counts = {
+  const counts: Record<NarTab, number> = {
     notificaciones: events.filter((e) => e.severity === 'low' && !e.acknowledged).length,
     alertas: events.filter((e) => (e.severity === 'high' || e.severity === 'medium') && !e.acknowledged).length,
     recomendaciones: recommendations.length,
+    reactiva: 0,
     reglas: rules.length,
   };
 
@@ -392,6 +400,8 @@ export default function NarPage() {
       {tab === 'recomendaciones' && (
         <RecommendationsList recos={recommendations} loading={loading} />
       )}
+
+      {tab === 'reactiva' && <ReactivaCREG />}
 
       {tab === 'reglas' && (
         <>

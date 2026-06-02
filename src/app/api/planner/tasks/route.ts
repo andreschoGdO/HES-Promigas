@@ -39,6 +39,7 @@ const arrTags = (v: unknown): string[] | undefined => {
  *   ?urgency=low|medium|high|critical
  *   ?status=todo|in_progress|done|blocked
  *   ?assignee=...
+ *   ?team=Ingeniería|Operaciones|...  (texto libre)
  *   ?from=YYYY-MM-DD  (due_date >=)
  *   ?to=YYYY-MM-DD    (due_date <=)
  *   ?q=texto libre
@@ -49,6 +50,7 @@ export async function GET(request: Request) {
   const urgency = url.searchParams.get('urgency');
   const status = url.searchParams.get('status');
   const assignee = url.searchParams.get('assignee');
+  const team = url.searchParams.get('team');
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
   const q = url.searchParams.get('q');
@@ -63,11 +65,12 @@ export async function GET(request: Request) {
   if (urgency && ALLOWED_URGENCIES.includes(urgency)) query = query.eq('urgency', urgency);
   if (status && ALLOWED_STATUSES.includes(status)) query = query.eq('status', status);
   if (assignee) query = query.eq('assigned_to', assignee);
+  if (team) query = query.eq('team', team);
   if (from) query = query.gte('due_date', from);
   if (to) query = query.lte('due_date', to);
   if (q) {
     const safe = q.replace(/[,()*"\\]/g, ' ').trim();
-    if (safe) query = query.or(`title.ilike.%${safe}%,description.ilike.%${safe}%,assigned_to.ilike.%${safe}%`);
+    if (safe) query = query.or(`title.ilike.%${safe}%,description.ilike.%${safe}%,assigned_to.ilike.%${safe}%,team.ilike.%${safe}%`);
   }
 
   const { data, error } = await query;
@@ -93,6 +96,7 @@ export async function POST(request: Request) {
       title: String(body.title).trim(),
       description: str(body.description),
       assigned_to: str(body.assigned_to),
+      team: str(body.team),
       urgency,
       status,
       start_date: dateStr(body.start_date),
@@ -142,7 +146,7 @@ export async function POST(request: Request) {
  * Body: { id (req), ...campos editables }
  */
 const PATCHABLE = new Set<string>([
-  'title', 'description', 'assigned_to', 'urgency', 'status',
+  'title', 'description', 'assigned_to', 'team', 'urgency', 'status',
   'start_date', 'due_date', 'tags', 'project_id',
 ]);
 

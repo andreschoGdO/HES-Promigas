@@ -109,6 +109,7 @@ export async function POST(request: Request) {
           'due_date': 'due_date', 'vencimiento': 'due_date', 'fin': 'due_date', 'fecha_fin': 'due_date', 'deadline': 'due_date',
           'tags': 'tags', 'etiquetas': 'tags',
           'project_id': 'project_id',
+          'team': 'team', 'equipo': 'team', 'area': 'team', 'área': 'team',
         };
         return aliases[h] ?? h;
       };
@@ -149,6 +150,7 @@ export async function POST(request: Request) {
         title,
         description: r.description ? String(r.description).trim() || null : null,
         assigned_to: r.assigned_to ? String(r.assigned_to).trim() || null : null,
+        team: r.team ? String(r.team).trim() || null : null,
         urgency,
         status,
         start_date: r.start_date ? normalizeDate(String(r.start_date)) : null,

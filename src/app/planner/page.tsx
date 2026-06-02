@@ -15,6 +15,7 @@ interface PlannerTask {
   title: string;
   description: string | null;
   assigned_to: string | null;
+  team: string | null;
   urgency: Urgency;
   status: Status;
   start_date: string | null;
@@ -26,6 +27,21 @@ interface PlannerTask {
   updated_at: string;
   completed_at: string | null;
 }
+
+// Lista canónica de equipos. Texto libre en BD, pero el form sugiere estos.
+const TEAMS = ['Ingeniería', 'Operaciones', 'Construcción', 'Ventas', 'Innovación', 'Administración', 'Mantenimiento'] as const;
+type Team = (typeof TEAMS)[number] | string;
+
+const TEAM_COLORS: Record<string, string> = {
+  'Ingeniería':     '#8b5cf6',
+  'Operaciones':    '#f59e0b',
+  'Construcción':   '#0ea5e9',
+  'Ventas':         '#10b981',
+  'Innovación':     '#ec4899',
+  'Administración': '#64748b',
+  'Mantenimiento':  '#ef4444',
+};
+const teamColor = (t: string | null | undefined): string => (t && TEAM_COLORS[t]) || '#94a3b8';
 
 interface AppUser {
   id: string;
@@ -87,6 +103,7 @@ export default function PlannerPage() {
   const [filterUrgency, setFilterUrgency] = useState<Urgency | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<Status | 'all'>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('');
+  const [filterTeam, setFilterTeam] = useState<string>('');
   const [search, setSearch] = useState('');
 
   const load = async () => {
@@ -132,23 +149,32 @@ export default function PlannerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks, nameByEmail]);
 
+  // Lista de equipos únicos para el filtro: TEAMS canónicos + cualquier custom usado
+  const allTeams = useMemo(() => {
+    const set = new Set<string>(TEAMS);
+    for (const t of tasks) if (t.team) set.add(t.team);
+    return Array.from(set).sort();
+  }, [tasks]);
+
   // Aplicar filtros
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
       if (filterUrgency !== 'all' && t.urgency !== filterUrgency) return false;
       if (filterStatus !== 'all' && t.status !== filterStatus) return false;
       if (filterAssignee && t.assigned_to !== filterAssignee) return false;
+      if (filterTeam && t.team !== filterTeam) return false;
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const hit = (t.title?.toLowerCase().includes(q))
           || (t.description?.toLowerCase().includes(q))
           || (t.assigned_to?.toLowerCase().includes(q))
+          || (t.team?.toLowerCase().includes(q))
           || (t.tags ?? []).some((tg) => tg.toLowerCase().includes(q));
         if (!hit) return false;
       }
       return true;
     });
-  }, [tasks, filterUrgency, filterStatus, filterAssignee, search]);
+  }, [tasks, filterUrgency, filterStatus, filterAssignee, filterTeam, search]);
 
   // Stats
   const stats = useMemo(() => {
@@ -295,6 +321,13 @@ export default function PlannerPage() {
             </select>
           </div>
           <div style={{ width: 150, flexShrink: 0 }}>
+            <select value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)}
+              style={{ fontSize: '0.8rem', paddingTop: 5, paddingBottom: 5 }}>
+              <option value="">Equipo: todos</option>
+              {allTeams.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div style={{ width: 150, flexShrink: 0 }}>
             <select value={filterUrgency} onChange={(e) => setFilterUrgency(e.target.value as Urgency | 'all')}
               style={{ fontSize: '0.8rem', paddingTop: 5, paddingBottom: 5 }}>
               <option value="all">Urgencia: todas</option>
@@ -308,8 +341,8 @@ export default function PlannerPage() {
               {STATUS_ORDER.map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
             </select>
           </div>
-          {(filterUrgency !== 'all' || filterStatus !== 'all' || filterAssignee !== '' || search !== '') && (
-            <button onClick={() => { setFilterUrgency('all'); setFilterStatus('all'); setFilterAssignee(''); setSearch(''); }}
+          {(filterUrgency !== 'all' || filterStatus !== 'all' || filterAssignee !== '' || filterTeam !== '' || search !== '') && (
+            <button onClick={() => { setFilterUrgency('all'); setFilterStatus('all'); setFilterAssignee(''); setFilterTeam(''); setSearch(''); }}
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.74rem', padding: '2px 6px', whiteSpace: 'nowrap' }}>
               Limpiar · {filtered.length}/{tasks.length}
             </button>
@@ -537,10 +570,15 @@ function KanbanView({ tasks, onEdit, onStatusChange, displayAssignee }: {
                       </span>
                     )}
 
-                    {/* Tags */}
-                    {t.tags && t.tags.length > 0 && (
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {t.tags.slice(0, 4).map((tag) => (
+                    {/* Equipo + Tags */}
+                    {(t.team || (t.tags && t.tags.length > 0)) && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {t.team && (
+                          <span style={{ fontSize: '0.62rem', padding: '1px 6px', borderRadius: 6, background: teamColor(t.team) + '20', color: teamColor(t.team), fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                            {t.team}
+                          </span>
+                        )}
+                        {t.tags?.slice(0, 4).map((tag) => (
                           <span key={tag} style={{ fontSize: '0.62rem', padding: '1px 5px', borderRadius: 6, background: 'var(--bg-elevated)', color: 'var(--text-muted)' }}>
                             #{tag}
                           </span>
@@ -633,6 +671,7 @@ function TaskListView({ tasks, onEdit, onDelete, onCycleStatus, displayAssignee 
               <th style={{ width: 38 }}></th>
               <Th k="urgency" width={110}>Urgencia</Th>
               <Th k="title">Tarea</Th>
+              <th style={{ width: 130 }}>Equipo</th>
               <Th k="assignee" width={160}>Responsable</Th>
               <Th k="due_date" width={120}>Vencimiento</Th>
               <Th k="status" width={130}>Estado</Th>
@@ -674,6 +713,13 @@ function TaskListView({ tasks, onEdit, onDelete, onCycleStatus, displayAssignee 
                         </div>
                       )}
                     </div>
+                  </td>
+                  <td>
+                    {t.team ? (
+                      <span style={{ display: 'inline-block', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 10, background: teamColor(t.team) + '20', color: teamColor(t.team), fontWeight: 600 }}>
+                        {t.team}
+                      </span>
+                    ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                   </td>
                   <td style={{ fontSize: '0.82rem' }}>{t.assigned_to ? displayAssignee(t.assigned_to) : <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                   <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.8rem', color: overdue ? '#ef4444' : undefined, fontWeight: overdue ? 700 : 400 }}>
@@ -1120,6 +1166,15 @@ function TaskPreviewModal({ task, displayAssignee, onClose, onEdit, onDelete, on
           <span style={{ color: 'var(--text-muted)' }}>Responsable</span>
           <span>{task.assigned_to ? displayAssignee(task.assigned_to) : <em style={{ color: 'var(--text-muted)' }}>sin asignar</em>}</span>
 
+          <span style={{ color: 'var(--text-muted)' }}>Equipo</span>
+          <span>
+            {task.team ? (
+              <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, background: teamColor(task.team) + '20', color: teamColor(task.team), fontSize: '0.78rem', fontWeight: 600 }}>
+                {task.team}
+              </span>
+            ) : <em style={{ color: 'var(--text-muted)' }}>—</em>}
+          </span>
+
           <span style={{ color: 'var(--text-muted)' }}>Inicio</span>
           <span style={{ fontFamily: 'ui-monospace, monospace' }}>{task.start_date ?? '—'}</span>
 
@@ -1197,6 +1252,7 @@ function TaskFormModal({ mode, initial, users, onClose, onSaved, onDeleted }: {
     title: initial?.title ?? '',
     description: initial?.description ?? '',
     assigned_to: initial?.assigned_to ?? '',
+    team: initial?.team ?? '',
     urgency: initial?.urgency ?? ('medium' as Urgency),
     status: initial?.status ?? ('todo' as Status),
     start_date: initial?.start_date ?? '',
@@ -1221,6 +1277,7 @@ function TaskFormModal({ mode, initial, users, onClose, onSaved, onDeleted }: {
         title: form.title.trim(),
         description: form.description.trim() || null,
         assigned_to: form.assigned_to.trim() || null,
+        team: form.team.trim() || null,
         urgency: form.urgency,
         status: form.status,
         start_date: form.start_date || null,
@@ -1273,7 +1330,7 @@ function TaskFormModal({ mode, initial, users, onClose, onSaved, onDeleted }: {
           <textarea value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Contexto adicional (opcional)" rows={3} style={{ width: '100%', resize: 'vertical' }} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
           <div className="input-group" style={{ margin: 0 }}>
             <label className="input-label">Responsable</label>
             {users.length > 0 ? (
@@ -1298,6 +1355,18 @@ function TaskFormModal({ mode, initial, users, onClose, onSaved, onDeleted }: {
             ) : (
               <input value={form.assigned_to} onChange={(e) => set('assigned_to', e.target.value)} placeholder="email@dominio o nombre" />
             )}
+          </div>
+          <div className="input-group" style={{ margin: 0 }}>
+            <label className="input-label">Equipo</label>
+            <input
+              list="planner-team-list"
+              value={form.team}
+              onChange={(e) => set('team', e.target.value)}
+              placeholder="Seleccionar equipo o escribir otro"
+            />
+            <datalist id="planner-team-list">
+              {TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </datalist>
           </div>
           <div className="input-group" style={{ margin: 0 }}>
             <label className="input-label">Urgencia</label>

@@ -257,10 +257,27 @@ export default function PlannerPage() {
         <StatCard color="#64748b" label="Total"      value={stats.total} />
       </div>
 
-      {/* FILTROS — una sola fila, todo inline */}
-      <div className="glass-panel" style={{ marginTop: 10, padding: '8px 10px' }}>
+      {/* TOOLBAR — vistas + filtros en una sola fila */}
+      <div className="glass-panel" style={{ marginTop: 10, marginBottom: 10, padding: '8px 10px' }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 180 }}>
+          {/* View tabs */}
+          {([
+            { key: 'kanban' as const, label: 'Kanban', icon: LayoutGrid, color: '#ef4444' },
+            { key: 'lista' as const, label: 'Lista', icon: ListTodo, color: '#07c5a8' },
+            { key: 'gantt' as const, label: 'Gantt', icon: BarChartHorizontal, color: '#8b5cf6' },
+            { key: 'calendario' as const, label: 'Calendario', icon: CalendarIcon, color: '#f59e0b' },
+          ]).map((v) => (
+            <button key={v.key} onClick={() => setView(v.key)} className={`chip ${view === v.key ? 'active' : ''}`}
+              style={{ fontSize: '0.8rem', padding: '6px 10px', borderLeft: `3px solid ${v.color}`, display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+              <v.icon size={13} /> {v.label}
+            </button>
+          ))}
+
+          {/* Separador visual entre vistas y filtros */}
+          <div style={{ width: 1, height: 22, background: 'var(--border)', margin: '0 2px' }} />
+
+          {/* Filtros */}
+          <div style={{ position: 'relative', flex: '1 1 160px', minWidth: 140 }}>
             <Search size={12} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', zIndex: 1 }} />
             <input
               type="text"
@@ -270,21 +287,21 @@ export default function PlannerPage() {
               style={{ paddingLeft: 26, paddingTop: 5, paddingBottom: 5, fontSize: '0.8rem' }}
             />
           </div>
-          <div style={{ width: 200, flexShrink: 0 }}>
+          <div style={{ width: 180, flexShrink: 0 }}>
             <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}
               style={{ fontSize: '0.8rem', paddingTop: 5, paddingBottom: 5 }}>
               <option value="">Todos los responsables</option>
               {assignees.map((a) => <option key={a} value={a}>{displayAssignee(a)}</option>)}
             </select>
           </div>
-          <div style={{ width: 170, flexShrink: 0 }}>
+          <div style={{ width: 150, flexShrink: 0 }}>
             <select value={filterUrgency} onChange={(e) => setFilterUrgency(e.target.value as Urgency | 'all')}
               style={{ fontSize: '0.8rem', paddingTop: 5, paddingBottom: 5 }}>
               <option value="all">Urgencia: todas</option>
               {URGENCY_ORDER.map((u) => <option key={u} value={u}>{URGENCY_META[u].label}</option>)}
             </select>
           </div>
-          <div style={{ width: 170, flexShrink: 0 }}>
+          <div style={{ width: 150, flexShrink: 0 }}>
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as Status | 'all')}
               style={{ fontSize: '0.8rem', paddingTop: 5, paddingBottom: 5 }}>
               <option value="all">Estado: todos</option>
@@ -298,21 +315,6 @@ export default function PlannerPage() {
             </button>
           )}
         </div>
-      </div>
-
-      {/* VIEW TABS */}
-      <div style={{ display: 'flex', gap: 6, marginTop: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-        {([
-          { key: 'kanban' as const, label: 'Kanban', icon: LayoutGrid, color: '#ef4444' },
-          { key: 'lista' as const, label: 'Lista', icon: ListTodo, color: '#07c5a8' },
-          { key: 'gantt' as const, label: 'Gantt', icon: BarChartHorizontal, color: '#8b5cf6' },
-          { key: 'calendario' as const, label: 'Calendario', icon: CalendarIcon, color: '#f59e0b' },
-        ]).map((v) => (
-          <button key={v.key} onClick={() => setView(v.key)} className={`chip ${view === v.key ? 'active' : ''}`}
-            style={{ fontSize: '0.8rem', padding: '6px 10px', borderLeft: `3px solid ${v.color}`, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <v.icon size={13} /> {v.label}
-          </button>
-        ))}
       </div>
 
       {/* VIEW CONTENT */}

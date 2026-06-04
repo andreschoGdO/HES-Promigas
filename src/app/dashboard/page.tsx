@@ -284,14 +284,78 @@ function SliceDonut({ slices, total }: { slices: Slice[]; total: number }) {
 }
 
 /** Visualizador del diccionario de variables (columna ↔ key Metrum + descripción) */
-function VariablesDictionary({ keys, title = 'Diccionario de variables' }: { keys?: string[]; title?: string }) {
-  const [open, setOpen] = useState(false);
-  const list: VariableMeta[] = useMemo(() => {
-    if (!keys || keys.length === 0) return VARIABLES;
-    return keys.map((k) => findVariable(k)).filter(Boolean) as VariableMeta[];
-  }, [keys]);
+// Clasificación de variables para filtros del diccionario.
+// equipo: en qué equipo "vive" la variable; marca: específica de una marca o agnóstica.
+type DictEquipo = 'medidor' | 'inversor' | 'bateria' | 'casa' | 'atributo';
+type DictMarca = 'Livoltek' | 'DEYE' | 'ambas';
 
-  if (list.length === 0) return null;
+const _METER_KEYS = new Set(['CenergyAI', 'CenergyAE', 'CenergyRI', 'CenergyRE', 'energyAI', 'energyRI', 'currentA', 'currentB', 'currentC', 'powerAI', 'powerRI']);
+const _BATTERY_KEYS = new Set(['Pbat', 'Pcharge', 'Pdischarge', 'Vbat', 'Ibat', 'Tbat', 'BattCycles', 'BattPower', 'BattCur', 'BattVolt', 'BattSOC', 'BattSOH', 'BattTemp', 'BattSn', 'TLBattSOC']);
+const _BATTERY_PREFIX = ['Batt'];
+const _CASA_KEYS = new Set(['generacion_wh', 'importacion_wh', 'excedentes_wh', 'demanda_wh', 'gen_dem_pct', 'exc_gen_pct', 'imp_dem_pct', 'yield_real', 'desempeno_pct', 'imax_a', 'potencia_kw']);
+const _ATTR_KEYS = new Set(['spcus', 'gateway', 'mettype', 'active', 'zone', 'city', 'dept', 'latDev', 'lonDev', 'invbrand', 'invmodel', 'invcap', 'invarray', 'invtype']);
+
+function classifyVariable(v: VariableMeta): { equipo: DictEquipo; marca: DictMarca } {
+  const k = v.key;
+  // Marca por sufijo
+  let marca: DictMarca = 'ambas';
+  if (k.endsWith('_LV')) marca = 'Livoltek';
+  else if (k.endsWith('_DY')) marca = 'DEYE';
+
+  // Equipo
+  if (_BATTERY_KEYS.has(k) || _BATTERY_PREFIX.some((p) => k.startsWith(p))) return { equipo: 'bateria', marca };
+  if (_METER_KEYS.has(k)) return { equipo: 'medidor', marca };
+  if (_CASA_KEYS.has(k)) return { equipo: 'casa', marca };
+  if (_ATTR_KEYS.has(k)) return { equipo: 'atributo', marca };
+  // Resto = inversor (cubre powerAEg, powerAPg, voltGridA/B/C, energyED/PD, frequency, invstate, etc.
+  //                  + las keys especulativas Ppv1/2/3, Pac, etc. + Ppv_estimado derivada)
+  return { equipo: 'inversor', marca };
+}
+
+const EQUIPO_META: Record<DictEquipo, { label: string; color: string }> = {
+  medidor:   { label: 'Medidor',   color: '#3b82f6' },
+  inversor:  { label: 'Inversor',  color: '#8b5cf6' },
+  bateria:   { label: 'Batería',   color: '#10b981' },
+  casa:      { label: 'Casa (agregado)', color: '#f59e0b' },
+  atributo:  { label: 'Atributo',  color: '#64748b' },
+};
+const MARCA_META: Record<DictMarca, { label: string; color: string }> = {
+  Livoltek: { label: 'Livoltek', color: '#0ea5e9' },
+  DEYE:     { label: 'DEYE',     color: '#ec4899' },
+  ambas:    { label: 'Genérica', color: '#94a3b8' },
+};
+
+function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }: { keys?: string[]; title?: string }) {
+  const [open, setOpen] = useState(false);
+  const [filterEquipo, setFilterEquipo] = useState<DictEquipo | 'all'>('all');
+  const [filterMarca, setFilterMarca] = useState<DictMarca | 'all'>('all');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 10;
+
+  // Anotar todas las variables con su clasificación
+  const annotated = useMemo(() => VARIABLES.map((v) => ({ ...v, ...classifyVariable(v) })), []);
+
+  // Aplicar filtros
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return annotated.filter((v) => {
+      if (filterEquipo !== 'all' && v.equipo !== filterEquipo) return false;
+      if (filterMarca !== 'all' && v.marca !== filterMarca) return false;
+      if (q) {
+        const hit = v.key.toLowerCase().includes(q) || v.label.toLowerCase().includes(q) || v.description.toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      return true;
+    });
+  }, [annotated, filterEquipo, filterMarca, search]);
+
+  // Reset page on filter change
+  useEffect(() => { setPage(0); }, [filterEquipo, filterMarca, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const visible = filtered.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
 
   return (
     <div className="glass-panel" style={{ padding: 0 }}>
@@ -301,40 +365,117 @@ function VariablesDictionary({ keys, title = 'Diccionario de variables' }: { key
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem', fontWeight: 600 }}>
           <BookOpen size={16} style={{ color: 'var(--accent)' }} />
-          {title} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({list.length} variables)</span>
+          {title} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({annotated.length} variables)</span>
         </span>
         {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
       {open && (
-        <div style={{ borderTop: '1px solid var(--border)', overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '0.78rem' }}>
-            <thead style={{ background: 'var(--bg-elevated)' }}>
-              <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                <th style={{ padding: '8px 14px' }}>Columna / UI</th>
-                <th style={{ padding: '8px 14px' }}>Key Metrum</th>
-                <th style={{ padding: '8px 14px' }}>Unidad</th>
-                <th style={{ padding: '8px 14px' }}>Origen</th>
-                <th style={{ padding: '8px 14px' }}>Categoría</th>
-                <th style={{ padding: '8px 14px' }}>Descripción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((v) => (
-                <tr key={v.key} style={{ borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '6px 14px', fontWeight: 600 }}>{v.label}</td>
-                  <td style={{ padding: '6px 14px', fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--accent)' }}>{v.key}</td>
-                  <td style={{ padding: '6px 14px', color: 'var(--text-secondary)' }}>{v.unit || '—'}</td>
-                  <td style={{ padding: '6px 14px' }}>
-                    <span style={{ fontSize: '0.68rem', padding: '1px 8px', borderRadius: 10, background: v.source === 'derived' ? '#07c5a820' : v.source === 'metrum' ? '#3b82f620' : '#94a3b820', color: v.source === 'derived' ? '#07c5a8' : v.source === 'metrum' ? '#3b82f6' : '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>
-                      {v.source}
-                    </span>
-                  </td>
-                  <td style={{ padding: '6px 14px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{v.category}</td>
-                  <td style={{ padding: '6px 14px', color: 'var(--text-secondary)', fontSize: '0.74rem' }}>{v.description}</td>
+        <div style={{ borderTop: '1px solid var(--border)' }}>
+          {/* Filtros */}
+          <div style={{ padding: '12px 18px', display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+            <div>
+              <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>Tipo de equipo</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <button onClick={() => setFilterEquipo('all')} className={`chip ${filterEquipo === 'all' ? 'active' : ''}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>Todos</button>
+                {(Object.keys(EQUIPO_META) as DictEquipo[]).map((e) => (
+                  <button key={e} onClick={() => setFilterEquipo(e)} className={`chip ${filterEquipo === e ? 'active' : ''}`}
+                    style={{ fontSize: '0.7rem', padding: '2px 8px', borderLeft: `3px solid ${EQUIPO_META[e].color}` }}>
+                    {EQUIPO_META[e].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>Marca</div>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <button onClick={() => setFilterMarca('all')} className={`chip ${filterMarca === 'all' ? 'active' : ''}`} style={{ fontSize: '0.7rem', padding: '2px 8px' }}>Todas</button>
+                {(Object.keys(MARCA_META) as DictMarca[]).map((m) => (
+                  <button key={m} onClick={() => setFilterMarca(m)} className={`chip ${filterMarca === m ? 'active' : ''}`}
+                    style={{ fontSize: '0.7rem', padding: '2px 8px', borderLeft: `3px solid ${MARCA_META[m].color}` }}>
+                    {MARCA_META[m].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ flex: '1 1 200px', minWidth: 180 }}>
+              <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>Buscar</div>
+              <input
+                type="text"
+                placeholder="key, label o descripción…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ fontSize: '0.78rem', padding: '4px 8px' }}
+              />
+            </div>
+          </div>
+
+          {/* Tabla con paginación */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '0.78rem' }}>
+              <thead style={{ background: 'var(--bg-elevated)' }}>
+                <tr style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <th style={{ padding: '8px 14px' }}>Equipo</th>
+                  <th style={{ padding: '8px 14px' }}>Marca</th>
+                  <th style={{ padding: '8px 14px' }}>Columna / UI</th>
+                  <th style={{ padding: '8px 14px' }}>Key Metrum</th>
+                  <th style={{ padding: '8px 14px' }}>Unidad</th>
+                  <th style={{ padding: '8px 14px' }}>Categoría</th>
+                  <th style={{ padding: '8px 14px' }}>Descripción</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.length === 0 ? (
+                  <tr><td colSpan={7} style={{ padding: 18, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>Ninguna variable coincide con los filtros</td></tr>
+                ) : visible.map((v) => (
+                  <tr key={v.key} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: '6px 14px' }}>
+                      <span style={{ fontSize: '0.66rem', padding: '1px 6px', borderRadius: 8, background: EQUIPO_META[v.equipo].color + '20', color: EQUIPO_META[v.equipo].color, fontWeight: 600 }}>
+                        {EQUIPO_META[v.equipo].label}
+                      </span>
+                    </td>
+                    <td style={{ padding: '6px 14px' }}>
+                      <span style={{ fontSize: '0.66rem', padding: '1px 6px', borderRadius: 8, background: MARCA_META[v.marca].color + '20', color: MARCA_META[v.marca].color, fontWeight: 600 }}>
+                        {MARCA_META[v.marca].label}
+                      </span>
+                    </td>
+                    <td style={{ padding: '6px 14px', fontWeight: 600 }}>{v.label}</td>
+                    <td style={{ padding: '6px 14px', fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--accent)' }}>{v.key}</td>
+                    <td style={{ padding: '6px 14px', color: 'var(--text-secondary)' }}>{v.unit || '—'}</td>
+                    <td style={{ padding: '6px 14px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{v.category}</td>
+                    <td style={{ padding: '6px 14px', color: 'var(--text-secondary)', fontSize: '0.74rem', maxWidth: 480, whiteSpace: 'pre-wrap' }}>{v.description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Paginador */}
+          {filtered.length > 0 && (
+            <div style={{ padding: '10px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', background: 'var(--bg-elevated)', flexWrap: 'wrap', gap: 8 }}>
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                Mostrando {currentPage * PAGE_SIZE + 1}-{Math.min((currentPage + 1) * PAGE_SIZE, filtered.length)} de {filtered.length} variables
+              </span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => setPage(Math.max(0, currentPage - 1))}
+                  disabled={currentPage === 0}
+                  className="chip"
+                  style={{ fontSize: '0.74rem', padding: '4px 10px', opacity: currentPage === 0 ? 0.4 : 1 }}>
+                  ← Anterior
+                </button>
+                <span style={{ alignSelf: 'center', fontSize: '0.74rem', color: 'var(--text-secondary)', padding: '0 6px' }}>
+                  Página {currentPage + 1} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setPage(Math.min(totalPages - 1, currentPage + 1))}
+                  disabled={currentPage >= totalPages - 1}
+                  className="chip"
+                  style={{ fontSize: '0.74rem', padding: '4px 10px', opacity: currentPage >= totalPages - 1 ? 0.4 : 1 }}>
+                  Siguiente →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

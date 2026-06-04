@@ -254,7 +254,6 @@ const filterByType = (devices: DeviceOption[], typeFilter: TypeFilter): DeviceOp
 type Agg = 'NONE' | 'AVG' | 'MIN' | 'MAX' | 'SUM' | 'COUNT';
 interface IntervalPreset { label: string; ms: number | null; }
 const PRESETS: IntervalPreset[] = [
-  { label: 'Crudo', ms: null },
   { label: '15 min', ms: 15 * 60 * 1000 },
   { label: '1 hora', ms: 60 * 60 * 1000 },
   { label: '1 día', ms: 24 * 60 * 60 * 1000 },
@@ -297,21 +296,24 @@ const _BATTERY_PREFIX = ['Batt'];
 const _CASA_KEYS = new Set(['generacion_wh', 'importacion_wh', 'excedentes_wh', 'demanda_wh', 'gen_dem_pct', 'exc_gen_pct', 'imp_dem_pct', 'yield_real', 'desempeno_pct', 'imax_a', 'potencia_kw']);
 const _ATTR_KEYS = new Set(['spcus', 'gateway', 'mettype', 'active', 'zone', 'city', 'dept', 'latDev', 'lonDev', 'invbrand', 'invmodel', 'invcap', 'invarray', 'invtype']);
 
-function classifyVariable(v: VariableMeta): { equipo: DictEquipo; marca: DictMarca } {
+// Keys compartidas entre medidor e inversor (mismo nombre en Metrum, distinto device físico)
+const _SHARED_METER_INVERTER = new Set(['currentA', 'currentB', 'currentC', 'CenergyAE', 'CenergyAI', 'CenergyRI', 'CenergyRE', 'frequency']);
+
+function classifyVariable(v: VariableMeta): { equipos: DictEquipo[]; marca: DictMarca } {
   const k = v.key;
   // Marca por sufijo
   let marca: DictMarca = 'ambas';
   if (k.endsWith('_LV')) marca = 'Livoltek';
   else if (k.endsWith('_DY')) marca = 'DEYE';
 
-  // Equipo
-  if (_BATTERY_KEYS.has(k) || _BATTERY_PREFIX.some((p) => k.startsWith(p))) return { equipo: 'bateria', marca };
-  if (_METER_KEYS.has(k)) return { equipo: 'medidor', marca };
-  if (_CASA_KEYS.has(k)) return { equipo: 'casa', marca };
-  if (_ATTR_KEYS.has(k)) return { equipo: 'atributo', marca };
-  // Resto = inversor (cubre powerAEg, powerAPg, voltGridA/B/C, energyED/PD, frequency, invstate, etc.
-  //                  + las keys especulativas Ppv1/2/3, Pac, etc. + Ppv_estimado derivada)
-  return { equipo: 'inversor', marca };
+  // Equipo (puede ser múltiple para keys compartidas)
+  if (_BATTERY_KEYS.has(k) || _BATTERY_PREFIX.some((p) => k.startsWith(p))) return { equipos: ['bateria'], marca };
+  if (_SHARED_METER_INVERTER.has(k)) return { equipos: ['medidor', 'inversor'], marca };
+  if (_METER_KEYS.has(k)) return { equipos: ['medidor'], marca };
+  if (_CASA_KEYS.has(k)) return { equipos: ['casa'], marca };
+  if (_ATTR_KEYS.has(k)) return { equipos: ['atributo'], marca };
+  // Resto = inversor (powerAEg, voltGridA, energyED, etc. + keys especulativas + Pdc_estimado)
+  return { equipos: ['inversor'], marca };
 }
 
 const EQUIPO_META: Record<DictEquipo, { label: string; color: string }> = {
@@ -342,7 +344,7 @@ function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return annotated.filter((v) => {
-      if (filterEquipo !== 'all' && v.equipo !== filterEquipo) return false;
+      if (filterEquipo !== 'all' && !v.equipos.includes(filterEquipo)) return false;
       if (filterMarca !== 'all' && v.marca !== filterMarca) return false;
       if (q) {
         const hit = v.key.toLowerCase().includes(q) || v.label.toLowerCase().includes(q) || v.description.toLowerCase().includes(q);
@@ -431,8 +433,12 @@ function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }
                 ) : visible.map((v) => (
                   <tr key={v.key} style={{ borderTop: '1px solid var(--border)' }}>
                     <td style={{ padding: '6px 14px' }}>
-                      <span style={{ fontSize: '0.66rem', padding: '1px 6px', borderRadius: 8, background: EQUIPO_META[v.equipo].color + '20', color: EQUIPO_META[v.equipo].color, fontWeight: 600 }}>
-                        {EQUIPO_META[v.equipo].label}
+                      <span style={{ display: 'inline-flex', gap: 4, flexWrap: 'wrap' }}>
+                        {v.equipos.map((e) => (
+                          <span key={e} style={{ fontSize: '0.66rem', padding: '1px 6px', borderRadius: 8, background: EQUIPO_META[e].color + '20', color: EQUIPO_META[e].color, fontWeight: 600 }}>
+                            {EQUIPO_META[e].label}
+                          </span>
+                        ))}
                       </span>
                     </td>
                     <td style={{ padding: '6px 14px' }}>
@@ -1606,7 +1612,14 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                               <YAxis
                                 stroke="var(--text-muted)" fontSize={11}
                                 domain={[cfg.yMin ?? 'auto', cfg.yMax ?? 'auto']}
-                                label={cfg.yLabel ? { value: cfg.yLabel, angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'var(--text-muted)' } } : undefined}
+                                label={(() => {
+                                  // Etiqueta del eje Y: prioridad al texto custom, sino unidad inferida de las series
+                                  if (cfg.yLabel) return { value: cfg.yLabel, angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'var(--text-muted)' } };
+                                  const units = Array.from(new Set(series.map((s) => findVariable(s.baseKey)?.unit).filter((u): u is string => !!u)));
+                                  if (units.length === 0) return undefined;
+                                  const autoLabel = units.length === 1 ? units[0] : units.join(' / ');
+                                  return { value: autoLabel, angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'var(--text-muted)' } };
+                                })()}
                               />
                               <Tooltip
                                 labelFormatter={(v) => new Date(Number(v)).toLocaleString('es-CO')}

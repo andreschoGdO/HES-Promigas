@@ -200,6 +200,28 @@ const dateStr = (d: Date) => d.toISOString().slice(0, 10);
 // es (Medidor RED / Medidor SOLAR / Inversor marca / Pulsar) además del nombre,
 // para que cuando una casa tiene varios equipos del mismo tipo nominal el
 // usuario distinga cuál está eligiendo.
+// ─── Keys calculadas (virtuales) ───────────────────────────────────────────
+// Estas keys NO existen en Metrum; se computan en el frontend a partir de las
+// keys reales que sí trae el inversor. Aparecen en la lista de "Keys disponibles"
+// solo si TODAS las dependencias existen para ese device específico.
+// Las descripciones (qué son, cómo se calculan, limitaciones) viven en
+// `variables-dict.ts` — aquí solo definimos las dependencias y la fórmula.
+interface DerivedKeyMeta {
+  deps: string[];
+  compute: (vals: Record<string, number>) => number;
+  appliesToInverter: boolean;
+}
+const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
+  Ppv_estimado: {
+    deps: ['powerAPg', 'BattPower'],
+    // Ppv ≈ AC out − Batt (positivo cuando descarga, negativo cuando carga)
+    compute: (v) => (v.powerAPg ?? 0) - (v.BattPower ?? 0),
+    appliesToInverter: true,
+  },
+};
+const isDerivedKey = (k: string): boolean => Object.prototype.hasOwnProperty.call(DERIVED_KEYS, k);
+const DERIVED_KEY_LIST = Object.keys(DERIVED_KEYS);
+
 const deviceLabel = (d: DeviceOption) => {
   const t = (d.type ?? '').toLowerCase();
   let tag = '';
@@ -744,9 +766,17 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         if (!dev) return;
         const devKeys = selectedKeysByDevice[devId];
         if (!devKeys || devKeys.size === 0) return; // este device no tiene keys seleccionadas, skip
+        // Expandir keys derivadas a sus dependencias antes de pedir a Metrum
+        // (las keys virtuales como Ppv_estimado se calculan después en chartData).
+        const toFetch = new Set<string>();
+        for (const k of devKeys) {
+          if (isDerivedKey(k)) DERIVED_KEYS[k].deps.forEach((d) => toFetch.add(d));
+          else toFetch.add(k);
+        }
+        if (toFetch.size === 0) return;
         const params = new URLSearchParams({
           metrumId: dev.metrum_id,
-          keys: Array.from(devKeys).join(','),
+          keys: Array.from(toFetch).join(','),
           startTs: String(startTs),
           endTs: String(endTs),
           agg: preset.ms === null ? 'NONE' : agg,
@@ -932,6 +962,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
 
   const chartData = useMemo(() => {
     const byTs = new Map<number, Record<string, number | null>>();
+    // 1) Volcar todas las keys crudas que vinieron de Metrum
     for (const [devId, byKey] of Object.entries(granData)) {
       for (const [key, points] of Object.entries(byKey)) {
         const seriesKey = `${devId}__${key}`;
@@ -943,8 +974,27 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         }
       }
     }
+    // 2) Calcular keys derivadas (virtuales) por device, donde el usuario las pidió
+    //    y todas las deps existen en granData. Se inyectan al mismo row del timestamp.
+    for (const [devId, selectedSet] of Object.entries(selectedKeysByDevice)) {
+      for (const k of selectedSet) {
+        if (!isDerivedKey(k)) continue;
+        const meta = DERIVED_KEYS[k];
+        const seriesKey = `${devId}__${k}`;
+        for (const [, row] of byTs) {
+          const vals: Record<string, number> = {};
+          let allPresent = true;
+          for (const dep of meta.deps) {
+            const v = row[`${devId}__${dep}`];
+            if (v === null || v === undefined || !Number.isFinite(v)) { allPresent = false; break; }
+            vals[dep] = v;
+          }
+          row[seriesKey] = allPresent ? meta.compute(vals) : null;
+        }
+      }
+    }
     return Array.from(byTs.entries()).map(([ts, vals]) => ({ ts, ...vals })).sort((a, b) => a.ts - b.ts);
-  }, [granData]);
+  }, [granData, selectedKeysByDevice]);
 
   // Agregación diaria (min/avg/max) por device+key
   const dailyData = useMemo(() => {
@@ -1250,7 +1300,16 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {granularDevicesMeta.map((dev) => {
-                  const devKeys = keysByDevice[dev.id] ?? [];
+                  const rawKeys = keysByDevice[dev.id] ?? [];
+                  const rawKeySet = new Set(rawKeys);
+                  // Inyectar keys derivadas que aplican a este device si todas sus deps existen
+                  const isInv = (dev.type ?? '').toLowerCase() === 'inverter';
+                  const derivedAvailable = DERIVED_KEY_LIST.filter((dk) => {
+                    const meta = DERIVED_KEYS[dk];
+                    if (meta.appliesToInverter && !isInv) return false;
+                    return meta.deps.every((d) => rawKeySet.has(d));
+                  });
+                  const devKeys = [...derivedAvailable, ...rawKeys];
                   const devSelected = selectedKeysByDevice[dev.id] ?? new Set<string>();
                   const devLabel = deviceLabel(dev);
                   return (
@@ -1281,13 +1340,21 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                         </p>
                       ) : (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 140, overflowY: 'auto' }}>
-                          {devKeys.map((k) => (
-                            <button key={k} onClick={() => toggleDeviceKey(dev.id, k)}
-                              className={`chip ${devSelected.has(k) ? 'active' : ''}`}
-                              style={{ fontSize: '0.72rem' }}>
-                              {k}
-                            </button>
-                          ))}
+                          {devKeys.map((k) => {
+                            const derived = isDerivedKey(k);
+                            return (
+                              <button key={k} onClick={() => toggleDeviceKey(dev.id, k)}
+                                className={`chip ${devSelected.has(k) ? 'active' : ''}`}
+                                title={derived ? 'Key calculada (estimación, no medición directa)' : undefined}
+                                style={{
+                                  fontSize: '0.72rem',
+                                  fontStyle: derived ? 'italic' : undefined,
+                                  borderLeft: derived ? '3px solid #f59e0b' : undefined,
+                                }}>
+                                {derived ? `ƒ ${k}` : k}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

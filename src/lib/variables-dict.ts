@@ -581,6 +581,27 @@ export const VARIABLES: VariableMeta[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════
+  //  KEYS CALCULADAS (estimadas en frontend, no vienen de Metrum directo)
+  //  Aparecen en "Keys disponibles" de Granular SOLO cuando los inversores
+  //  exponen todas sus dependencias.
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    key: 'Ppv_estimado', label: 'Potencia DC ESTIMADA (paneles)', unit: 'W',
+    category: 'energia', source: 'derived',
+    description:
+      'Estimación de la potencia DC que están entregando los paneles solares — NO es medición directa. ' +
+      'Se calcula en el frontend como: Ppv_estimado = powerAPg − BattPower. ' +
+      'Idea física: lo que sale del inversor a AC (powerAPg) menos lo que viene/va a batería (BattPower) es aproximadamente lo que entró desde los paneles. ' +
+      'Convención de BattPower: negativo = cargando batería (resta de la salida AC), positivo = descargando (suma a la salida AC). ' +
+      '\n\nLIMITACIONES (lo que NO captura):\n' +
+      '  • Pérdidas de conversión del inversor (~3-5%) → la estimación queda subestimada por ese margen.\n' +
+      '  • Pérdidas internas de la batería (calor durante carga) → ídem.\n' +
+      '  • Asume convención de signos constante; si el inversor cambia de modo (isla, falla) la estimación puede salir invertida.\n' +
+      '\nÚSALA PARA: ver la forma de la curva solar, detectar caídas anómalas (sombra, sucio, falla), comparar generación relativa entre casas.\n' +
+      'NO LA USES PARA: reportes regulatorios, auditorías de kWh exactos, análisis por string (las marcas no exponen DC por string en Metrum).',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
   //  KEYS GENÉRICAS DE INVERSOR — Ppv*, Vpv*, Ipv*, Pac, etc.
   //  NOTA: Estos NOMBRES NO los expone ni Livoltek HP3 ni DEYE SUN-SG01HP3 a
   //  Metrum (verificado en piloto Promigas). Se mantienen catalogados porque:

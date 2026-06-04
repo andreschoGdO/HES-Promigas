@@ -710,6 +710,48 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const [agg, setAgg] = useState<Agg>('AVG');
   // Multi-device: el usuario puede graficar varios devices a la vez en la sección granular
   const [granularDeviceIds, setGranularDeviceIds] = useState<Set<string>>(new Set());
+
+  // ── Vistas guardadas (compartidas entre usuarios) ──────────────────────
+  interface GranularViewConfig {
+    devices: string[];
+    keysByDevice: Record<string, string[]>;
+    intervalLabel: string;
+    agg: Agg;
+    typeFilter: TypeFilter;
+    selectedLocation: string;
+    startDate?: string;
+    endDate?: string;
+    chartsState?: Array<{ id: string; title: string; seriesIncluded: 'all' | string[]; yMin?: number; yMax?: number; yLabel?: string }>;
+  }
+  interface SavedView {
+    id: string;
+    name: string;
+    created_at: string;
+    created_by?: string;
+    config: GranularViewConfig;
+  }
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [savedViewsLoading, setSavedViewsLoading] = useState(false);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSavedViewsLoading(true);
+    fetch('/api/settings/granular-views')
+      .then((r) => r.json())
+      .then((j) => setSavedViews(Array.isArray(j.views) ? j.views : []))
+      .catch(() => {})
+      .finally(() => setSavedViewsLoading(false));
+  }, []);
+
+  const persistViews = async (next: SavedView[]) => {
+    setSavedViews(next);
+    try {
+      await fetch('/api/settings/granular-views', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ views: next }),
+      });
+    } catch { /* fire-and-forget; el estado local ya está actualizado */ }
+  };
   // Para diccionario y stats agregados de keys disponibles (union de todos los devices seleccionados)
   const allKeys = useMemo<string[]>(() => {
     const s = new Set<string>();
@@ -1405,6 +1447,93 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           >
             <Play size={14} /> {granLoading ? 'Cargando...' : 'Consultar'}
           </button>
+        </div>
+
+        {/* Panel de Vistas guardadas — global para todo el equipo */}
+        <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vistas guardadas</span>
+            {savedViewsLoading ? (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>cargando…</span>
+            ) : savedViews.length === 0 ? (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin vistas guardadas — crea la primera con &quot;Guardar vista actual&quot;</span>
+            ) : (
+              savedViews.map((v) => (
+                <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                  <button
+                    onClick={() => {
+                      // APLICAR la vista guardada al estado actual
+                      setTypeFilter(v.config.typeFilter);
+                      setSelectedLocation(v.config.selectedLocation);
+                      setGranularDeviceIds(new Set(v.config.devices));
+                      setSelectedKeysByDevice(Object.fromEntries(Object.entries(v.config.keysByDevice).map(([devId, keys]) => [devId, new Set(keys)])));
+                      setIntervalLabel(v.config.intervalLabel);
+                      setAgg(v.config.agg);
+                      if (v.config.startDate) setStartDate(v.config.startDate);
+                      if (v.config.endDate) setEndDate(v.config.endDate);
+                      if (v.config.chartsState) {
+                        setCharts(v.config.chartsState.map((c) => ({
+                          id: c.id, title: c.title,
+                          seriesIncluded: c.seriesIncluded === 'all' ? 'all' : new Set(c.seriesIncluded),
+                          yMin: c.yMin, yMax: c.yMax, yLabel: c.yLabel,
+                        })));
+                      }
+                      setActiveViewId(v.id);
+                    }}
+                    className={`chip ${activeViewId === v.id ? 'active' : ''}`}
+                    style={{ fontSize: '0.74rem', padding: '4px 10px' }}
+                    title={`Aplicar vista &quot;${v.name}&quot; (creada ${new Date(v.created_at).toLocaleDateString('es-CO')}${v.created_by ? ' por ' + v.created_by : ''})`}
+                  >
+                    {v.name}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!confirm(`¿Eliminar la vista &quot;${v.name}&quot;? Se borra para todos los usuarios.`)) return;
+                      void persistViews(savedViews.filter((x) => x.id !== v.id));
+                      if (activeViewId === v.id) setActiveViewId(null);
+                    }}
+                    title="Eliminar vista"
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.8rem', padding: '0 4px', lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+            )}
+            <button
+              onClick={() => {
+                const name = prompt('Nombre para esta vista (ej. "Casa 42 — voltajes diarios"):');
+                if (!name || !name.trim()) return;
+                const newView: SavedView = {
+                  id: `view-${Date.now()}`,
+                  name: name.trim(),
+                  created_at: new Date().toISOString(),
+                  config: {
+                    devices: Array.from(granularDeviceIds),
+                    keysByDevice: Object.fromEntries(Object.entries(selectedKeysByDevice).map(([devId, set]) => [devId, Array.from(set)])),
+                    intervalLabel,
+                    agg,
+                    typeFilter,
+                    selectedLocation,
+                    startDate, endDate,
+                    chartsState: charts.map((c) => ({
+                      id: c.id, title: c.title,
+                      seriesIncluded: c.seriesIncluded === 'all' ? 'all' : Array.from(c.seriesIncluded),
+                      yMin: c.yMin, yMax: c.yMax, yLabel: c.yLabel,
+                    })),
+                  },
+                };
+                void persistViews([...savedViews, newView]);
+                setActiveViewId(newView.id);
+              }}
+              disabled={granularDeviceIds.size === 0 || totalSelectedKeysCount === 0}
+              className="secondary-btn"
+              style={{ marginLeft: 'auto', fontSize: '0.74rem', padding: '4px 10px' }}
+              title={granularDeviceIds.size === 0 || totalSelectedKeysCount === 0 ? 'Selecciona devices y keys antes de guardar' : 'Guardar la configuración actual como vista reutilizable'}
+            >
+              + Guardar vista actual
+            </button>
+          </div>
         </div>
 
         {granularDeviceIds.size > 0 && (

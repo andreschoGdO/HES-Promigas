@@ -61,11 +61,13 @@ export async function GET() {
 
         // Tipo: priorizar mettype (atributo real), luego type entityField
         // Para inversores que no tienen mettype: usar 'inverter' si patrón de nombre coincide
+        // Si nada matchea, cae a 'pulsar' (modem/gateway) — es lo más probable según el inventario
+        // del piloto: todo lo que no es inversor ni medidor termina siendo gateway.
         let type = pick(e, ['mettype', 'type', 'deviceType', 'tipo']);
         if (!type || type === 'unknown') {
           if (/^IN\d+/i.test(name)) type = 'pulsar';
           else if (nameMatchesInverter(name)) type = 'inverter';
-          else type = 'unknown';
+          else type = 'pulsar';
         }
 
         // Casa/cliente: el atributo real es `spcus` ("Casa 2", "Casa 23p")

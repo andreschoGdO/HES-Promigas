@@ -61,15 +61,18 @@ export async function GET(request: Request) {
     const { data: devices, error } = await q;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!devices || devices.length === 0) {
-      // Fallback: traer todos los activos y dejar que el caller filtre, mostrando qué hay
-      const { data: all } = await supabaseAdmin.from('devices').select('type, marca').eq('is_active', true);
+      // Fallback: listar todo lo que existe en BD (sin filtro is_active) para que el caller vea por qué
+      const { data: all } = await supabaseAdmin.from('devices').select('type, marca, is_active');
       const types = Array.from(new Set((all ?? []).map((d) => d.type ?? '(null)')));
       const brands = Array.from(new Set((all ?? []).map((d) => d.marca ?? '(null)')));
+      const sampleNames = (all ?? []).slice(0, 5).map((d) => `${d.type}/${d.marca ?? 'null'} (active=${d.is_active})`);
       return NextResponse.json({
         error: `No se encontraron devices que matchen filtros`,
         filters_tried: { type, brand, name },
         available_types_in_db: types,
         available_brands_in_db: brands,
+        sample_first_5: sampleNames,
+        total_devices_in_db: (all ?? []).length,
       }, { status: 404 });
     }
 

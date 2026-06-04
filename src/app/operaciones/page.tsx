@@ -13,7 +13,7 @@ export default function OperacionesPage() {
   return (
     <CrmModulePage
       module="operations"
-      title="Operaciones en Campo"
+      title="Construcción"
       description="Visita previa, alistamiento de inventario, instalación con contratista, puesta en marcha y legalización."
       color="#f59e0b"
       userEmail={userEmail}

@@ -60,7 +60,7 @@ const MODULES: Module[] = [
   },
   {
     href: '/operaciones',
-    title: 'Operaciones en Campo',
+    title: 'Construcción',
     description: 'Visita previa, alistamiento, instalación, operativo y legalización.',
     Icon: HardHat,
     color: '#f59e0b',

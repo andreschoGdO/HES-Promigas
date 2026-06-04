@@ -55,7 +55,9 @@ export async function GET(request: Request) {
     if (type)  q = q.ilike('type', `%${type}%`);
     if (brand) q = q.ilike('marca', `%${brand}%`);
     if (name)  q = q.ilike('name', `%${name}%`);
-    q = q.eq('is_active', true).limit(sample);
+    // NO filtramos por is_active: muchos devices están marcados is_active=false en la BD
+    // pero igual exponen keys en Metrum (la flag puede estar desactualizada).
+    q = q.limit(sample);
     const { data: devices, error } = await q;
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     if (!devices || devices.length === 0) {

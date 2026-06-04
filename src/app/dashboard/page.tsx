@@ -1676,17 +1676,10 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                           <tr>
                             <th style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'left' }}>Día</th>
                             {seriesKeys.map((s) => (
-                              <th key={s.key} colSpan={3} style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>{s.label}</th>
-                            ))}
-                          </tr>
-                          <tr>
-                            <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)' }}></th>
-                            {seriesKeys.map((s) => (
-                              <React.Fragment key={s.key}>
-                                <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)' }}>min</th>
-                                <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)' }}>prom</th>
-                                <th style={{ position: 'sticky', top: 28, background: 'var(--bg-elevated)', textAlign: 'right', fontSize: '0.7rem', color: 'var(--text-muted)' }}>max</th>
-                              </React.Fragment>
+                              <th key={s.key} style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'right', borderLeft: '1px solid var(--border)' }}>
+                                {s.label}
+                                <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 400, textTransform: 'uppercase', letterSpacing: '0.04em' }}>promedio</div>
+                              </th>
                             ))}
                           </tr>
                         </thead>
@@ -1697,15 +1690,11 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                               {seriesKeys.map((s) => {
                                 const cnt = d.count[s.key] ?? 0;
                                 const avg = cnt > 0 ? d.sum[s.key] / cnt : null;
-                                const mn = d.min[s.key];
-                                const mx = d.max[s.key];
-                                const fmt = (n: number | undefined) => n === undefined ? '—' : n.toLocaleString('es-CO', { maximumFractionDigits: 2 });
+                                const fmt = (n: number | null) => n === null ? '—' : n.toLocaleString('es-CO', { maximumFractionDigits: 2 });
                                 return (
-                                  <React.Fragment key={s.key}>
-                                    <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: 'var(--text-muted)' }}>{fmt(mn)}</td>
-                                    <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{avg === null ? '—' : fmt(avg)}</td>
-                                    <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: 'var(--text-muted)' }}>{fmt(mx)}</td>
-                                  </React.Fragment>
+                                  <td key={s.key} style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 600, borderLeft: '1px solid var(--border)' }}>
+                                    {fmt(avg)}
+                                  </td>
                                 );
                               })}
                             </tr>

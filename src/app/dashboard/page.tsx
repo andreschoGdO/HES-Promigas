@@ -887,6 +887,49 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     return out;
   }, [granularDevicesMeta, selectedKeysByDevice]);
 
+  // ── Multi-gráfica: el usuario puede partir las series seleccionadas
+  // en N gráficas, cada una con su propio Y axis (min/max/label).
+  // Gráfica 1 por default muestra TODAS las series (comportamiento previo);
+  // las gráficas extras arrancan vacías y el usuario asigna series con checkboxes.
+  interface ChartConfig {
+    id: string;
+    title: string;
+    seriesIncluded: 'all' | Set<string>; // 'all' = todas las series globales (default chart 1)
+    yMin?: number;
+    yMax?: number;
+    yLabel?: string;
+  }
+  const [charts, setCharts] = useState<ChartConfig[]>([
+    { id: 'chart-1', title: 'Gráfica 1', seriesIncluded: 'all' },
+  ]);
+
+  const addChart = () => {
+    setCharts((cur) => [
+      ...cur,
+      { id: `chart-${Date.now()}`, title: `Gráfica ${cur.length + 1}`, seriesIncluded: new Set<string>() },
+    ]);
+  };
+  const removeChart = (id: string) => {
+    setCharts((cur) => (cur.length <= 1 ? cur : cur.filter((c) => c.id !== id)));
+  };
+  const updateChart = (id: string, patch: Partial<ChartConfig>) => {
+    setCharts((cur) => cur.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  };
+  const toggleSeriesInChart = (chartId: string, seriesKey: string) => {
+    setCharts((cur) => cur.map((c) => {
+      if (c.id !== chartId) return c;
+      const set = c.seriesIncluded === 'all'
+        ? new Set(seriesKeys.map((s) => s.key))
+        : new Set(c.seriesIncluded);
+      if (set.has(seriesKey)) set.delete(seriesKey); else set.add(seriesKey);
+      return { ...c, seriesIncluded: set };
+    }));
+  };
+  const chartSeriesFor = (c: ChartConfig) => {
+    if (c.seriesIncluded === 'all') return seriesKeys;
+    return seriesKeys.filter((s) => (c.seriesIncluded as Set<string>).has(s.key));
+  };
+
   const chartData = useMemo(() => {
     const byTs = new Map<number, Record<string, number | null>>();
     for (const [devId, byKey] of Object.entries(granData)) {
@@ -1257,36 +1300,121 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
 
             {chartData.length > 0 && (
               <>
-                <div style={{ width: '100%', height: 360 }}>
-                  <ResponsiveContainer>
-                    <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                      <CartesianGrid stroke="rgba(0,0,0,0.06)" />
-                      <XAxis
-                        dataKey="ts"
-                        type="number"
-                        domain={['dataMin', 'dataMax']}
-                        scale="time"
-                        tickFormatter={(v) => new Date(v).toLocaleString('es-CO', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                        stroke="var(--text-muted)" fontSize={11}
-                      />
-                      <YAxis stroke="var(--text-muted)" fontSize={11} />
-                      <Tooltip
-                        labelFormatter={(v) => new Date(Number(v)).toLocaleString('es-CO')}
-                        contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.78rem' }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '0.78rem', cursor: 'pointer' }} />
-                      {seriesKeys.map((s, i) => (
-                        <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={COLORS[i % COLORS.length]}
-                          dot={{ r: 2.5, strokeWidth: 0, fill: COLORS[i % COLORS.length] }}
-                          activeDot={{ r: 5, stroke: 'white', strokeWidth: 2 }}
-                          strokeWidth={2} connectNulls isAnimationActive={false} />
-                      ))}
-                      {/* Brush para zoom interactivo: arrastra los handles para seleccionar un rango */}
-                      <Brush dataKey="ts" height={28} stroke="#07c5a8" fill="rgba(7,197,168,0.08)"
-                        travellerWidth={10}
-                        tickFormatter={(v) => new Date(v).toLocaleDateString('es-CO', { month: 'short', day: '2-digit' })} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                {charts.map((cfg, chartIdx) => {
+                  const series = chartSeriesFor(cfg);
+                  const isFirst = chartIdx === 0;
+                  return (
+                    <div key={cfg.id} className="glass-panel" style={{ padding: 12, marginBottom: 12 }}>
+                      {/* Header de la gráfica: título editable, controles Y axis, botón eliminar */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                        <input
+                          value={cfg.title}
+                          onChange={(e) => updateChart(cfg.id, { title: e.target.value })}
+                          style={{ fontWeight: 700, fontSize: '0.92rem', maxWidth: 220, padding: '4px 8px' }}
+                        />
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                          {series.length} serie{series.length === 1 ? '' : 's'}
+                        </span>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto', flexWrap: 'wrap' }}>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            Y min:
+                            <input type="number" placeholder="auto"
+                              value={cfg.yMin ?? ''}
+                              onChange={(e) => updateChart(cfg.id, { yMin: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              style={{ width: 70, marginLeft: 4, padding: '3px 6px', fontSize: '0.75rem' }} />
+                          </label>
+                          <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            Y max:
+                            <input type="number" placeholder="auto"
+                              value={cfg.yMax ?? ''}
+                              onChange={(e) => updateChart(cfg.id, { yMax: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              style={{ width: 70, marginLeft: 4, padding: '3px 6px', fontSize: '0.75rem' }} />
+                          </label>
+                          <input type="text" placeholder="Etiqueta Y (opcional)"
+                            value={cfg.yLabel ?? ''}
+                            onChange={(e) => updateChart(cfg.id, { yLabel: e.target.value || undefined })}
+                            style={{ width: 130, padding: '3px 6px', fontSize: '0.75rem' }} />
+                          {!isFirst && (
+                            <button onClick={() => removeChart(cfg.id)}
+                              title="Eliminar gráfica"
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '1rem', padding: '0 6px' }}>
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Selector de series (excepto chart 1 que por default es 'all') */}
+                      {!isFirst && seriesKeys.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8, padding: '6px 8px', background: 'var(--bg-elevated)', borderRadius: 6 }}>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', alignSelf: 'center', marginRight: 4 }}>Series:</span>
+                          {seriesKeys.map((s, i) => {
+                            const included = cfg.seriesIncluded === 'all' || (cfg.seriesIncluded as Set<string>).has(s.key);
+                            return (
+                              <button key={s.key}
+                                onClick={() => toggleSeriesInChart(cfg.id, s.key)}
+                                className={`chip ${included ? 'active' : ''}`}
+                                style={{ fontSize: '0.68rem', padding: '2px 8px', borderLeft: `3px solid ${COLORS[i % COLORS.length]}` }}>
+                                {s.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Chart */}
+                      {series.length === 0 ? (
+                        <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', background: 'var(--bg-elevated)', borderRadius: 6 }}>
+                          Sin series asignadas a esta gráfica
+                        </div>
+                      ) : (
+                        <div style={{ width: '100%', height: 320 }}>
+                          <ResponsiveContainer>
+                            <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                              <CartesianGrid stroke="rgba(0,0,0,0.06)" />
+                              <XAxis
+                                dataKey="ts" type="number" domain={['dataMin', 'dataMax']} scale="time"
+                                tickFormatter={(v) => new Date(v).toLocaleString('es-CO', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                stroke="var(--text-muted)" fontSize={11}
+                              />
+                              <YAxis
+                                stroke="var(--text-muted)" fontSize={11}
+                                domain={[cfg.yMin ?? 'auto', cfg.yMax ?? 'auto']}
+                                label={cfg.yLabel ? { value: cfg.yLabel, angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: 'var(--text-muted)' } } : undefined}
+                              />
+                              <Tooltip
+                                labelFormatter={(v) => new Date(Number(v)).toLocaleString('es-CO')}
+                                contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: '0.78rem' }}
+                              />
+                              <Legend wrapperStyle={{ fontSize: '0.78rem', cursor: 'pointer' }} />
+                              {series.map((s) => {
+                                const colorIdx = seriesKeys.findIndex((x) => x.key === s.key);
+                                return (
+                                  <Line key={s.key} type="monotone" dataKey={s.key} name={s.label}
+                                    stroke={COLORS[(colorIdx >= 0 ? colorIdx : 0) % COLORS.length]}
+                                    dot={{ r: 2.5, strokeWidth: 0, fill: COLORS[(colorIdx >= 0 ? colorIdx : 0) % COLORS.length] }}
+                                    activeDot={{ r: 5, stroke: 'white', strokeWidth: 2 }}
+                                    strokeWidth={2} connectNulls isAnimationActive={false} />
+                                );
+                              })}
+                              {isFirst && (
+                                <Brush dataKey="ts" height={28} stroke="#07c5a8" fill="rgba(7,197,168,0.08)"
+                                  travellerWidth={10}
+                                  tickFormatter={(v) => new Date(v).toLocaleDateString('es-CO', { month: 'short', day: '2-digit' })} />
+                              )}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Botón para agregar más gráficas */}
+                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+                  <button onClick={addChart} className="secondary-btn" style={{ fontSize: '0.82rem' }}>
+                    + Nueva gráfica
+                  </button>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, flexWrap: 'wrap', gap: 10 }}>

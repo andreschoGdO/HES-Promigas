@@ -39,6 +39,45 @@ export const VARIABLES: VariableMeta[] = [
   { key: 'powerAI',         label: 'Potencia activa imp.', unit: 'W',  category: 'energia',  source: 'metrum', description: 'Potencia activa importada instantánea.' },
   { key: 'powerRI',         label: 'Potencia reactiva imp.', unit: 'var', category: 'energia', source: 'metrum', description: 'Potencia reactiva importada instantánea.' },
 
+  // ─── Telemetría instantánea del inversor — lado DC (paneles) ───
+  // Estas keys vienen como timeseries de Metrum. Las naming varían entre Livoltek
+  // (HP*) y DEYE (numéricos 24/25*); incluimos las dos variantes principales.
+  { key: 'Ppv1',            label: 'Potencia DC String 1', unit: 'W',  category: 'energia', source: 'metrum', description: 'Potencia DC del MPPT 1 (paneles conectados al string 1). Esta es la generación REAL de los paneles antes del inversor, sin pérdidas de conversión ni efecto batería.' },
+  { key: 'Ppv2',            label: 'Potencia DC String 2', unit: 'W',  category: 'energia', source: 'metrum', description: 'Potencia DC del MPPT 2. Sumar Ppv1+Ppv2(+Ppv3) para obtener la generación solar total instantánea.' },
+  { key: 'Ppv3',            label: 'Potencia DC String 3', unit: 'W',  category: 'energia', source: 'metrum', description: 'Potencia DC del MPPT 3 (solo en inversores con 3 trackers, ej. SG01HP3 12K/15K).' },
+  { key: 'Ppv',             label: 'Potencia DC total',    unit: 'W',  category: 'energia', source: 'metrum', description: 'Suma de potencia DC de todos los MPPT (cuando el inversor expone el agregado directamente). Esta es la curva clásica de generación solar.' },
+  { key: 'pvPower',         label: 'Potencia PV total (DEYE)', unit: 'W', category: 'energia', source: 'metrum', description: 'Alias DEYE para la potencia PV total. Equivalente a Ppv.' },
+  { key: 'Vpv1',            label: 'Voltaje DC String 1',  unit: 'V',  category: 'voltaje', source: 'metrum', description: 'Voltaje DC del MPPT 1. Útil para detectar sombras parciales (un string con Vpv < otros sugiere panel(es) sombreados o defectuosos).' },
+  { key: 'Vpv2',            label: 'Voltaje DC String 2',  unit: 'V',  category: 'voltaje', source: 'metrum', description: 'Voltaje DC del MPPT 2.' },
+  { key: 'Vpv3',            label: 'Voltaje DC String 3',  unit: 'V',  category: 'voltaje', source: 'metrum', description: 'Voltaje DC del MPPT 3.' },
+  { key: 'Ipv1',            label: 'Corriente DC String 1', unit: 'A', category: 'corriente', source: 'metrum', description: 'Corriente DC del MPPT 1.' },
+  { key: 'Ipv2',            label: 'Corriente DC String 2', unit: 'A', category: 'corriente', source: 'metrum', description: 'Corriente DC del MPPT 2.' },
+  { key: 'Ipv3',            label: 'Corriente DC String 3', unit: 'A', category: 'corriente', source: 'metrum', description: 'Corriente DC del MPPT 3.' },
+
+  // ─── Telemetría instantánea del inversor — lado AC (salida) ───
+  { key: 'Pac',             label: 'Potencia AC inversor', unit: 'W',  category: 'energia', source: 'metrum', description: 'Potencia activa AC entregada por el inversor (después de la conversión DC→AC). Incluye PV + descarga de batería − carga de batería. Para ver solo generación solar usa Ppv1+Ppv2.' },
+  { key: 'Sac',             label: 'Potencia aparente AC', unit: 'VA', category: 'energia', source: 'metrum', description: 'Potencia aparente AC del inversor. Relación con Pac da el factor de potencia: cos φ = Pac / Sac.' },
+  { key: 'Qac',             label: 'Potencia reactiva AC', unit: 'var', category: 'energia', source: 'metrum', description: 'Potencia reactiva del inversor. Positivo = inductiva, negativo = capacitiva. Es la variable que controlamos vía set_reactive_power.' },
+  { key: 'Vac',             label: 'Voltaje AC',           unit: 'V',  category: 'voltaje', source: 'metrum', description: 'Voltaje AC instantáneo en la salida del inversor (fase a neutro o entre fases según topología).' },
+  { key: 'Iac',             label: 'Corriente AC',         unit: 'A',  category: 'corriente', source: 'metrum', description: 'Corriente AC instantánea en la salida del inversor.' },
+  { key: 'Freq',            label: 'Frecuencia AC',        unit: 'Hz', category: 'estado', source: 'metrum', description: 'Frecuencia de la red AC. Nominal 60 Hz en Colombia. Variaciones > ±0.5 Hz indican problemas en la red del operador.' },
+  { key: 'cosPhi',          label: 'Factor de potencia',   unit: '',   category: 'estado', source: 'metrum', description: 'cos φ instantáneo del inversor. CREG exige ≥ 0.9. Si está por debajo, hay penalización.' },
+  { key: 'Tinv',            label: 'Temperatura inversor', unit: '°C', category: 'estado', source: 'metrum', description: 'Temperatura interna del inversor. Por encima de ~70°C inicia derating; arriba de 85°C se apaga preventivamente.' },
+
+  // ─── Telemetría instantánea de batería (cuando hay almacenamiento) ───
+  { key: 'Pbat',            label: 'Potencia batería neta', unit: 'W', category: 'energia', source: 'metrum', description: 'Potencia neta de la batería. Positivo = descargando (entregando al sistema), negativo = cargando (absorbiendo).' },
+  { key: 'Pcharge',         label: 'Potencia carga batería', unit: 'W', category: 'energia', source: 'metrum', description: 'Potencia con la que se está cargando la batería (siempre ≥ 0). Cero si está descargando o en reposo.' },
+  { key: 'Pdischarge',      label: 'Potencia descarga batería', unit: 'W', category: 'energia', source: 'metrum', description: 'Potencia con la que la batería está entregando energía (siempre ≥ 0). Cero si está cargando o en reposo.' },
+  { key: 'Vbat',            label: 'Voltaje batería',      unit: 'V',  category: 'voltaje', source: 'metrum', description: 'Voltaje DC del bus de batería. Cambia según SOC y química (LV ~48V, HV ~150-500V).' },
+  { key: 'Ibat',            label: 'Corriente batería',    unit: 'A',  category: 'corriente', source: 'metrum', description: 'Corriente DC de batería. Convención: positivo = descarga, negativo = carga.' },
+  { key: 'Tbat',            label: 'Temperatura batería',  unit: '°C', category: 'estado', source: 'metrum', description: 'Temperatura del módulo de batería. Rango operativo típico 0-50°C; fuera de eso el BMS limita corriente.' },
+  { key: 'BattCycles',      label: 'Ciclos de batería',    unit: '',   category: 'estado', source: 'metrum', description: 'Número total de ciclos carga-descarga acumulados desde nuevo. Métrica de salud / vida útil.' },
+
+  // ─── Flujos de energía (DEYE expone estos como flujos discretos) ───
+  { key: 'gridPower',       label: 'Potencia a/desde red (DEYE)', unit: 'W', category: 'energia', source: 'metrum', description: 'Flujo neto con la red eléctrica. Positivo = importando, negativo = exportando. Específico de DEYE Hybrid.' },
+  { key: 'loadPower',       label: 'Potencia a cargas (DEYE)', unit: 'W', category: 'energia', source: 'metrum', description: 'Potencia entregada a las cargas de la casa (lo que efectivamente consume el usuario). Específico de DEYE Hybrid.' },
+  { key: 'genPower',        label: 'Potencia generador (DEYE)', unit: 'W', category: 'energia', source: 'metrum', description: 'Potencia desde un generador diésel (si está conectado). 0 en instalaciones sin genset.' },
+
   // ─── Atributos del inversor (Metrum SERVER_SCOPE) ───
   { key: 'invbrand',        label: 'Marca inversor',       unit: '',   category: 'estado', source: 'metrum', description: 'Marca del inversor: LIVOLTEK (HP*) o DEYE (numéricos 24/25*).' },
   { key: 'invmodel',        label: 'Modelo inversor',      unit: '',   category: 'estado', source: 'metrum', description: 'Modelo del inversor (ej: LIVOTEK HP3-10KL2 o SUN-15K-SG01HP3 HV trifásico).' },

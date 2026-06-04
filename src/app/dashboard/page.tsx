@@ -212,9 +212,11 @@ interface DerivedKeyMeta {
   appliesToInverter: boolean;
 }
 const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
-  Ppv_estimado: {
+  Pdc_estimado: {
     deps: ['powerAPg', 'BattPower'],
-    // Ppv ≈ AC out − Batt (positivo cuando descarga, negativo cuando carga)
+    // P_dc ≈ AC out − Batt (positivo cuando descarga, negativo cuando carga).
+    // No es Ppv puro porque incorpora la dinámica DC de la batería — refleja
+    // el balance del bus DC del inversor, no la generación PV aislada.
     compute: (v) => (v.powerAPg ?? 0) - (v.BattPower ?? 0),
     appliesToInverter: true,
   },

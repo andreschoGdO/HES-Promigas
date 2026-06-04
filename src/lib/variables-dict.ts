@@ -586,19 +586,21 @@ export const VARIABLES: VariableMeta[] = [
   //  exponen todas sus dependencias.
   // ═══════════════════════════════════════════════════════════════════════
   {
-    key: 'Ppv_estimado', label: 'Potencia DC ESTIMADA (paneles)', unit: 'W',
+    key: 'Pdc_estimado', label: 'Potencia DC estimada (bus inversor)', unit: 'W',
     category: 'energia', source: 'derived',
     description:
-      'Estimación de la potencia DC que están entregando los paneles solares — NO es medición directa. ' +
-      'Se calcula en el frontend como: Ppv_estimado = powerAPg − BattPower. ' +
-      'Idea física: lo que sale del inversor a AC (powerAPg) menos lo que viene/va a batería (BattPower) es aproximadamente lo que entró desde los paneles. ' +
-      'Convención de BattPower: negativo = cargando batería (resta de la salida AC), positivo = descargando (suma a la salida AC). ' +
-      '\n\nLIMITACIONES (lo que NO captura):\n' +
-      '  • Pérdidas de conversión del inversor (~3-5%) → la estimación queda subestimada por ese margen.\n' +
-      '  • Pérdidas internas de la batería (calor durante carga) → ídem.\n' +
-      '  • Asume convención de signos constante; si el inversor cambia de modo (isla, falla) la estimación puede salir invertida.\n' +
-      '\nÚSALA PARA: ver la forma de la curva solar, detectar caídas anómalas (sombra, sucio, falla), comparar generación relativa entre casas.\n' +
-      'NO LA USES PARA: reportes regulatorios, auditorías de kWh exactos, análisis por string (las marcas no exponen DC por string en Metrum).',
+      'Potencia inferida en el bus DC del inversor — NO es medición directa ni es PV puro. ' +
+      'Captura la dinámica completa del lado DC: aporte de los paneles + comportamiento de la batería (carga o descarga). ' +
+      'Se calcula en el frontend como: Pdc_estimado = powerAPg − BattPower. ' +
+      '\n\nPor qué NO es Ppv puro: la fórmula resta el flujo de batería para "limpiar" el AC, pero el resultado todavía refleja la dinámica DC que la batería impone al bus. Cuando la batería se carga fuerte (PV → batería) el número se acerca a Ppv; cuando se descarga (batería → AC) el número se aleja de Ppv y refleja el déficit/superávit del bus DC. ' +
+      '\n\nConvención de BattPower observada en Livoltek/DEYE: negativo = cargando batería, positivo = descargando. ' +
+      '\n\nLIMITACIONES:\n' +
+      '  • Pérdidas de conversión del inversor (~3-5%) no se descuentan → subestimación.\n' +
+      '  • Pérdidas internas de la batería (calor durante carga) no se descuentan.\n' +
+      '  • Asume convención de signos constante; si el inversor cambia de modo (isla, falla) puede salir invertida.\n' +
+      '  • No equivale a las lecturas Ppv1/Ppv2 que algunas integraciones exponen por string.\n' +
+      '\nÚSALA PARA: visualizar la curva del bus DC, detectar caídas anómalas globales (sombra masiva, falla de inversor), comparar comportamiento entre casas.\n' +
+      'NO LA USES PARA: reportes regulatorios, auditorías de kWh exactos por panel, análisis fino por string.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════

@@ -535,10 +535,59 @@ export const VARIABLES: VariableMeta[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════
-  //  INVERSOR — TELEMETRÍA INSTANTÁNEA — LADO DC (PANELES)
-  //  Estas vienen como timeseries del inversor. La cantidad de strings (1, 2 o 3)
-  //  depende del modelo: HP3-8K=2, HP3-10K=2, SG01HP3-12K/15K=3, SG04LP3-6K=2.
-  //  Sumar todas las Ppv* da la generación solar pura (antes del inversor y batería).
+  //  INVERSOR DEYE (SUN-*-SG01HP3) — keys con sufijo _DY
+  //  DEYE expone el mismo subset de Livoltek pero con sufijo _DY en algunas
+  //  keys, y omite reactiva/cos φ/DC eq./EPS por fase. La mayoría de las keys
+  //  compartidas (powerAEg, currentA, voltageA, frequency, energyPD, BattSOC,
+  //  invstate, etc.) ya están catalogadas arriba con descripciones genéricas
+  //  que aplican a ambas marcas — aquí solo agrego las específicas DEYE.
+  //
+  //  LIMITACIONES IMPORTANTES DE DEYE en Metrum:
+  //    - No expone cos φ ni reactiva (toca calcular o medir externamente)
+  //    - No expone potencia DC equivalente
+  //    - No expone corrientes EPS por fase
+  //    - No expone estado operativo BMS de la batería
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    key: 'BattCapAH_DY', label: 'Capacidad batería (DEYE)', unit: 'Ah',
+    category: 'estado', source: 'metrum',
+    description: 'Capacidad nominal de la batería conectada al inversor DEYE, en amperios-hora. Equivalente DEYE de BattCapAH_LV.',
+  },
+  {
+    key: 'BattCharges_DY', label: 'Ciclos batería (DEYE)', unit: '',
+    category: 'estado', source: 'metrum',
+    description: 'Ciclos carga-descarga acumulados de la batería conectada al inversor DEYE. Equivalente DEYE de BattCharges_LV.',
+  },
+  {
+    key: 'ExportGrid_DY', label: 'Potencia exportada a red (DEYE)', unit: 'W',
+    category: 'energia', source: 'metrum',
+    description: 'Potencia activa que el inversor DEYE está exportando hacia la red. Si es 0 todo el sistema solar va a autoconsumo o batería. Equivalente DEYE de ExportGrid_LV.',
+  },
+  {
+    key: 'LoadPower_DY', label: 'Potencia a cargas (DEYE)', unit: 'W',
+    category: 'energia', source: 'metrum',
+    description:
+      'Potencia que el inversor DEYE entrega a las cargas conectadas al puerto Load/Backup. Es la demanda real de la casa medida por el inversor. ' +
+      'Si la casa está en backup mode, toda la energía pasa por esta lectura. Equivalente DEYE de LoadPower_LV.',
+  },
+  {
+    key: 'MeterState_DY', label: 'Estado medidor (DEYE)', unit: '',
+    category: 'estado', source: 'metrum',
+    description:
+      'Estado del medidor interno (CT clamps) del inversor DEYE. Valores típicos: ' +
+      '"ct" = CT clamps configurados y leyendo (normal) · ' +
+      '"offline" = sensores no responden, revisar conexión física. ' +
+      'Equivalente DEYE de MeterState_LV (que usa "online"/"offline").',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  KEYS GENÉRICAS DE INVERSOR — Ppv*, Vpv*, Ipv*, Pac, etc.
+  //  NOTA: Estos NOMBRES NO los expone ni Livoltek HP3 ni DEYE SUN-SG01HP3 a
+  //  Metrum (verificado en piloto Promigas). Se mantienen catalogados porque:
+  //    (a) son nombres estándar de la industria — útiles si en el futuro
+  //        se integran inversores de otra marca (Huawei, Sungrow, Fronius, etc.)
+  //    (b) podrían exponerse vía la API OEM directa de Livoltek/DEYE
+  //        (cuando obtengamos las credenciales — bypaseando Metrum).
   // ═══════════════════════════════════════════════════════════════════════
   {
     key: 'Ppv1', label: 'Potencia DC String 1', unit: 'W',

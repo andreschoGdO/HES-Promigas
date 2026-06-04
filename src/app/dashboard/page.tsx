@@ -1820,11 +1820,9 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                                     strokeWidth={2} connectNulls isAnimationActive={false} />
                                 );
                               })}
-                              {isFirst && (
-                                <Brush dataKey="ts" height={28} stroke="#07c5a8" fill="rgba(7,197,168,0.08)"
-                                  travellerWidth={10}
-                                  tickFormatter={(v) => new Date(v).toLocaleDateString('es-CO', { month: 'short', day: '2-digit' })} />
-                              )}
+                              <Brush dataKey="ts" height={28} stroke="#07c5a8" fill="rgba(7,197,168,0.08)"
+                                travellerWidth={10}
+                                tickFormatter={(v) => new Date(v).toLocaleDateString('es-CO', { month: 'short', day: '2-digit' })} />
                             </LineChart>
                           </ResponsiveContainer>
                         </div>

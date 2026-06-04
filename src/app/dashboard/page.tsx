@@ -1185,7 +1185,6 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                 { id: 'all' as const, label: `Todos (${devices.length})` },
                 { id: 'meter' as const, label: `Medidores (${devices.filter((d) => classifyDevice(d) === 'meter').length})` },
                 { id: 'inverter' as const, label: `Inversores (${devices.filter((d) => classifyDevice(d) === 'inverter').length})` },
-                { id: 'gateway' as const, label: `Módems (${devices.filter((d) => classifyDevice(d) === 'gateway').length})` },
               ]).map((t) => (
                 <button key={t.id} className={`chip ${typeFilter === t.id ? 'active' : ''}`} onClick={() => setTypeFilter(t.id)}>
                   {t.label}

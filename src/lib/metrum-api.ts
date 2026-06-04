@@ -148,6 +148,10 @@ export async function getTimeseries(
     endTs: String(endTs),
     limit: String(options.limit ?? 5000),
     agg: options.agg ?? 'NONE',
+    // useStrictDataTypes=false → ThingsBoard NO rechaza la query si hay keys
+    // de tipo string mezcladas con numéricas. Útil cuando el usuario marca
+    // BattStateOp_LV (string) y BattSOC (numérica) en la misma consulta con AVG.
+    useStrictDataTypes: 'false',
   });
   if (options.interval && options.agg && options.agg !== 'NONE') {
     params.set('interval', String(options.interval));

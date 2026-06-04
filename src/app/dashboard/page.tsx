@@ -1600,16 +1600,6 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                   ))}
                 </div>
               </div>
-              {intervalLabel !== 'Crudo' && (
-                <div>
-                  <label className="input-label" style={{ display: 'block', marginBottom: '8px' }}>Agregación</label>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    {(['AVG', 'MIN', 'MAX', 'SUM'] as Agg[]).map((a) => (
-                      <button key={a} onClick={() => setAgg(a)} className={`chip ${agg === a ? 'active' : ''}`}>{a}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Keys disponibles AGRUPADAS POR DEVICE — cada equipo expone sus propias variables */}

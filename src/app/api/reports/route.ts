@@ -387,7 +387,7 @@ async function reporteEjecutivo(from: string, to: string) {
     ['Inventario', 'Items totales', items.data?.length ?? 0],
     ['Inventario', 'En stock', itemsByStatus.in_stock ?? 0],
     ['Inventario', 'Instalados', itemsByStatus.installed ?? 0],
-    ['Inventario', 'En reparación', itemsByStatus.in_repair ?? 0],
+    ['Inventario', 'En garantía', itemsByStatus.in_repair ?? 0],
     ['Inventario', 'Consumibles con stock bajo', lowStock],
     ['', '', ''],
     ['CRM', 'Total proyectos', projects.data?.length ?? 0],

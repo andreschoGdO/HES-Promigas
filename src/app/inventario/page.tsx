@@ -76,7 +76,7 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   in_stock:        { label: 'En stock',       color: '#10b981' },
   reserved:        { label: 'Reservado',      color: '#3b82f6' },
   installed:       { label: 'Instalado',      color: '#07c5a8' },
-  in_repair:       { label: 'En reparación',  color: '#f59e0b' },
+  in_repair:       { label: 'En garantía',    color: '#f59e0b' },
   rma:             { label: 'RMA',            color: '#8b5cf6' },
   decommissioned:  { label: 'Decomisado',     color: '#94a3b8' },
   lost:            { label: 'Perdido',        color: '#ef4444' },
@@ -97,7 +97,7 @@ const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu; de
   consumibles: { label: 'Consumibles', color: '#8b5cf6', Icon: Cable,          description: 'Cantidad disponible, umbrales de stock mínimo y ajustes.' },
   ubicaciones: { label: 'Ubicaciones', color: '#0ea5e9', Icon: MapPin,         description: 'Bodegas, talleres, vehículos de cuadrilla y RMA proveedor. Donde físicamente vive cada equipo.' },
   reservas:    { label: 'Reservas',    color: '#ec4899', Icon: ClipboardList,  description: 'Aparta equipos serializados para una visita planeada. Al completar la visita, los items pasan a instalados.' },
-  movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History,        description: 'Audit log de cada cambio: recepción, instalación, reparación, RMA.' },
+  movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History,        description: 'Audit log de cada cambio: recepción, instalación, garantía, RMA.' },
   categorias:  { label: 'Categorías',  color: '#10b981', Icon: Tags,           description: 'Catálogo de modelos con valores por defecto (marca, capacidad, garantía).' },
 };
 
@@ -217,7 +217,7 @@ function ResumenTab({ onJump }: { onJump: (t: Tab) => void }) {
   const attentionItems = [
     stats.lowStockCount > 0 && { label: `${stats.lowStockCount} consumible${stats.lowStockCount === 1 ? '' : 's'} con stock bajo`, color: '#ef4444', tab: 'consumibles' as Tab, hint: 'Revisar y reponer' },
     stats.warrantyExpiring > 0 && { label: `${stats.warrantyExpiring} garantía${stats.warrantyExpiring === 1 ? '' : 's'} próxima${stats.warrantyExpiring === 1 ? '' : 's'} a vencer (≤ 60 días)`, color: '#ec4899', tab: 'equipos' as Tab, hint: 'Revisar antes que expiren' },
-    stats.inRepair > 0 && { label: `${stats.inRepair} equipo${stats.inRepair === 1 ? '' : 's'} en reparación o RMA`, color: '#f59e0b', tab: 'equipos' as Tab, hint: 'Hacer seguimiento al taller' },
+    stats.inRepair > 0 && { label: `${stats.inRepair} equipo${stats.inRepair === 1 ? '' : 's'} en garantía o RMA`, color: '#f59e0b', tab: 'equipos' as Tab, hint: 'Hacer seguimiento al proveedor' },
   ].filter(Boolean) as Array<{ label: string; color: string; tab: Tab; hint: string }>;
 
   return (
@@ -263,7 +263,7 @@ function ResumenTab({ onJump }: { onJump: (t: Tab) => void }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 14 }}>
         <KpiCard label="Equipos totales" value={stats.totalItems} sub={`${stats.byStatus.installed ?? 0} instalados`} color="#07c5a8" Icon={Cpu} />
         <KpiCard label="En stock (bodega)" value={stats.byStatus.in_stock ?? 0} sub="Listos para instalar" color="#10b981" Icon={Boxes} />
-        <KpiCard label="En reparación / RMA" value={stats.inRepair} sub={stats.inRepair === 0 ? 'Todo operando' : 'Fuera de servicio'} color="#f59e0b" Icon={AlertTriangle} />
+        <KpiCard label="En garantía / RMA" value={stats.inRepair} sub={stats.inRepair === 0 ? 'Todo operando' : 'Fuera de servicio'} color="#f59e0b" Icon={AlertTriangle} />
         <KpiCard label="Consumibles" value={stats.totalConsumables} sub={`${stats.lowStockCount} con stock bajo`} color="#8b5cf6" Icon={Cable} />
       </div>
 
@@ -935,8 +935,8 @@ const MOVEMENT_TYPES: Array<{ key: string; label: string; color: string }> = [
   { key: 'install',          label: 'Instalación',     color: '#07c5a8' },
   { key: 'uninstall',        label: 'Desinstalación',  color: '#94a3b8' },
   { key: 'transfer',         label: 'Traslado',        color: '#10b981' },
-  { key: 'repair_start',     label: 'A reparación',    color: '#f59e0b' },
-  { key: 'repair_end',       label: 'Repar. cerrada',  color: '#10b981' },
+  { key: 'repair_start',     label: 'A garantía',      color: '#f59e0b' },
+  { key: 'repair_end',       label: 'Garantía cerrada', color: '#10b981' },
   { key: 'rma_send',         label: 'RMA enviado',     color: '#8b5cf6' },
   { key: 'rma_return',       label: 'RMA retorno',     color: '#8b5cf6' },
   { key: 'decommission',     label: 'Decomiso',        color: '#94a3b8' },

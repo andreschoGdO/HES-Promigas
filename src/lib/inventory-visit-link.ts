@@ -196,7 +196,7 @@ export async function linkVisitToInventory(opts: {
         responsible_email: opts.technicianEmail,
         notes: `Reemplazo por emergencia (${equipoAfectado})`,
       });
-      linked.push(`${equipoAfectado}: ${it.serial_number} → en reparación`);
+      linked.push(`${equipoAfectado}: ${it.serial_number} → en garantía`);
     }
     return { linked, skipped };
   }

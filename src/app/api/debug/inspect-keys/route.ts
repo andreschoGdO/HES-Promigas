@@ -21,7 +21,8 @@ export async function GET(request: Request) {
   const type = url.searchParams.get('type');
   const brand = url.searchParams.get('brand');
   const name = url.searchParams.get('name');
-  const sample = Math.min(Math.max(Number(url.searchParams.get('sample') ?? 3), 1), 10);
+  const sample = Math.min(Math.max(Number(url.searchParams.get('sample') ?? 3), 1), 50);
+  const namesOnly = url.searchParams.get('namesOnly') === '1' || url.searchParams.get('names') === '1';
 
   // Si no pasaron filtros, devolvemos el inventario de la BD
   if (!type && !brand && !name) {
@@ -74,6 +75,18 @@ export async function GET(request: Request) {
         sample_first_5: sampleNames,
         total_devices_in_db: (all ?? []).length,
       }, { status: 404 });
+    }
+
+    // Modo namesOnly: solo lista los devices encontrados sin pegarle a Metrum
+    if (namesOnly) {
+      return NextResponse.json({
+        filters: { type, brand, name, sample },
+        count: devices.length,
+        devices: devices.map((d) => ({
+          name: d.name, metrum_id: d.metrum_id, casa: d.casa,
+          type: d.type, marca: d.marca, modelo: d.modelo, is_active: d.is_active,
+        })),
+      });
     }
 
     // Fetch de keys + último valor por device

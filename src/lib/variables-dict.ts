@@ -209,6 +209,332 @@ export const VARIABLES: VariableMeta[] = [
   },
 
   // ═══════════════════════════════════════════════════════════════════════
+  //  INVERSOR LIVOLTEK (HP3-*) — TELEMETRÍA REAL desde Metrum
+  //  Estas son las keys que Metrum REALMENTE expone para inversores Livoltek
+  //  HP3 (verificado en piloto Promigas). El sufijo "_LV" significa Livoltek
+  //  (es nomenclatura del fabricante, NO "low voltage").
+  //
+  //  NOTA IMPORTANTE: Livoltek NO expone potencia DC por string (no hay Ppv1,
+  //  Ppv2, Vpv1, etc.). Para análisis de generación DC se infiere a partir
+  //  de powerAPg / powerAEg + BattPower.
+  // ═══════════════════════════════════════════════════════════════════════
+  // ── Potencias AC instantáneas
+  {
+    key: 'powerAEg', label: 'Potencia activa hacia red', unit: 'W',
+    category: 'energia', source: 'metrum',
+    description:
+      'Potencia activa que el inversor está entregando hacia la red AC en este instante. Es la lectura más cercana a "AC output del inversor". ' +
+      'Si está cargando la batería, este número es menor que la generación PV total (parte va a batería en lugar de salir como AC).',
+  },
+  {
+    key: 'powerAPg', label: 'Potencia activa generada (PV+Batt)', unit: 'W',
+    category: 'energia', source: 'metrum',
+    description:
+      'Potencia activa total generada por el inversor — suma de aporte PV + descarga de batería (− carga de batería). ' +
+      'Es lo más cercano que Livoltek expone a "generación AC". Para aislar solo PV restá BattPower (que es negativo cuando carga, positivo cuando descarga).',
+  },
+  {
+    key: 'powerAE', label: 'Potencia activa exportada', unit: 'W',
+    category: 'energia', source: 'metrum',
+    description:
+      'Potencia activa exportada del inversor (lo que efectivamente sale del equipo hacia las cargas + red). ' +
+      'Suele ser muy parecido a powerAEg; cuando difieren reflejan pérdidas internas del inversor.',
+  },
+  {
+    key: 'powerAEgdc_LV', label: 'Potencia DC equivalente', unit: 'W',
+    category: 'energia', source: 'metrum',
+    description:
+      'Potencia DC equivalente calculada por el inversor Livoltek. Es la mejor aproximación disponible a "potencia desde los paneles" ' +
+      'cuando se descuentan pérdidas de conversión. NO viene de medición real por string (Livoltek no la expone).',
+  },
+  {
+    key: 'powerREg_LV', label: 'Potencia reactiva', unit: 'var',
+    category: 'energia', source: 'metrum',
+    description:
+      'Potencia reactiva del inversor Livoltek. Si es 0 sostenido = cos φ ≈ 1 (ideal). ' +
+      'Si crece, el inversor está generando reactiva — la variable que se controla via API set_reactive_power.',
+  },
+  {
+    key: 'powerPFg_LV', label: 'Factor de potencia (cos φ)', unit: '',
+    category: 'estado', source: 'metrum',
+    description:
+      'Factor de potencia instantáneo medido por el inversor Livoltek. Rango -1 a +1. ' +
+      'CREG exige ≥ 0.9. En la lectura típica este valor está cerca de 1.0 cuando el inversor opera correctamente.',
+  },
+  // ── Corrientes y voltajes (3 grupos: general, Grid, EPS/Backup)
+  {
+    key: 'currentA', label: 'Corriente Fase A (general)', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description:
+      'Corriente AC fase A del inversor — visión general (combinada). Para distinguir entre lo que va a red vs lo que va a backup usá curGridA y curEpsA.',
+  },
+  {
+    key: 'currentB', label: 'Corriente Fase B (general)', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description: 'Corriente AC fase B del inversor — visión general (combinada).',
+  },
+  {
+    key: 'currentC', label: 'Corriente Fase C (general)', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description: 'Corriente AC fase C del inversor — visión general (combinada).',
+  },
+  {
+    key: 'curGridA', label: 'Corriente Grid Fase A', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description:
+      'Corriente fase A en el puerto Grid del inversor — lo que efectivamente fluye desde/hacia la red eléctrica. ' +
+      'Combinada con voltGridA da la potencia que se intercambia con la red en esa fase.',
+  },
+  {
+    key: 'curGridB', label: 'Corriente Grid Fase B', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description: 'Corriente fase B en el puerto Grid del inversor.',
+  },
+  {
+    key: 'curGridC', label: 'Corriente Grid Fase C', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description: 'Corriente fase C en el puerto Grid del inversor.',
+  },
+  {
+    key: 'curEpsA_LV', label: 'Corriente Backup Fase A', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description:
+      'Corriente fase A en el puerto EPS (Emergency Power Supply / Backup) — lo que va hacia las cargas críticas. ' +
+      'Cuando el inversor opera grid-tied este número refleja consumo del backup; cuando se cae la red este es el único camino activo.',
+  },
+  {
+    key: 'curEpsB_LV', label: 'Corriente Backup Fase B', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description: 'Corriente fase B en puerto EPS/Backup del inversor.',
+  },
+  {
+    key: 'curEpsC_LV', label: 'Corriente Backup Fase C', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description: 'Corriente fase C en puerto EPS/Backup del inversor.',
+  },
+  {
+    key: 'voltageA', label: 'Voltaje Fase A (general)', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description: 'Voltaje AC fase A del inversor — lectura general (combinada de los puertos).',
+  },
+  {
+    key: 'voltageB', label: 'Voltaje Fase B (general)', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description: 'Voltaje AC fase B del inversor — lectura general.',
+  },
+  {
+    key: 'voltageC', label: 'Voltaje Fase C (general)', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description: 'Voltaje AC fase C del inversor — lectura general.',
+  },
+  {
+    key: 'voltGridA', label: 'Voltaje Grid Fase A', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description: 'Voltaje fase A en el puerto Grid — lo que mide el inversor del lado de la red Promigas. Nominal ~120 V para sistema 120/208.',
+  },
+  {
+    key: 'voltGridB', label: 'Voltaje Grid Fase B', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description: 'Voltaje fase B en el puerto Grid.',
+  },
+  {
+    key: 'voltGridC', label: 'Voltaje Grid Fase C', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description: 'Voltaje fase C en el puerto Grid.',
+  },
+  {
+    key: 'voltEpsA', label: 'Voltaje Backup Fase A', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description: 'Voltaje fase A en puerto EPS/Backup. Cuando el inversor está formando red en isla, este es el voltaje que el inversor SINTETIZA.',
+  },
+  {
+    key: 'voltEpsB', label: 'Voltaje Backup Fase B', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description: 'Voltaje fase B en puerto EPS/Backup.',
+  },
+  {
+    key: 'voltEpsC', label: 'Voltaje Backup Fase C', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description: 'Voltaje fase C en puerto EPS/Backup.',
+  },
+  {
+    key: 'frequency', label: 'Frecuencia Grid', unit: 'Hz',
+    category: 'estado', source: 'metrum',
+    description: 'Frecuencia AC de la red eléctrica (Grid). Nominal Colombia: 60 Hz ± 0.5. Caídas por debajo de 59 Hz son señal de falla del operador.',
+  },
+  {
+    key: 'freqEps', label: 'Frecuencia Backup', unit: 'Hz',
+    category: 'estado', source: 'metrum',
+    description: 'Frecuencia AC en el puerto EPS/Backup. En modo isla el inversor la sintetiza independientemente de la red.',
+  },
+  // ── Energías diarias (D = Day) y totales (T = Total) Livoltek
+  {
+    key: 'energyED', label: 'Energía exportada del día', unit: 'Wh',
+    category: 'energia', source: 'metrum',
+    description: 'Energía activa exportada en el día (Export Day). Se reinicia a 0 cada día calendario en hora local del inversor.',
+  },
+  {
+    key: 'energyET', label: 'Energía exportada total', unit: 'Wh',
+    category: 'energia', source: 'metrum',
+    description: 'Energía activa exportada acumulada total desde que el inversor está en operación (Export Total). Solo crece.',
+  },
+  {
+    key: 'energyID', label: 'Energía importada del día', unit: 'Wh',
+    category: 'energia', source: 'metrum',
+    description: 'Energía activa importada en el día (Import Day) — lo que el inversor TOMÓ de la red ese día.',
+  },
+  {
+    key: 'energyIT', label: 'Energía importada total', unit: 'Wh',
+    category: 'energia', source: 'metrum',
+    description: 'Energía activa importada acumulada total desde puesta en marcha.',
+  },
+  {
+    key: 'energyPD', label: 'Generación PV del día', unit: 'Wh',
+    category: 'energia', source: 'metrum',
+    description:
+      'Energía solar generada en el día (PV Day) — del lado DC, antes de pérdidas de conversión y batería. ' +
+      'ESTA es la métrica más cercana a "cuánto generaron los paneles hoy" disponible en Livoltek. ' +
+      'Se reinicia a 0 cada día calendario.',
+  },
+  {
+    key: 'energyLD', label: 'Consumo de cargas del día', unit: 'Wh',
+    category: 'energia', source: 'metrum',
+    description: 'Energía consumida por las cargas en el día (Load Day) — lo que efectivamente usó la casa.',
+  },
+  {
+    key: 'energyLT', label: 'Consumo de cargas total', unit: 'Wh',
+    category: 'energia', source: 'metrum',
+    description: 'Energía consumida por las cargas acumulada total desde puesta en marcha.',
+  },
+  {
+    key: 'energyAE', label: 'Energía exportada (var. alterna)', unit: 'Wh',
+    category: 'energia', source: 'metrum',
+    description: 'Variante de la energía activa exportada. Suele coincidir con energyET; mantener trazabilidad si difieren.',
+  },
+  {
+    key: 'ExportGrid_LV', label: 'Potencia exportada a red', unit: 'W',
+    category: 'energia', source: 'metrum',
+    description: 'Potencia activa que sale del inversor hacia la red eléctrica en este instante. Si es 0 todo el sistema solar va a autoconsumo o batería.',
+  },
+  {
+    key: 'LoadPower_LV', label: 'Potencia a cargas', unit: 'W',
+    category: 'energia', source: 'metrum',
+    description: 'Potencia que el inversor entrega a las cargas conectadas al puerto Load/Backup. Es la demanda real de la casa en este instante.',
+  },
+  // ── Batería Livoltek (HP3 trae batería integrada o conectada vía BHF-S*)
+  {
+    key: 'BattPower', label: 'Potencia batería', unit: 'W',
+    category: 'energia', source: 'metrum',
+    description:
+      'Potencia neta de la batería en el inversor Livoltek. Convención: ' +
+      'POSITIVO = descargando (batería entregando energía al sistema). ' +
+      'NEGATIVO = cargando (absorbiendo energía).',
+  },
+  {
+    key: 'BattCur', label: 'Corriente batería', unit: 'A',
+    category: 'corriente', source: 'metrum',
+    description: 'Corriente DC de batería. Misma convención: positivo descarga, negativo carga.',
+  },
+  {
+    key: 'BattVolt', label: 'Voltaje batería', unit: 'V',
+    category: 'voltaje', source: 'metrum',
+    description:
+      'Voltaje DC del bus de batería. ' +
+      'En sistemas Livoltek HV (HP3-15K, etc.) los valores típicos son 150-500 V. ' +
+      'Si baja a < 150V el sistema deja de poder usar la batería.',
+  },
+  {
+    key: 'BattSOC', label: 'SOC batería', unit: '%',
+    category: 'estado', source: 'metrum',
+    description:
+      'State of Charge — porcentaje de carga actual. 0%=vacía, 100%=llena. ' +
+      'Operación recomendada para vida útil: ciclar entre 15% y 95%. ' +
+      'Si TLBattSOC también aparece en DEYE, este es su equivalente Livoltek.',
+  },
+  {
+    key: 'BattSOH', label: 'SOH batería', unit: '%',
+    category: 'estado', source: 'metrum',
+    description:
+      'State of Health — capacidad restante respecto a la nominal de fábrica. ' +
+      '100% = nueva, 80% = umbral de garantía típica, < 80% degradación significativa.',
+  },
+  {
+    key: 'BattTemp', label: 'Temperatura batería', unit: '°C',
+    category: 'estado', source: 'metrum',
+    description:
+      'Temperatura de la celda de batería (más caliente). ' +
+      'Rango operativo seguro: 0-50°C. Sobre 55°C el BMS limita la corriente para proteger las celdas.',
+  },
+  {
+    key: 'BattStateOp_LV', label: 'Estado operativo batería', unit: '',
+    category: 'estado', source: 'metrum',
+    description:
+      'Estado operativo de la batería: charging / discharging / idle / standby. ' +
+      'A veces hay desfase con BattCur (la corriente puede ser negativa = cargando pero el estado siga "discharging" por retardo del reporte).',
+  },
+  {
+    key: 'BattState_LV', label: 'Estado conexión batería', unit: '',
+    category: 'estado', source: 'metrum',
+    description: 'Estado de comunicación con la batería: online (BMS reportando) / offline (sin comunicación). Si está offline durante operación, hay problema de cable BMS o BMS apagado.',
+  },
+  {
+    key: 'BattCapAH_LV', label: 'Capacidad batería', unit: 'Ah',
+    category: 'estado', source: 'metrum',
+    description: 'Capacidad nominal de la batería en amperios-hora. Atributo de configuración inicial, no cambia con el tiempo.',
+  },
+  {
+    key: 'BattCharges_LV', label: 'Ciclos batería', unit: '',
+    category: 'estado', source: 'metrum',
+    description:
+      'Contador de ciclos carga-descarga acumulados de la batería. ' +
+      'LiFePO4 típica: ~6000 ciclos antes de bajar a 80% SOH. ' +
+      'A 1 ciclo/día son ~16 años nominales.',
+  },
+  // ── Estado y meta del inversor
+  {
+    key: 'invstate', label: 'Estado inversor', unit: '',
+    category: 'estado', source: 'metrum',
+    description: 'Estado on/off del inversor. "on" = generando o disponible para generar. "off" = apagado. Si está "off" durante horas de sol, hay alerta operativa.',
+  },
+  {
+    key: 'invrun', label: 'Modo de operación', unit: '',
+    category: 'estado', source: 'metrum',
+    description:
+      'Modo en que está corriendo el inversor: ' +
+      '"normal" = grid-tied operando normal · ' +
+      '"backup" = en modo isla por caída de red · ' +
+      '"fault" = falla activa · ' +
+      '"standby" = encendido pero no generando.',
+  },
+  {
+    key: 'activityState', label: 'Estado de telemetría', unit: '',
+    category: 'estado', source: 'metrum',
+    description:
+      'Estado del reporte de telemetría: "succesful" (sic — typo del firmware) = está enviando datos al gateway correctamente. ' +
+      'Si difiere, hay problema en la comunicación local entre inversor y Pulsar.',
+  },
+  {
+    key: 'MeterState_LV', label: 'Estado medidor inversor', unit: '',
+    category: 'estado', source: 'metrum',
+    description: 'Estado del medidor interno del inversor (CT clamps). online = leyendo / offline = sensor desconectado o falla.',
+  },
+  {
+    key: 'platts', label: 'Timestamp plataforma', unit: 'ms',
+    category: 'estado', source: 'metrum',
+    description: 'Timestamp Unix (ms) cuando el dato fue recibido por Metrum. Útil para detectar lag entre el inversor y la plataforma.',
+  },
+  {
+    key: 'DCts', label: 'Timestamp diario', unit: 'ms',
+    category: 'estado', source: 'metrum',
+    description: 'Timestamp Unix del último cierre diario que el inversor reportó. Si está atrasado más de 24h hay problema con el cierre.',
+  },
+  {
+    key: 'dailyReportTel', label: 'Reporte diario telemetría', unit: '',
+    category: 'estado', source: 'metrum',
+    description: 'Bandera/blob que el inversor manda como resumen diario. Generalmente no se grafica directamente.',
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
   //  INVERSOR — TELEMETRÍA INSTANTÁNEA — LADO DC (PANELES)
   //  Estas vienen como timeseries del inversor. La cantidad de strings (1, 2 o 3)
   //  depende del modelo: HP3-8K=2, HP3-10K=2, SG01HP3-12K/15K=3, SG04LP3-6K=2.

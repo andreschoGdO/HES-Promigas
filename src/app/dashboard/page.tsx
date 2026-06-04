@@ -950,8 +950,26 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || startTs >= endTs) {
         throw new Error('Rango inválido');
       }
-      const preset = PRESETS.find((p) => p.label === intervalLabel) ?? PRESETS[1] /* 1 hora fallback */;
+      let preset = PRESETS.find((p) => p.label === intervalLabel) ?? PRESETS[1] /* 1 hora fallback */;
+
+      // Metrum/ThingsBoard rechaza con 400 si (rango / interval) excede ~700 buckets.
+      // Auto-ajustar: si el intervalo elegido excede el cap, promovemos al siguiente
+      // (15min → 1h → 1d) y avisamos al usuario.
+      const METRUM_BUCKET_CAP = 600; // margen de seguridad bajo los 700 reales
+      let promoted = false;
+      while (preset.ms !== null && (endTs - startTs) / preset.ms > METRUM_BUCKET_CAP) {
+        const idx = PRESETS.findIndex((p) => p.label === preset.label);
+        if (idx === -1 || idx >= PRESETS.length - 1) break;
+        preset = PRESETS[idx + 1];
+        promoted = true;
+      }
+      if (promoted) {
+        setGranError(`Rango muy largo para ${intervalLabel} (Metrum solo acepta ~${METRUM_BUCKET_CAP} buckets por consulta). Se cambió automáticamente a ${preset.label}. Para ver ${intervalLabel} reduce el rango de fechas.`);
+        setIntervalLabel(preset.label);
+      }
+
       const next: Record<string, Record<string, { ts: number; value: string | number }[]>> = {};
+      const fetchErrors: string[] = [];
       // Fetch en paralelo: cada device pide SU propia lista de keys (selectedKeysByDevice)
       await Promise.all(Array.from(granularDeviceIds).map(async (devId) => {
         const dev = devices.find((d) => d.id === devId);
@@ -977,12 +995,17 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         const res = await fetch(`/api/metrum/timeseries?${params.toString()}`);
         const json = await res.json();
         if (!res.ok || !json.ok) {
-          console.error('granular fetch fail for', dev.name, json.error);
+          const errMsg = json.error ?? `HTTP ${res.status}`;
+          console.error('granular fetch fail for', dev.name, errMsg);
+          fetchErrors.push(`${dev.name}: ${errMsg}`);
           return;
         }
         next[devId] = json.raw ?? {};
       }));
       setGranData(next);
+      if (fetchErrors.length > 0 && !promoted) {
+        setGranError(`Metrum rechazó ${fetchErrors.length} consultas. Posibles causas: rango muy largo para el intervalo, key sin datos, o problemas de la API. Detalle: ${fetchErrors[0]}`);
+      }
     } catch (e) {
       setGranError(e instanceof Error ? e.message : 'Error');
     } finally {

@@ -950,7 +950,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || startTs >= endTs) {
         throw new Error('Rango inválido');
       }
-      const preset = PRESETS.find((p) => p.label === intervalLabel)!;
+      const preset = PRESETS.find((p) => p.label === intervalLabel) ?? PRESETS[1] /* 1 hora fallback */;
       const next: Record<string, Record<string, { ts: number; value: string | number }[]>> = {};
       // Fetch en paralelo: cada device pide SU propia lista de keys (selectedKeysByDevice)
       await Promise.all(Array.from(granularDeviceIds).map(async (devId) => {
@@ -1678,6 +1678,21 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
             </div>
 
             {granError && <div className="alert-error">{granError}</div>}
+
+            {/* Diagnóstico: cuántos puntos llegaron tras el último Consultar */}
+            {!granLoading && Object.keys(granData).length > 0 && (
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: 8 }}>
+                {chartData.length === 0 ? (
+                  <span style={{ color: '#ef4444' }}>
+                    ⚠ Se recibió respuesta de Metrum pero los datos no se pudieron interpretar (0 puntos en el chart). Revisa la consola del navegador (F12).
+                  </span>
+                ) : (
+                  <>
+                    <strong>{chartData.length}</strong> puntos × {seriesKeys.length} serie{seriesKeys.length === 1 ? '' : 's'} cargados ({intervalLabel} agregado por AVG).
+                  </>
+                )}
+              </div>
+            )}
 
             {chartData.length > 0 && (
               <>

@@ -1344,10 +1344,27 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                         </div>
                       </div>
 
-                      {/* Selector de series (excepto chart 1 que por default es 'all') */}
-                      {!isFirst && seriesKeys.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8, padding: '6px 8px', background: 'var(--bg-elevated)', borderRadius: 6 }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', alignSelf: 'center', marginRight: 4 }}>Series:</span>
+                      {/* Selector de series — click en un chip prende/apaga esa serie en esta gráfica */}
+                      {seriesKeys.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8, padding: '6px 8px', background: 'var(--bg-elevated)', borderRadius: 6, alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginRight: 4 }}>Series:</span>
+                          <button
+                            onClick={() => updateChart(cfg.id, { seriesIncluded: 'all' })}
+                            className={`chip ${cfg.seriesIncluded === 'all' ? 'active' : ''}`}
+                            style={{ fontSize: '0.68rem', padding: '2px 8px' }}
+                            title="Mostrar todas las series seleccionadas en esta gráfica"
+                          >
+                            Todas
+                          </button>
+                          <button
+                            onClick={() => updateChart(cfg.id, { seriesIncluded: new Set<string>() })}
+                            className="chip"
+                            style={{ fontSize: '0.68rem', padding: '2px 8px' }}
+                            title="Ocultar todas"
+                          >
+                            Ninguna
+                          </button>
+                          <span style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
                           {seriesKeys.map((s, i) => {
                             const included = cfg.seriesIncluded === 'all' || (cfg.seriesIncluded as Set<string>).has(s.key);
                             return (

@@ -1,6 +1,7 @@
 "use client";
 import { supabase } from '@/lib/supabase';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { toPng } from 'html-to-image';
 import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp, BarChart3, Cpu, AlertTriangle, AlertCircle, Bell, Info, Lightbulb } from 'lucide-react';
 import { VARIABLES, findVariable, type VariableMeta } from '@/lib/variables-dict';
 import { findVariableMeta, formatValue, ALERT_CATEGORIES } from '@/lib/alert-variables';
@@ -1124,6 +1125,52 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     { id: 'chart-1', title: 'Gráfica 1', seriesIncluded: 'all' },
   ]);
 
+  // Refs por chart id para exportar a PNG cada gráfica individual
+  const chartRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const downloadChartPng = async (chartId: string, title: string) => {
+    const node = chartRefs.current[chartId];
+    if (!node) return;
+    try {
+      const dataUrl = await toPng(node, { backgroundColor: '#ffffff', pixelRatio: 2 });
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      const safeName = title.replace(/[^\w\d\-_. ]+/g, '').trim().replace(/\s+/g, '_') || 'grafica';
+      a.download = `${safeName}_${dateStr(today())}.png`;
+      a.click();
+    } catch (err) {
+      console.error('PNG export error', err);
+      alert('No se pudo exportar a PNG: ' + (err instanceof Error ? err.message : 'Error'));
+    }
+  };
+
+  const downloadDailyTableCsv = () => {
+    if (!dailyData || dailyData.length === 0) return;
+    const headers = ['Día', ...seriesKeys.map((s) => s.label)];
+    const rows = dailyData.map((d) => {
+      const cells: (string | number)[] = [d.dia];
+      for (const s of seriesKeys) {
+        const cnt = d.count[s.key] ?? 0;
+        const avg = cnt > 0 ? d.sum[s.key] / cnt : null;
+        cells.push(avg === null ? '' : avg.toFixed(2));
+      }
+      return cells;
+    });
+    const escape = (v: unknown): string => {
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))];
+    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `granular_tabla_${startDate}_${endDate}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const addChart = () => {
     setCharts((cur) => [
       ...cur,
@@ -1648,7 +1695,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                   const series = chartSeriesFor(cfg);
                   const isFirst = chartIdx === 0;
                   return (
-                    <div key={cfg.id} className="glass-panel" style={{ padding: 12, marginBottom: 12 }}>
+                    <div key={cfg.id} ref={(el) => { chartRefs.current[cfg.id] = el; }} className="glass-panel" style={{ padding: 12, marginBottom: 12 }}>
                       {/* Header de la gráfica: título editable, controles Y axis, botón eliminar */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                         <input
@@ -1659,6 +1706,14 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                         <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
                           {series.length} serie{series.length === 1 ? '' : 's'}
                         </span>
+                        <button
+                          onClick={() => downloadChartPng(cfg.id, cfg.title)}
+                          title="Descargar esta gráfica como PNG"
+                          style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.72rem', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          disabled={series.length === 0}
+                        >
+                          <Download size={11} /> PNG
+                        </button>
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginLeft: 'auto', flexWrap: 'wrap' }}>
                           <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                             Y min:
@@ -1812,6 +1867,19 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
 
                 {showDataTable && dataTableMode === 'diario' && dailyData.length > 0 && (
                   <div className="glass-panel" style={{ padding: 0, marginTop: 12, overflow: 'hidden' }}>
+                    <div style={{ padding: '8px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
+                      <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                        Promedio diario por serie · {dailyData.length} día{dailyData.length === 1 ? '' : 's'}
+                      </span>
+                      <button
+                        onClick={downloadDailyTableCsv}
+                        className="secondary-btn"
+                        style={{ fontSize: '0.74rem', padding: '4px 10px' }}
+                        title="Descargar la tabla como CSV (abre en Excel)"
+                      >
+                        <Download size={12} /> CSV
+                      </button>
+                    </div>
                     <div style={{ overflowX: 'auto', maxHeight: 380 }}>
                       <table style={{ width: '100%', fontSize: '0.78rem' }}>
                         <thead>

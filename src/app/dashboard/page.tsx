@@ -196,10 +196,20 @@ const weekAgo = () => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 const today = () => new Date();
 const dateStr = (d: Date) => d.toISOString().slice(0, 10);
 
+// Etiqueta corta para los chips del selector. Identifica qué tipo de equipo
+// es (Medidor RED / Medidor SOLAR / Inversor marca / Pulsar) además del nombre,
+// para que cuando una casa tiene varios equipos del mismo tipo nominal el
+// usuario distinga cuál está eligiendo.
 const deviceLabel = (d: DeviceOption) => {
-  const parts = [d.name];
+  const t = (d.type ?? '').toLowerCase();
+  let tag = '';
+  if (t === 'red')       tag = 'Medidor RED';
+  else if (t === 'solar') tag = 'Medidor SOLAR';
+  else if (t === 'inverter') tag = `Inversor ${d.marca ?? ''}`.trim();
+  else if (t === 'pulsar' || t === 'gateway') tag = 'Pulsar';
+  const parts = tag ? [tag, d.name] : [d.name];
   if (d.client) parts.push(`(${d.client})`);
-  return parts.join(' ');
+  return parts.join(' · ');
 };
 
 const distinct = <T,>(arr: T[]): T[] => Array.from(new Set(arr));
@@ -843,10 +853,31 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       .filter((d): d is NonNullable<typeof d> => Boolean(d));
   }, [granularDeviceIds, devices]);
 
+  // Construye una etiqueta corta que identifica el equipo dentro de la casa:
+  //   - Medidor red → "Medidor RED"
+  //   - Medidor solar → "Medidor SOLAR"
+  //   - Inversor → "Inv <marca> <últimos 6 del serial>" (ej. "Inv LIVOLTEK 290023")
+  //   - Pulsar (gateway) → "Pulsar"
+  //   - Otro → device.name como fallback
+  const formatDeviceTag = (dev: DeviceOption): string => {
+    const t = (dev.type ?? '').toLowerCase();
+    if (t === 'red') return 'Medidor RED';
+    if (t === 'solar') return 'Medidor SOLAR';
+    if (t === 'inverter') {
+      const marca = dev.marca ?? 'Inversor';
+      const tail = (dev.name ?? '').slice(-6);
+      return `Inv ${marca}${tail ? ' ' + tail : ''}`;
+    }
+    if (t === 'pulsar' || t === 'gateway') return 'Pulsar';
+    return dev.name ?? 'Equipo';
+  };
+
   const seriesKeys = useMemo(() => {
     const out: Array<{ key: string; label: string; deviceId: string; baseKey: string }> = [];
     for (const dev of granularDevicesMeta) {
-      const devLabel = dev.casa ?? dev.name;
+      const casa = dev.casa ?? dev.name ?? '—';
+      const tag = formatDeviceTag(dev);
+      const devLabel = `${casa} · ${tag}`;
       const devKeys = selectedKeysByDevice[dev.id];
       if (!devKeys) continue;
       for (const k of devKeys) {

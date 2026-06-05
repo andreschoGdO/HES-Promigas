@@ -311,9 +311,13 @@ export default function FacturacionPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Total horizontal de costos por fila (suma de todas las columnas money editables)
+  // Subtotal por fila: suma de los 10 costos de componentes/servicios.
+  // Excluye `capex` porque Capex ya representa la suma agregada (con posible
+  // override comercial); incluirlo causaría double-counting.
   const rowSubtotal = (r: Row): number => {
-    return COLUMNS.filter((c) => c.type === 'money').reduce((acc, c) => acc + ((r[c.key] as number | null) ?? 0), 0);
+    return COLUMNS
+      .filter((c) => c.type === 'money' && c.key !== 'capex')
+      .reduce((acc, c) => acc + ((r[c.key] as number | null) ?? 0), 0);
   };
 
   const unfreezeRow = async (row: Row) => {

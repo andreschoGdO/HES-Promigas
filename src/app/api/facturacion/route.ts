@@ -70,15 +70,35 @@ export async function GET() {
   // 3. Equipos instalados en las casas de los proyectos (para marcas reales,
   // no las teóricas del diseño). Cuando hay equipo instalado, prevalece.
   const houseIds = projectList.map((p) => p.house_id).filter((x): x is string => Boolean(x));
-  type InstalledRow = { current_house_id: string; brand: string | null; model: string | null; capacity_value: number | null; capacity_unit: string | null; category_id: string | null };
+  type InstalledRow = { current_house_id: string; brand: string | null; model: string | null; capacity_value: number | null; capacity_unit: string | null; category_id: string | null; acquired_cost_cop: number | null };
   let installedRows: InstalledRow[] = [];
   if (houseIds.length > 0) {
     const { data } = await supabaseAdmin
       .from('inventory_items')
-      .select('current_house_id, brand, model, capacity_value, capacity_unit, category_id')
+      .select('current_house_id, brand, model, capacity_value, capacity_unit, category_id, acquired_cost_cop')
       .in('current_house_id', houseIds)
       .eq('status', 'installed');
     installedRows = (data ?? []) as InstalledRow[];
+  }
+
+  // Sumar costos reales de equipos instalados por familia.
+  // Mapeo familia → columna de costo en facturacion_records.
+  const FAMILY_TO_COST: Record<string, string> = {
+    inverter: 'costo_inversor',
+    battery:  'costo_bateria',
+    panel:    'costo_panel_solar',
+    gateway:  'costo_modem',
+  };
+  const derivedCostsByHouse = new Map<string, Record<string, number>>();
+  for (const it of installedRows) {
+    if (!it.current_house_id || !it.category_id || it.acquired_cost_cop == null) continue;
+    const fam = catById.get(it.category_id)?.family;
+    if (!fam) continue;
+    const costKey = FAMILY_TO_COST[fam];
+    if (!costKey) continue;
+    const houseAgg = derivedCostsByHouse.get(it.current_house_id) ?? {};
+    houseAgg[costKey] = (houseAgg[costKey] ?? 0) + Number(it.acquired_cost_cop);
+    derivedCostsByHouse.set(it.current_house_id, houseAgg);
   }
   // Indexar por house_id + family
   const installedByHouse = new Map<string, Map<string, { brand: string | null; model: string | null; cap: number | null; unit: string | null }>>();
@@ -131,6 +151,43 @@ export async function GET() {
 
   const rows = projectList.map((p) => {
     const fact = factByProject.get(p.id) ?? {};
+    const isFrozen = fact.frozen_at != null;
+    // Si el proyecto está congelado, NO se aplican costos derivados desde
+    // inventario — todo lo que se ve viene del registro fijo en BD.
+    const derived = (!isFrozen && p.house_id) ? (derivedCostsByHouse.get(p.house_id) ?? {}) : {};
+
+    const resolveCost = (key: string): { value: number | null; isDerived: boolean } => {
+      const userVal = fact[key] as number | null | undefined;
+      if (userVal != null) return { value: Number(userVal), isDerived: false };
+      const derivedVal = derived[key];
+      if (derivedVal != null) return { value: Number(derivedVal), isDerived: true };
+      return { value: null, isDerived: false };
+    };
+
+    const costInversor   = resolveCost('costo_inversor');
+    const costBateria    = resolveCost('costo_bateria');
+    const costPanelSolar = resolveCost('costo_panel_solar');
+    const costModem      = resolveCost('costo_modem');
+
+    // Costos sin derivación (solo user input)
+    const costControlBox       = (fact.costo_control_box        as number | null) ?? null;
+    const costTopCover         = (fact.costo_top_cover          as number | null) ?? null;
+    const costMedidorSolar     = (fact.costo_medidor_solar      as number | null) ?? null;
+    const costMedidorGen       = (fact.costo_medidor_generacion as number | null) ?? null;
+    const manoObra             = (fact.mano_de_obra             as number | null) ?? null;
+    const desmantelamiento     = (fact.desmantelamiento_mo      as number | null) ?? null;
+
+    // Capex: user override else suma de los 11 costos efectivos (derivados+user)
+    const userCapex = fact.capex as number | null | undefined;
+    const capexComputed = [
+      costInversor.value, costBateria.value, costControlBox, costTopCover,
+      costPanelSolar.value, costMedidorSolar, costMedidorGen, costModem.value,
+      manoObra, desmantelamiento,
+    ].reduce<number>((acc, v) => acc + (v ?? 0), 0);
+    const capex = userCapex != null
+      ? { value: Number(userCapex), isDerived: false }
+      : { value: capexComputed > 0 ? capexComputed : null, isDerived: capexComputed > 0 };
+
     return {
       project_id: p.id,
       project_code: p.code,
@@ -148,19 +205,31 @@ export async function GET() {
       marca_bateria: resolveBrand(p, 'battery', p.diseno_bateria_categoria_id),
       marca_inversor: resolveBrand(p, 'inverter', p.diseno_inversor_categoria_id),
       marca_panel: resolveBrand(p, 'panel', p.diseno_panel_categoria_id),
-      costo_inversor: (fact.costo_inversor as number | null) ?? null,
-      costo_bateria: (fact.costo_bateria as number | null) ?? null,
-      costo_control_box: (fact.costo_control_box as number | null) ?? null,
-      costo_top_cover: (fact.costo_top_cover as number | null) ?? null,
-      costo_panel_solar: (fact.costo_panel_solar as number | null) ?? null,
-      costo_medidor_solar: (fact.costo_medidor_solar as number | null) ?? null,
-      costo_medidor_generacion: (fact.costo_medidor_generacion as number | null) ?? null,
-      costo_modem: (fact.costo_modem as number | null) ?? null,
-      mano_de_obra: (fact.mano_de_obra as number | null) ?? null,
-      desmantelamiento_mo: (fact.desmantelamiento_mo as number | null) ?? null,
-      capex: (fact.capex as number | null) ?? null,
+
+      costo_inversor: costInversor.value,
+      costo_inversor_is_derived: costInversor.isDerived,
+      costo_bateria: costBateria.value,
+      costo_bateria_is_derived: costBateria.isDerived,
+      costo_control_box: costControlBox,
+      costo_top_cover: costTopCover,
+      costo_panel_solar: costPanelSolar.value,
+      costo_panel_solar_is_derived: costPanelSolar.isDerived,
+      costo_medidor_solar: costMedidorSolar,
+      costo_medidor_generacion: costMedidorGen,
+      costo_modem: costModem.value,
+      costo_modem_is_derived: costModem.isDerived,
+      mano_de_obra: manoObra,
+      desmantelamiento_mo: desmantelamiento,
+      capex: capex.value,
+      capex_is_derived: capex.isDerived,
+
       operador_red: (fact.operador_red as string | null) ?? null,
       has_record: factByProject.has(p.id),
+
+      // Freeze state
+      frozen_at: (fact.frozen_at as string | null) ?? null,
+      frozen_by: (fact.frozen_by as string | null) ?? null,
+      periodo: (fact.periodo as string | null) ?? null,
     };
   });
 
@@ -210,14 +279,46 @@ export async function PATCH(request: Request) {
     }
 
     const actor = str(body.actor_email);
+    const force = body.force_edit_frozen === true;
 
-    // Upsert: intentar UPDATE; si afecta 0 filas, INSERT.
+    // Leer estado actual (para validar frozen + capturar valores anteriores
+    // para el audit log).
     const { data: existing } = await supabaseAdmin
       .from('facturacion_records')
-      .select('id')
+      .select('*')
       .eq('project_id', projectId)
       .maybeSingle();
 
+    if (existing?.frozen_at && !force) {
+      return NextResponse.json({
+        error: 'El proyecto está congelado. Para editar costos, descongelarlo primero o pasa force_edit_frozen=true.',
+        frozen: true,
+        frozen_at: existing.frozen_at,
+        periodo: existing.periodo,
+      }, { status: 409 });
+    }
+
+    // Log de cambios al audit table (un evento por campo modificado)
+    const events = Object.entries(updates)
+      .filter(([k, v]) => {
+        const prev = existing ? (existing as Record<string, unknown>)[k] : null;
+        // Normalizar para comparar (null vs undefined vs valores numéricos)
+        const a = prev === undefined ? null : prev;
+        const b = v === undefined ? null : v;
+        return String(a ?? '') !== String(b ?? '');
+      })
+      .map(([k, v]) => ({
+        project_id: projectId,
+        event_type: typeof v === 'number' ? 'cost_change' : 'text_change',
+        field: k,
+        old_value: existing ? ((existing as Record<string, unknown>)[k] == null ? null : String((existing as Record<string, unknown>)[k])) : null,
+        new_value: v == null ? null : String(v),
+        source: force ? 'user' : 'user',  // futuro: distinguir
+        actor_email: actor,
+        notes: force ? 'Edición sobre proyecto congelado' : null,
+      }));
+
+    let record;
     if (existing) {
       const { data, error } = await supabaseAdmin
         .from('facturacion_records')
@@ -226,7 +327,7 @@ export async function PATCH(request: Request) {
         .select('*')
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ record: data });
+      record = data;
     } else {
       const { data, error } = await supabaseAdmin
         .from('facturacion_records')
@@ -234,8 +335,13 @@ export async function PATCH(request: Request) {
         .select('*')
         .single();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ record: data });
+      record = data;
     }
+
+    if (events.length > 0) {
+      await supabaseAdmin.from('facturacion_events').insert(events);
+    }
+    return NextResponse.json({ record });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
   }

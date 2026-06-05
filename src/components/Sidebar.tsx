@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat, TrendingUp, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Home, Package, ShoppingCart, Ruler, HardHat, TrendingUp, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { readVisibility, fetchVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
 
@@ -98,6 +98,7 @@ export function Sidebar() {
     { id: 'funnel',      label: 'Funnel', path: '/funnel', icon: TrendingUp },
     { id: 'visitas',     label: 'Visitas en Campo', path: '/visitas', icon: ClipboardCheck },
     { id: 'inventario',  label: 'Inventario', path: '/inventario', icon: Package },
+    { id: 'facturacion', label: 'Facturación', path: '/facturacion', icon: Receipt },
     { id: 'reportes',    label: 'Reportes', path: '/reportes', icon: FileBarChart },
     { id: 'planner',     label: 'Planner', path: '/planner', icon: CalendarRange },
   ];

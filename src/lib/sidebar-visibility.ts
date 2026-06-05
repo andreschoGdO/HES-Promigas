@@ -24,6 +24,7 @@ export interface SidebarVisibility {
   funnel?: boolean;
   visitas?: boolean;
   inventario?: boolean;
+  facturacion?: boolean;
   reportes?: boolean;
   planner?: boolean;
   alertas?: boolean;
@@ -47,6 +48,7 @@ export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: stri
   { id: 'funnel',        label: 'Funnel',                  group: 'general' },
   { id: 'visitas',       label: 'Visitas en Campo',        group: 'general' },
   { id: 'inventario',    label: 'Inventario',              group: 'general' },
+  { id: 'facturacion',   label: 'Facturación',             group: 'general' },
   { id: 'reportes',      label: 'Reportes',                group: 'general' },
   { id: 'planner',       label: 'Planner',                 group: 'general' },
   { id: 'alertas',       label: 'NAR',                     group: 'sistema' },

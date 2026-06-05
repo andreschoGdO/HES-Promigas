@@ -91,13 +91,13 @@ const FAMILY_LABELS: Record<string, string> = {
   meter: 'Medidores', cable: 'Cableado', breaker: 'Breakers', tool: 'Herramientas', other: 'Otros',
 };
 
-const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu; description: string }> = {
-  equipos:     { label: 'Equipos',     color: '#3b82f6', Icon: Cpu,            description: 'Catálogo de equipos serializados por número de fabricante.' },
-  consumibles: { label: 'Consumibles', color: '#8b5cf6', Icon: Cable,          description: 'Cantidad disponible, umbrales de stock mínimo y ajustes.' },
-  ubicaciones: { label: 'Ubicaciones', color: '#0ea5e9', Icon: MapPin,         description: 'Bodegas, talleres, vehículos de cuadrilla y RMA proveedor. Donde físicamente vive cada equipo.' },
-  reservas:    { label: 'Reservas',    color: '#ec4899', Icon: ClipboardList,  description: 'Aparta equipos serializados para una visita planeada. Al completar la visita, los items pasan a instalados.' },
-  movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History,        description: 'Audit log de cada cambio: recepción, instalación, garantía, RMA.' },
-  categorias:  { label: 'Categorías',  color: '#10b981', Icon: Tags,           description: 'Catálogo de modelos con valores por defecto (marca, capacidad, garantía).' },
+const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu }> = {
+  equipos:     { label: 'Equipos',     color: '#3b82f6', Icon: Cpu },
+  consumibles: { label: 'Consumibles', color: '#8b5cf6', Icon: Cable },
+  ubicaciones: { label: 'Ubicaciones', color: '#0ea5e9', Icon: MapPin },
+  reservas:    { label: 'Reservas',    color: '#ec4899', Icon: ClipboardList },
+  movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History },
+  categorias:  { label: 'Categorías',  color: '#10b981', Icon: Tags },
 };
 
 const LOCATION_TYPE_META: Record<string, { label: string; color: string; Icon: typeof Cpu }> = {
@@ -153,7 +153,6 @@ export default function InventarioPage() {
     })();
   }, []);
 
-  const meta = TAB_META[tab];
   const attention: Array<{ label: string; color: string; jump: Tab }> = headerStats ? [
     headerStats.lowStockCount > 0 && { label: `${headerStats.lowStockCount} consumible${headerStats.lowStockCount === 1 ? '' : 's'} con stock bajo`, color: '#ef4444', jump: 'consumibles' as Tab },
     headerStats.warrantyExpiring > 0 && { label: `${headerStats.warrantyExpiring} garantía${headerStats.warrantyExpiring === 1 ? '' : 's'} próxima${headerStats.warrantyExpiring === 1 ? '' : 's'} a vencer`, color: '#ec4899', jump: 'equipos' as Tab },
@@ -210,17 +209,6 @@ export default function InventarioPage() {
             </button>
           );
         })}
-      </div>
-
-      {/* Strip de identidad del tab activo */}
-      <div className="glass-panel" style={{ padding: 16, borderLeft: `4px solid ${meta.color}`, marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <meta.Icon size={26} style={{ color: meta.color, flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={{ margin: 0, fontSize: '1.05rem' }}>{meta.label}</h2>
-            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>{meta.description}</p>
-          </div>
-        </div>
       </div>
 
       {tab === 'equipos' && <EquiposTab userEmail={userEmail} />}

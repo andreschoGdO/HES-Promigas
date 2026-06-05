@@ -10,7 +10,7 @@ const supa = () => createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-type Tab = 'resumen' | 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias';
+type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias';
 
 interface Category {
   id: string;
@@ -92,7 +92,6 @@ const FAMILY_LABELS: Record<string, string> = {
 };
 
 const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu; description: string }> = {
-  resumen:     { label: 'Resumen',     color: '#07c5a8', Icon: Boxes,          description: 'Indicadores y atención requerida del inventario.' },
   equipos:     { label: 'Equipos',     color: '#3b82f6', Icon: Cpu,            description: 'Catálogo de equipos serializados por número de fabricante.' },
   consumibles: { label: 'Consumibles', color: '#8b5cf6', Icon: Cable,          description: 'Cantidad disponible, umbrales de stock mínimo y ajustes.' },
   ubicaciones: { label: 'Ubicaciones', color: '#0ea5e9', Icon: MapPin,         description: 'Bodegas, talleres, vehículos de cuadrilla y RMA proveedor. Donde físicamente vive cada equipo.' },
@@ -112,19 +111,59 @@ const LOCATION_TYPE_META: Record<string, { label: string; color: string; Icon: t
 };
 
 export default function InventarioPage() {
-  const [tab, setTab] = useState<Tab>('resumen');
+  const [tab, setTab] = useState<Tab>('equipos');
   const [userEmail, setUserEmail] = useState<string>('');
+  const [headerStats, setHeaderStats] = useState<HeaderStats | null>(null);
 
   useEffect(() => {
     supa().auth.getUser().then(({ data }) => { if (data.user?.email) setUserEmail(data.user.email); });
   }, []);
 
+  // Fetch resumen stats al cargar la página, persisten arriba sin importar el tab
+  useEffect(() => {
+    (async () => {
+      try {
+        const [r1, r2] = await Promise.all([
+          fetch('/api/inventory/items?limit=2000').then((r) => r.json()),
+          fetch('/api/inventory/consumables').then((r) => r.json()),
+        ]);
+        const items: InvItem[] = r1.items ?? [];
+        const consumables: Consumable[] = r2.consumables ?? [];
+        const byStatus: Record<string, number> = {};
+        let warrantyExpiring = 0;
+        const nowPlus60 = new Date(Date.now() + 60 * 86400000);
+        for (const it of items) {
+          byStatus[it.status] = (byStatus[it.status] ?? 0) + 1;
+          if (it.warranty_expires_at && new Date(it.warranty_expires_at) < nowPlus60) warrantyExpiring++;
+        }
+        const lowStock = consumables.filter((c) => c.stock_quantity <= c.min_threshold);
+        setHeaderStats({
+          totalItems: items.length,
+          totalConsumables: consumables.length,
+          inStock: byStatus.in_stock ?? 0,
+          installed: byStatus.installed ?? 0,
+          inRepair: (byStatus.in_repair ?? 0) + (byStatus.rma ?? 0),
+          lowStockCount: lowStock.length,
+          warrantyExpiring,
+        });
+      } catch {
+        // Si falla, mostramos los cards con cero pero la página sigue operando
+        setHeaderStats({ totalItems: 0, totalConsumables: 0, inStock: 0, installed: 0, inRepair: 0, lowStockCount: 0, warrantyExpiring: 0 });
+      }
+    })();
+  }, []);
+
   const meta = TAB_META[tab];
+  const attention: Array<{ label: string; color: string; jump: Tab }> = headerStats ? [
+    headerStats.lowStockCount > 0 && { label: `${headerStats.lowStockCount} consumible${headerStats.lowStockCount === 1 ? '' : 's'} con stock bajo`, color: '#ef4444', jump: 'consumibles' as Tab },
+    headerStats.warrantyExpiring > 0 && { label: `${headerStats.warrantyExpiring} garantía${headerStats.warrantyExpiring === 1 ? '' : 's'} próxima${headerStats.warrantyExpiring === 1 ? '' : 's'} a vencer`, color: '#ec4899', jump: 'equipos' as Tab },
+    headerStats.inRepair > 0 && { label: `${headerStats.inRepair} en garantía / RMA`, color: '#f59e0b', jump: 'equipos' as Tab },
+  ].filter(Boolean) as Array<{ label: string; color: string; jump: Tab }> : [];
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 40 }}>
       {/* HEADER */}
-      <div style={{ marginBottom: 22 }}>
+      <div style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Package size={24} style={{ color: 'var(--accent)' }} />
           <h1 style={{ margin: 0 }}>Inventario</h1>
@@ -134,8 +173,34 @@ export default function InventarioPage() {
         </p>
       </div>
 
+      {/* KPI cards + Atención requerida — siempre visibles */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 14 }}>
+        <KpiCard label="Equipos totales" value={headerStats?.totalItems ?? 0} sub={`${headerStats?.installed ?? 0} instalados`} color="#07c5a8" Icon={Cpu} />
+        <KpiCard label="En stock (bodega)" value={headerStats?.inStock ?? 0} sub="Listos para instalar" color="#10b981" Icon={Boxes} />
+        <KpiCard label="En garantía / RMA" value={headerStats?.inRepair ?? 0} sub={(headerStats?.inRepair ?? 0) === 0 ? 'Todo operando' : 'Fuera de servicio'} color="#f59e0b" Icon={AlertTriangle} />
+        <KpiCard label="Consumibles" value={headerStats?.totalConsumables ?? 0} sub={`${headerStats?.lowStockCount ?? 0} con stock bajo`} color="#8b5cf6" Icon={Cable} />
+        {/* Atención requerida — al lado, mismo nivel que los KPIs */}
+        <div className="glass-panel" style={{ padding: '14px 16px', borderLeft: '4px solid #ef4444', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+            <AlertTriangle size={13} style={{ color: '#ef4444' }} /> Atención requerida
+          </div>
+          {attention.length === 0 ? (
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Sin alertas — todo en orden</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {attention.map((a, i) => (
+                <button key={i} onClick={() => setTab(a.jump)}
+                  style={{ background: 'transparent', border: 'none', borderLeft: `2px solid ${a.color}`, padding: '2px 0 2px 8px', textAlign: 'left', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.82rem', lineHeight: 1.3 }}>
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* TABS — primary navigation */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
         {(Object.keys(TAB_META) as Tab[]).map((k) => {
           const m = TAB_META[k];
           return (
@@ -158,7 +223,6 @@ export default function InventarioPage() {
         </div>
       </div>
 
-      {tab === 'resumen' && <ResumenTab onJump={setTab} />}
       {tab === 'equipos' && <EquiposTab userEmail={userEmail} />}
       {tab === 'consumibles' && <ConsumiblesTab userEmail={userEmail} />}
       {tab === 'ubicaciones' && <UbicacionesTab />}
@@ -169,177 +233,17 @@ export default function InventarioPage() {
   );
 }
 
-/* ═════════════ RESUMEN ═════════════ */
-function ResumenTab({ onJump }: { onJump: (t: Tab) => void }) {
-  const [items, setItems] = useState<InvItem[]>([]);
-  const [consumables, setConsumables] = useState<Consumable[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    (async () => {
-      const [r1, r2] = await Promise.all([
-        fetch('/api/inventory/items?limit=2000').then((r) => r.json()),
-        fetch('/api/inventory/consumables').then((r) => r.json()),
-      ]);
-      setItems(r1.items ?? []);
-      setConsumables(r2.consumables ?? []);
-      setLoading(false);
-    })();
-  }, []);
-
-  const stats = useMemo(() => {
-    const byStatus: Record<string, number> = {};
-    const byFamily: Record<string, number> = {};
-    let warrantyExpiring = 0;
-    const nowPlus60 = new Date(Date.now() + 60 * 86400000);
-    for (const it of items) {
-      byStatus[it.status] = (byStatus[it.status] ?? 0) + 1;
-      const fam = it.inventory_categories?.family ?? 'other';
-      byFamily[fam] = (byFamily[fam] ?? 0) + 1;
-      if (it.warranty_expires_at && new Date(it.warranty_expires_at) < nowPlus60) warrantyExpiring++;
-    }
-    const lowStockList = consumables.filter((c) => c.stock_quantity <= c.min_threshold);
-    return {
-      byStatus, byFamily, warrantyExpiring,
-      lowStockCount: lowStockList.length,
-      lowStockList,
-      inRepair: (byStatus.in_repair ?? 0) + (byStatus.rma ?? 0),
-      totalItems: items.length,
-      totalConsumables: consumables.length,
-      maxFamilyCount: Math.max(1, ...Object.values(byFamily)),
-      maxStatusCount: Math.max(1, ...Object.values(byStatus)),
-    };
-  }, [items, consumables]);
-
-  if (loading) return <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
-
-  const empty = stats.totalItems === 0 && stats.totalConsumables === 0;
-  const attentionItems = [
-    stats.lowStockCount > 0 && { label: `${stats.lowStockCount} consumible${stats.lowStockCount === 1 ? '' : 's'} con stock bajo`, color: '#ef4444', tab: 'consumibles' as Tab, hint: 'Revisar y reponer' },
-    stats.warrantyExpiring > 0 && { label: `${stats.warrantyExpiring} garantía${stats.warrantyExpiring === 1 ? '' : 's'} próxima${stats.warrantyExpiring === 1 ? '' : 's'} a vencer (≤ 60 días)`, color: '#ec4899', tab: 'equipos' as Tab, hint: 'Revisar antes que expiren' },
-    stats.inRepair > 0 && { label: `${stats.inRepair} equipo${stats.inRepair === 1 ? '' : 's'} en garantía o RMA`, color: '#f59e0b', tab: 'equipos' as Tab, hint: 'Hacer seguimiento al proveedor' },
-  ].filter(Boolean) as Array<{ label: string; color: string; tab: Tab; hint: string }>;
-
-  return (
-    <>
-      {empty && (
-        <div className="glass-panel" style={{ padding: 20, marginBottom: 14, borderLeft: '4px solid #f59e0b' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-            <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
-            <h3 style={{ margin: 0, fontSize: '1rem' }}>Inventario vacío</h3>
-          </div>
-          <p style={{ margin: '0 0 14px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            Aún no hay equipos ni consumibles registrados. Empieza dando de alta tu primer equipo serializado o cargando un CSV con varios.
-          </p>
-          <button onClick={() => onJump('equipos')} className="primary-btn">
-            <Plus size={14} /> Ir a Equipos para registrar el primero
-          </button>
-        </div>
-      )}
-
-      {/* 1. Atención requerida — solo si hay algo accionable */}
-      {attentionItems.length > 0 && (
-        <div className="glass-panel" style={{ marginBottom: 14, borderLeft: '4px solid #ef4444', padding: 18 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <AlertTriangle size={18} style={{ color: '#ef4444' }} />
-            <h3 style={{ margin: 0, fontSize: '0.98rem' }}>Atención requerida</h3>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {attentionItems.map((a, i) => (
-              <button key={i} onClick={() => onJump(a.tab)}
-                style={{ background: 'var(--bg-elevated)', border: 'none', borderLeft: `3px solid ${a.color}`, borderRadius: 8, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', color: 'var(--text-primary)', textAlign: 'left' }}>
-                <div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{a.label}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{a.hint}</div>
-                </div>
-                <span style={{ fontSize: '0.74rem', color: a.color, fontWeight: 600 }}>Ir a {TAB_META[a.tab].label} →</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 2. KPIs principales — vista de portafolio en 4 cards iguales */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 14 }}>
-        <KpiCard label="Equipos totales" value={stats.totalItems} sub={`${stats.byStatus.installed ?? 0} instalados`} color="#07c5a8" Icon={Cpu} />
-        <KpiCard label="En stock (bodega)" value={stats.byStatus.in_stock ?? 0} sub="Listos para instalar" color="#10b981" Icon={Boxes} />
-        <KpiCard label="En garantía / RMA" value={stats.inRepair} sub={stats.inRepair === 0 ? 'Todo operando' : 'Fuera de servicio'} color="#f59e0b" Icon={AlertTriangle} />
-        <KpiCard label="Consumibles" value={stats.totalConsumables} sub={`${stats.lowStockCount} con stock bajo`} color="#8b5cf6" Icon={Cable} />
-      </div>
-
-      {/* 3. Distribución por estado y por familia, lado a lado */}
-      {stats.totalItems > 0 && (
-        <div className="dist-grid" style={{ marginBottom: 14 }}>
-          <div className="glass-panel">
-            <h3 style={{ margin: 0, marginBottom: 14, fontSize: '0.95rem' }}>Equipos por estado</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {Object.entries(STATUS_META).map(([key, meta]) => {
-                const count = stats.byStatus[key] ?? 0;
-                if (count === 0) return null;
-                const pct = (count / stats.maxStatusCount) * 100;
-                return (
-                  <div key={key}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{meta.label}</span>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: meta.color, fontFamily: 'ui-monospace, monospace' }}>{count}</span>
-                    </div>
-                    <div style={{ height: 8, background: 'var(--bg-elevated)', borderRadius: 4, overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: meta.color, borderRadius: 4, transition: 'width 0.3s' }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="glass-panel">
-            <h3 style={{ margin: 0, marginBottom: 14, fontSize: '0.95rem' }}>Equipos por familia</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {Object.entries(stats.byFamily).sort((a, b) => b[1] - a[1]).map(([fam, count]) => {
-                const Icon = FAMILY_ICONS[fam] ?? Package;
-                const pct = (count / stats.maxFamilyCount) * 100;
-                return (
-                  <div key={fam}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, gap: 8 }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', fontWeight: 600 }}>
-                        <Icon size={14} style={{ color: 'var(--accent)' }} /> {FAMILY_LABELS[fam] ?? fam}
-                      </span>
-                      <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent)', fontFamily: 'ui-monospace, monospace' }}>{count}</span>
-                    </div>
-                    <div style={{ height: 8, background: 'var(--bg-elevated)', borderRadius: 4, overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 4 }} />
-                    </div>
-                  </div>
-                );
-              })}
-              {Object.keys(stats.byFamily).length === 0 && (
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Aún sin equipos clasificados por familia.</div>
-              )}
-            </div>
-          </div>
-
-          <style jsx>{`
-            .dist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-            @media (max-width: 768px) { .dist-grid { grid-template-columns: 1fr; } }
-          `}</style>
-        </div>
-      )}
-
-      {/* 4. Acciones rápidas — el siguiente paso natural */}
-      <div className="glass-panel" style={{ padding: 18 }}>
-        <h3 style={{ margin: 0, marginBottom: 4, fontSize: '0.95rem' }}>Siguientes acciones</h3>
-        <p style={{ margin: '0 0 14px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
-          Lo más común que vas a hacer aquí:
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
-          <ActionLink onClick={() => onJump('equipos')} color="#3b82f6" Icon={Plus} label="Registrar un equipo" hint="Manual, CSV, cámara o pistola" />
-          <ActionLink onClick={() => onJump('consumibles')} color="#8b5cf6" Icon={Cable} label="Ajustar stock de consumibles" hint="Entradas, salidas, ajustes" />
-          <ActionLink onClick={() => onJump('movimientos')} color="#f59e0b" Icon={History} label="Ver audit log" hint="Cada cambio queda registrado" />
-        </div>
-      </div>
-    </>
-  );
+interface HeaderStats {
+  totalItems: number;
+  totalConsumables: number;
+  inStock: number;
+  installed: number;
+  inRepair: number;
+  lowStockCount: number;
+  warrantyExpiring: number;
 }
+
+/* ═════════════ Helpers de KPIs (usados en el header) ═════════════ */
 
 function KpiCard({ label, value, color, sub, Icon }: { label: string; value: number; color: string; sub?: string; Icon?: typeof Cpu }) {
   return (
@@ -354,18 +258,6 @@ function KpiCard({ label, value, color, sub, Icon }: { label: string; value: num
   );
 }
 
-function ActionLink({ onClick, color, Icon, label, hint }: { onClick: () => void; color: string; Icon: typeof Cpu; label: string; hint: string }) {
-  return (
-    <button onClick={onClick}
-      style={{ background: 'var(--bg-elevated)', border: 'none', borderLeft: `3px solid ${color}`, borderRadius: 8, padding: 14, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, color: 'var(--text-primary)' }}>
-      <Icon size={18} style={{ color, flexShrink: 0 }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '0.86rem', fontWeight: 600 }}>{label}</div>
-        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 2 }}>{hint}</div>
-      </div>
-    </button>
-  );
-}
 
 /* ═════════════ EQUIPOS ═════════════ */
 function EquiposTab({ userEmail }: { userEmail: string }) {

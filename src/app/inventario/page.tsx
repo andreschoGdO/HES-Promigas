@@ -1043,6 +1043,8 @@ function MovimientosTab() {
 function CategoriasTab() {
   const [items, setItems] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -1068,12 +1070,38 @@ function CategoriasTab() {
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [items]);
 
-  if (loading) return <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
-  if (items.length === 0) return <div className="alert-warning" style={{ fontSize: '0.85rem' }}>No hay categorías registradas. Las categorías sirven como plantilla para autocompletar marca, modelo, capacidad y garantía al dar de alta un equipo.</div>;
+  const header = (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+      <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+        Las categorías son plantillas: cuando das de alta un equipo y lo asocias a una categoría, los campos marca / modelo / capacidad / garantía se autocompletan.
+      </p>
+      <button className="primary-btn" onClick={() => setShowAdd(true)} style={{ fontSize: '0.82rem' }}>
+        <Plus size={14} /> Nueva categoría
+      </button>
+    </div>
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {byFamily.map(([family, cats]) => {
+      {header}
+      {msg && <div className={msg.kind === 'success' ? 'alert-success' : 'alert-error'} style={{ fontSize: '0.82rem' }}>{msg.text}</div>}
+      {showAdd && (
+        <NewCategoryModal
+          onClose={() => setShowAdd(false)}
+          onCreated={(c) => {
+            setItems((cur) => [...cur, c]);
+            setMsg({ kind: 'success', text: `Categoría "${c.name}" creada (código ${c.code}).` });
+            setShowAdd(false);
+          }}
+        />
+      )}
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
+      ) : items.length === 0 ? (
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+          No hay categorías registradas. Crea la primera con el botón &quot;Nueva categoría&quot; arriba.
+        </div>
+      ) : byFamily.map(([family, cats]) => {
         const Icon = FAMILY_ICONS[family] ?? Package;
         return (
           <div key={family} className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
@@ -1118,6 +1146,118 @@ function CategoriasTab() {
         );
       })}
     </div>
+  );
+}
+
+/* ─── Modal: nueva categoría ─── */
+function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreated: (c: Category) => void }) {
+  const [form, setForm] = useState({
+    code: '',
+    name: '',
+    family: 'inverter',
+    default_brand: '',
+    default_model: '',
+    default_capacity_value: '',
+    default_capacity_unit: '',
+    default_warranty_months: '',
+    is_serialized: true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  const submit = async () => {
+    setErr(null);
+    if (!form.code.trim()) return setErr('Código requerido (ej. INV_LIVOLTEK_HP3_10K)');
+    if (!form.name.trim()) return setErr('Nombre requerido');
+    if (!form.family) return setErr('Familia requerida');
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        code: form.code.trim(),
+        name: form.name.trim(),
+        family: form.family,
+        default_brand: form.default_brand.trim() || null,
+        default_model: form.default_model.trim() || null,
+        default_capacity_value: form.default_capacity_value ? Number(form.default_capacity_value) : null,
+        default_capacity_unit: form.default_capacity_unit.trim() || null,
+        default_warranty_months: form.default_warranty_months ? Number(form.default_warranty_months) : null,
+        is_serialized: form.is_serialized,
+      };
+      const r = await fetch('/api/inventory/categories', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      onCreated(j.category as Category);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Nueva categoría" onClose={onClose}>
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Código <span style={{ color: '#ef4444' }}>*</span></label>
+          <input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="INV_LIVOLTEK_HP3_10K" autoFocus />
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>Se normaliza a MAYÚSCULAS, A-Z 0-9 _ — clave única.</p>
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Nombre <span style={{ color: '#ef4444' }}>*</span></label>
+          <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Livoltek HP3-10KL2 trifásico" />
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Familia <span style={{ color: '#ef4444' }}>*</span></label>
+          <select value={form.family} onChange={(e) => set('family', e.target.value)}>
+            {Object.entries(FAMILY_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">¿Serializado?</label>
+          <select value={form.is_serialized ? '1' : '0'} onChange={(e) => set('is_serialized', e.target.value === '1')}>
+            <option value="1">Sí (cada unidad lleva serial individual)</option>
+            <option value="0">No (es consumible / cantidad)</option>
+          </select>
+        </div>
+      </div>
+
+      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6, marginTop: 8 }}>
+        Valores por defecto (autocompletado al crear equipos)
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Marca default</label>
+          <input value={form.default_brand} onChange={(e) => set('default_brand', e.target.value)} placeholder="Livoltek" />
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Modelo default</label>
+          <input value={form.default_model} onChange={(e) => set('default_model', e.target.value)} placeholder="HP3-10KL2" />
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Capacidad</label>
+          <input type="number" value={form.default_capacity_value} onChange={(e) => set('default_capacity_value', e.target.value)} placeholder="10" />
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Unidad capacidad</label>
+          <input value={form.default_capacity_unit} onChange={(e) => set('default_capacity_unit', e.target.value)} placeholder="kW · Ah · W · cm" />
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Garantía (meses)</label>
+          <input type="number" value={form.default_warranty_months} onChange={(e) => set('default_warranty_months', e.target.value)} placeholder="60" />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={submit} className="primary-btn" disabled={saving}>{saving ? 'Creando…' : 'Crear categoría'}</button>
+      </div>
+    </ModalShell>
   );
 }
 

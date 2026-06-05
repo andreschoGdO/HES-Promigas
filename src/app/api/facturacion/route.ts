@@ -55,17 +55,24 @@ export async function GET() {
   // 2. Catálogo de categorías para resolver marcas + costo default desde diseno_*_categoria_id
   const { data: cats } = await supabaseAdmin
     .from('inventory_categories')
-    .select('id, family, default_brand, default_model, default_capacity_value, default_capacity_unit, default_cost_cop');
-  const catById = new Map<string, { family: string; brand: string | null; model: string | null; cap: number | null; unit: string | null; costCop: number | null }>();
+    .select('id, family, default_brand, default_model, default_capacity_value, default_capacity_unit, default_cost_cop, provider');
+  type CatRow = { family: string; brand: string | null; model: string | null; cap: number | null; unit: string | null; costCop: number | null; provider: string | null };
+  const catById = new Map<string, CatRow>();
+  const serviceCats: CatRow[] = [];
   for (const c of cats ?? []) {
-    catById.set(c.id, {
+    const row: CatRow = {
       family: c.family,
       brand: c.default_brand ?? null,
       model: c.default_model ?? null,
       cap: c.default_capacity_value ?? null,
       unit: c.default_capacity_unit ?? null,
       costCop: c.default_cost_cop ?? null,
-    });
+      provider: c.provider ?? null,
+    };
+    catById.set(c.id, row);
+    if (['mano_obra', 'desmantelamiento', 'puesta_en_marcha', 'servicio'].includes(c.family) && c.default_cost_cop != null) {
+      serviceCats.push(row);
+    }
   }
 
   // 3. Equipos instalados en las casas de los proyectos (para marcas reales,
@@ -124,6 +131,47 @@ export async function GET() {
     installedByHouse.set(it.current_house_id, houseMap);
   }
 
+  // 3b. Servicios (mano de obra, desmantelamiento, etc.) — derivar por proyecto
+  // basándose en provider (contractor_name) o marca de equipos instalados.
+  // Mapeo family servicio → columna en facturacion_records.
+  const SERVICE_FAMILY_TO_COST: Record<string, string> = {
+    mano_obra: 'mano_de_obra',
+    desmantelamiento: 'desmantelamiento_mo',
+    puesta_en_marcha: 'mano_de_obra',   // se suma al mismo bucket
+    servicio: 'mano_de_obra',           // genérico → mano de obra
+  };
+  const derivedServiceByProject = new Map<string, Record<string, number>>();
+  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+  for (const p of projectList) {
+    if (serviceCats.length === 0) break;
+    const contractor = norm(p.contractor_name);
+    // Marcas presentes en la casa (de equipos instalados o del diseño)
+    const houseBrands = new Set<string>();
+    if (p.house_id) {
+      for (const it of installedRows) {
+        if (it.current_house_id === p.house_id && it.brand) houseBrands.add(norm(it.brand));
+      }
+    }
+    for (const id of [p.diseno_inversor_categoria_id, p.diseno_bateria_categoria_id, p.diseno_panel_categoria_id]) {
+      const b = id ? catById.get(id)?.brand : null;
+      if (b) houseBrands.add(norm(b));
+    }
+
+    const agg: Record<string, number> = {};
+    for (const sc of serviceCats) {
+      const costKey = SERVICE_FAMILY_TO_COST[sc.family];
+      if (!costKey || sc.costCop == null) continue;
+      const providerMatch = sc.provider && contractor && norm(sc.provider) === contractor;
+      const brandMatch = sc.brand && houseBrands.has(norm(sc.brand));
+      // Si no tiene provider NI brand → aplica a todos. Si tiene alguno, debe matchear.
+      const isUniversal = !sc.provider && !sc.brand;
+      const applies = isUniversal || providerMatch || brandMatch;
+      if (!applies) continue;
+      agg[costKey] = (agg[costKey] ?? 0) + Number(sc.costCop);
+    }
+    if (Object.keys(agg).length > 0) derivedServiceByProject.set(p.id, agg);
+  }
+
   // 4. Registros de facturación existentes
   const { data: facts } = await supabaseAdmin
     .from('facturacion_records')
@@ -161,34 +209,35 @@ export async function GET() {
     // Si el proyecto está congelado, NO se aplican costos derivados desde
     // inventario — todo lo que se ve viene del registro fijo en BD.
     const derived = (!isFrozen && p.house_id) ? (derivedCostsByHouse.get(p.house_id) ?? {}) : {};
+    const derivedSvc = !isFrozen ? (derivedServiceByProject.get(p.id) ?? {}) : {};
 
     const resolveCost = (key: string): { value: number | null; isDerived: boolean } => {
       const userVal = fact[key] as number | null | undefined;
       if (userVal != null) return { value: Number(userVal), isDerived: false };
-      const derivedVal = derived[key];
+      const derivedVal = derived[key] ?? derivedSvc[key];
       if (derivedVal != null) return { value: Number(derivedVal), isDerived: true };
       return { value: null, isDerived: false };
     };
 
-    const costInversor   = resolveCost('costo_inversor');
-    const costBateria    = resolveCost('costo_bateria');
-    const costPanelSolar = resolveCost('costo_panel_solar');
-    const costModem      = resolveCost('costo_modem');
+    const costInversor       = resolveCost('costo_inversor');
+    const costBateria        = resolveCost('costo_bateria');
+    const costPanelSolar     = resolveCost('costo_panel_solar');
+    const costModem          = resolveCost('costo_modem');
+    const manoObraResolved   = resolveCost('mano_de_obra');
+    const desmantelamientoR  = resolveCost('desmantelamiento_mo');
 
     // Costos sin derivación (solo user input)
     const costControlBox       = (fact.costo_control_box        as number | null) ?? null;
     const costTopCover         = (fact.costo_top_cover          as number | null) ?? null;
     const costMedidorSolar     = (fact.costo_medidor_solar      as number | null) ?? null;
     const costMedidorGen       = (fact.costo_medidor_generacion as number | null) ?? null;
-    const manoObra             = (fact.mano_de_obra             as number | null) ?? null;
-    const desmantelamiento     = (fact.desmantelamiento_mo      as number | null) ?? null;
 
     // Capex: user override else suma de los 11 costos efectivos (derivados+user)
     const userCapex = fact.capex as number | null | undefined;
     const capexComputed = [
       costInversor.value, costBateria.value, costControlBox, costTopCover,
       costPanelSolar.value, costMedidorSolar, costMedidorGen, costModem.value,
-      manoObra, desmantelamiento,
+      manoObraResolved.value, desmantelamientoR.value,
     ].reduce<number>((acc, v) => acc + (v ?? 0), 0);
     const capex = userCapex != null
       ? { value: Number(userCapex), isDerived: false }
@@ -224,8 +273,10 @@ export async function GET() {
       costo_medidor_generacion: costMedidorGen,
       costo_modem: costModem.value,
       costo_modem_is_derived: costModem.isDerived,
-      mano_de_obra: manoObra,
-      desmantelamiento_mo: desmantelamiento,
+      mano_de_obra: manoObraResolved.value,
+      mano_de_obra_is_derived: manoObraResolved.isDerived,
+      desmantelamiento_mo: desmantelamientoR.value,
+      desmantelamiento_mo_is_derived: desmantelamientoR.isDerived,
       capex: capex.value,
       capex_is_derived: capex.isDerived,
 

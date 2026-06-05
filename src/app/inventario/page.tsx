@@ -23,6 +23,7 @@ interface Category {
   default_capacity_unit: string | null;
   default_warranty_months: number | null;
   default_cost_cop: number | null;
+  provider: string | null;
   is_serialized: boolean;
 }
 
@@ -83,12 +84,18 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
 
 const FAMILY_ICONS: Record<string, typeof Cpu> = {
   inverter: Cpu, battery: Battery, panel: Sun, gateway: Cpu, meter: Cpu, cable: Cable, breaker: Cable, tool: Package, other: Package,
+  mano_obra: Wrench, desmantelamiento: Wrench, puesta_en_marcha: Wrench, servicio: Wrench,
 };
 
 const FAMILY_LABELS: Record<string, string> = {
   inverter: 'Inversores', battery: 'Baterías', panel: 'Paneles', gateway: 'Gateways',
   meter: 'Medidores', cable: 'Cableado', breaker: 'Breakers', tool: 'Herramientas', other: 'Otros',
+  mano_obra: 'Mano de obra', desmantelamiento: 'Desmantelamiento', puesta_en_marcha: 'Puesta en marcha', servicio: 'Servicios',
 };
+
+// Familias que NO son equipos físicos — servicios cuyo precio alimenta Facturación.
+const SERVICE_FAMILIES = new Set(['mano_obra', 'desmantelamiento', 'puesta_en_marcha', 'servicio']);
+const isServiceFamily = (f: string) => SERVICE_FAMILIES.has(f);
 
 const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu }> = {
   equipos:     { label: 'Equipos',     color: '#3b82f6', Icon: Cpu },
@@ -997,9 +1004,9 @@ function CategoriasTab() {
                   <tr>
                     <th>Código</th>
                     <th>Nombre</th>
-                    <th>Marca / Modelo default</th>
-                    <th>Capacidad</th>
-                    <th>Garantía</th>
+                    <th>{isServiceFamily(family) ? 'Proveedor / Marca' : 'Marca / Modelo default'}</th>
+                    {!isServiceFamily(family) && <th>Capacidad</th>}
+                    {!isServiceFamily(family) && <th>Garantía</th>}
                     <th style={{ textAlign: 'right' }}>Costo unitario (COP)</th>
                     <th style={{ textAlign: 'right', width: 60 }}></th>
                   </tr>
@@ -1009,9 +1016,17 @@ function CategoriasTab() {
                     <tr key={c.id}>
                       <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.76rem', fontWeight: 600 }}>{c.code}</td>
                       <td style={{ fontSize: '0.82rem' }}>{c.name}</td>
-                      <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{[c.default_brand, c.default_model].filter(Boolean).join(' · ') || '—'}</td>
-                      <td style={{ fontSize: '0.78rem', fontFamily: 'ui-monospace, monospace' }}>{c.default_capacity_value ? `${c.default_capacity_value} ${c.default_capacity_unit ?? ''}` : '—'}</td>
-                      <td style={{ fontSize: '0.78rem' }}>{c.default_warranty_months ? `${c.default_warranty_months} m` : '—'}</td>
+                      <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                        {isServiceFamily(family)
+                          ? [c.provider, c.default_brand].filter(Boolean).join(' · ') || <span style={{ color: 'var(--text-muted)' }}>aplica a todos</span>
+                          : ([c.default_brand, c.default_model].filter(Boolean).join(' · ') || '—')}
+                      </td>
+                      {!isServiceFamily(family) && (
+                        <td style={{ fontSize: '0.78rem', fontFamily: 'ui-monospace, monospace' }}>{c.default_capacity_value ? `${c.default_capacity_value} ${c.default_capacity_unit ?? ''}` : '—'}</td>
+                      )}
+                      {!isServiceFamily(family) && (
+                        <td style={{ fontSize: '0.78rem' }}>{c.default_warranty_months ? `${c.default_warranty_months} m` : '—'}</td>
+                      )}
                       <td style={{ fontSize: '0.78rem', textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: c.default_cost_cop ? 'var(--text)' : 'var(--text-muted)' }}>
                         {c.default_cost_cop != null ? new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(c.default_cost_cop) : '—'}
                       </td>
@@ -1044,6 +1059,7 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
     default_capacity_unit: '',
     default_warranty_months: '',
     default_cost_cop: '',
+    provider: '',
     is_serialized: true,
   });
   const [saving, setSaving] = useState(false);
@@ -1068,7 +1084,8 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
         default_capacity_unit: form.default_capacity_unit.trim() || null,
         default_warranty_months: form.default_warranty_months ? Number(form.default_warranty_months) : null,
         default_cost_cop: form.default_cost_cop ? Number(form.default_cost_cop) : null,
-        is_serialized: form.is_serialized,
+        provider: form.provider.trim() || null,
+        is_serialized: isServiceFamily(form.family) ? false : form.is_serialized,
       };
       const r = await fetch('/api/inventory/categories', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1103,47 +1120,78 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
             {Object.entries(FAMILY_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </select>
         </div>
-        <div className="input-group" style={{ margin: 0 }}>
-          <label className="input-label">¿Serializado?</label>
-          <select value={form.is_serialized ? '1' : '0'} onChange={(e) => set('is_serialized', e.target.value === '1')}>
-            <option value="1">Sí (cada unidad lleva serial individual)</option>
-            <option value="0">No (es consumible / cantidad)</option>
-          </select>
-        </div>
+        {!isServiceFamily(form.family) && (
+          <div className="input-group" style={{ margin: 0 }}>
+            <label className="input-label">¿Serializado?</label>
+            <select value={form.is_serialized ? '1' : '0'} onChange={(e) => set('is_serialized', e.target.value === '1')}>
+              <option value="1">Sí (cada unidad lleva serial individual)</option>
+              <option value="0">No (es consumible / cantidad)</option>
+            </select>
+          </div>
+        )}
       </div>
 
-      <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6, marginTop: 8 }}>
-        Valores por defecto (autocompletado al crear equipos)
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-        <div className="input-group" style={{ margin: 0 }}>
-          <label className="input-label">Marca default</label>
-          <input value={form.default_brand} onChange={(e) => set('default_brand', e.target.value)} placeholder="Livoltek" />
-        </div>
-        <div className="input-group" style={{ margin: 0 }}>
-          <label className="input-label">Modelo default</label>
-          <input value={form.default_model} onChange={(e) => set('default_model', e.target.value)} placeholder="HP3-10KL2" />
-        </div>
-        <div className="input-group" style={{ margin: 0 }}>
-          <label className="input-label">Capacidad</label>
-          <input type="number" value={form.default_capacity_value} onChange={(e) => set('default_capacity_value', e.target.value)} placeholder="10" />
-        </div>
-        <div className="input-group" style={{ margin: 0 }}>
-          <label className="input-label">Unidad capacidad</label>
-          <input value={form.default_capacity_unit} onChange={(e) => set('default_capacity_unit', e.target.value)} placeholder="kW · Ah · W · cm" />
-        </div>
-        <div className="input-group" style={{ margin: 0 }}>
-          <label className="input-label">Garantía (meses)</label>
-          <input type="number" value={form.default_warranty_months} onChange={(e) => set('default_warranty_months', e.target.value)} placeholder="60" />
-        </div>
-        <div className="input-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
-          <label className="input-label">Costo unitario (COP)</label>
-          <input type="number" value={form.default_cost_cop} onChange={(e) => set('default_cost_cop', e.target.value)} placeholder="5200000" />
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
-            Precio por equipo de este modelo. Facturación lo suma automáticamente por cada item instalado en una casa. Si un serial tiene precio diferente en su registro individual, ese prevalece.
-          </p>
-        </div>
-      </div>
+      {isServiceFamily(form.family) ? (
+        <>
+          <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6, marginTop: 8 }}>
+            Servicio — usado en Facturación para auto-llenar Mano de Obra / Desmantelamiento
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label">Proveedor / contratista</label>
+              <input value={form.provider} onChange={(e) => set('provider', e.target.value)} placeholder="Cuadrilla GdO Cali" />
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>Match exacto contra contractor_name del proyecto.</p>
+            </div>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label">Marca asociada (opcional)</label>
+              <input value={form.default_brand} onChange={(e) => set('default_brand', e.target.value)} placeholder="Livoltek" />
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>Si el servicio solo aplica a una marca específica.</p>
+            </div>
+            <div className="input-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+              <label className="input-label">Costo unitario (COP) <span style={{ color: '#ef4444' }}>*</span></label>
+              <input type="number" value={form.default_cost_cop} onChange={(e) => set('default_cost_cop', e.target.value)} placeholder="2500000" />
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                Se aplicará automáticamente al campo correspondiente en Facturación cuando el proyecto matchee proveedor o marca.
+              </p>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 6, marginTop: 8 }}>
+            Valores por defecto (autocompletado al crear equipos)
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label">Marca default</label>
+              <input value={form.default_brand} onChange={(e) => set('default_brand', e.target.value)} placeholder="Livoltek" />
+            </div>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label">Modelo default</label>
+              <input value={form.default_model} onChange={(e) => set('default_model', e.target.value)} placeholder="HP3-10KL2" />
+            </div>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label">Capacidad</label>
+              <input type="number" value={form.default_capacity_value} onChange={(e) => set('default_capacity_value', e.target.value)} placeholder="10" />
+            </div>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label">Unidad capacidad</label>
+              <input value={form.default_capacity_unit} onChange={(e) => set('default_capacity_unit', e.target.value)} placeholder="kW · Ah · W · cm" />
+            </div>
+            <div className="input-group" style={{ margin: 0 }}>
+              <label className="input-label">Garantía (meses)</label>
+              <input type="number" value={form.default_warranty_months} onChange={(e) => set('default_warranty_months', e.target.value)} placeholder="60" />
+            </div>
+            <div className="input-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+              <label className="input-label">Costo unitario (COP)</label>
+              <input type="number" value={form.default_cost_cop} onChange={(e) => set('default_cost_cop', e.target.value)} placeholder="5200000" />
+              <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                Precio por equipo de este modelo. Facturación lo suma automáticamente por cada item instalado en una casa. Si un serial tiene precio diferente en su registro individual, ese prevalece.
+              </p>
+            </div>
+          </div>
+        </>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
         <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>

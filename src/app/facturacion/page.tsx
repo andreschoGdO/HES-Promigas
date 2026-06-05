@@ -34,7 +34,9 @@ interface Row {
   costo_modem: number | null;
   costo_modem_is_derived?: boolean;
   mano_de_obra: number | null;
+  mano_de_obra_is_derived?: boolean;
   desmantelamiento_mo: number | null;
+  desmantelamiento_mo_is_derived?: boolean;
   capex: number | null;
   capex_is_derived?: boolean;
   operador_red: string | null;
@@ -64,6 +66,8 @@ const DERIVED_KEY: Record<string, keyof Row> = {
   costo_bateria: 'costo_bateria_is_derived',
   costo_panel_solar: 'costo_panel_solar_is_derived',
   costo_modem: 'costo_modem_is_derived',
+  mano_de_obra: 'mano_de_obra_is_derived',
+  desmantelamiento_mo: 'desmantelamiento_mo_is_derived',
   capex: 'capex_is_derived',
 };
 

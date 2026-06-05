@@ -30,6 +30,7 @@ export async function POST(request: Request) {
         default_capacity_unit: body.default_capacity_unit ?? null,
         default_warranty_months: body.default_warranty_months ?? null,
         default_cost_cop: body.default_cost_cop ?? null,
+        provider: body.provider ?? null,
         is_serialized: body.is_serialized ?? true,
       })
       .select('*')

@@ -22,6 +22,7 @@ interface Category {
   default_capacity_value: number | null;
   default_capacity_unit: string | null;
   default_warranty_months: number | null;
+  default_cost_cop: number | null;
   is_serialized: boolean;
 }
 
@@ -999,6 +1000,7 @@ function CategoriasTab() {
                     <th>Marca / Modelo default</th>
                     <th>Capacidad</th>
                     <th>Garantía</th>
+                    <th style={{ textAlign: 'right' }}>Costo unitario (COP)</th>
                     <th style={{ textAlign: 'right', width: 60 }}></th>
                   </tr>
                 </thead>
@@ -1010,6 +1012,9 @@ function CategoriasTab() {
                       <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{[c.default_brand, c.default_model].filter(Boolean).join(' · ') || '—'}</td>
                       <td style={{ fontSize: '0.78rem', fontFamily: 'ui-monospace, monospace' }}>{c.default_capacity_value ? `${c.default_capacity_value} ${c.default_capacity_unit ?? ''}` : '—'}</td>
                       <td style={{ fontSize: '0.78rem' }}>{c.default_warranty_months ? `${c.default_warranty_months} m` : '—'}</td>
+                      <td style={{ fontSize: '0.78rem', textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: c.default_cost_cop ? 'var(--text)' : 'var(--text-muted)' }}>
+                        {c.default_cost_cop != null ? new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(c.default_cost_cop) : '—'}
+                      </td>
                       <td style={{ textAlign: 'right' }}>
                         <button onClick={() => remove(c.id)} title="Eliminar" style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
                           <Trash2 size={14} />
@@ -1038,6 +1043,7 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
     default_capacity_value: '',
     default_capacity_unit: '',
     default_warranty_months: '',
+    default_cost_cop: '',
     is_serialized: true,
   });
   const [saving, setSaving] = useState(false);
@@ -1061,6 +1067,7 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
         default_capacity_value: form.default_capacity_value ? Number(form.default_capacity_value) : null,
         default_capacity_unit: form.default_capacity_unit.trim() || null,
         default_warranty_months: form.default_warranty_months ? Number(form.default_warranty_months) : null,
+        default_cost_cop: form.default_cost_cop ? Number(form.default_cost_cop) : null,
         is_serialized: form.is_serialized,
       };
       const r = await fetch('/api/inventory/categories', {
@@ -1128,6 +1135,13 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
         <div className="input-group" style={{ margin: 0 }}>
           <label className="input-label">Garantía (meses)</label>
           <input type="number" value={form.default_warranty_months} onChange={(e) => set('default_warranty_months', e.target.value)} placeholder="60" />
+        </div>
+        <div className="input-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+          <label className="input-label">Costo unitario (COP)</label>
+          <input type="number" value={form.default_cost_cop} onChange={(e) => set('default_cost_cop', e.target.value)} placeholder="5200000" />
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+            Precio por equipo de este modelo. Facturación lo suma automáticamente por cada item instalado en una casa. Si un serial tiene precio diferente en su registro individual, ese prevalece.
+          </p>
         </div>
       </div>
 

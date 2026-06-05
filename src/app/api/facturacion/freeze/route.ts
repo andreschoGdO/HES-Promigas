@@ -74,18 +74,20 @@ export async function POST(request: Request) {
     if (project.house_id) {
       const { data: items } = await supabaseAdmin
         .from('inventory_items')
-        .select('category_id, acquired_cost_cop, inventory_categories(family)')
+        .select('category_id, acquired_cost_cop, inventory_categories(family, default_cost_cop)')
         .eq('current_house_id', project.house_id)
         .eq('status', 'installed');
-      type Item = { category_id: string | null; acquired_cost_cop: number | null; inventory_categories: { family: string } | { family: string }[] | null };
+      type Item = { category_id: string | null; acquired_cost_cop: number | null; inventory_categories: { family: string; default_cost_cop: number | null } | { family: string; default_cost_cop: number | null }[] | null };
       for (const raw of (items ?? []) as Item[]) {
-        if (raw.acquired_cost_cop == null) continue;
         const cat = Array.isArray(raw.inventory_categories) ? raw.inventory_categories[0] : raw.inventory_categories;
-        const fam = cat?.family;
-        if (!fam) continue;
-        const key = FAMILY_TO_COST[fam];
+        if (!cat?.family) continue;
+        const key = FAMILY_TO_COST[cat.family];
         if (!key) continue;
-        derived[key] = (derived[key] ?? 0) + Number(raw.acquired_cost_cop);
+        const unitCost = raw.acquired_cost_cop != null ? Number(raw.acquired_cost_cop)
+                       : cat.default_cost_cop != null ? Number(cat.default_cost_cop)
+                       : null;
+        if (unitCost == null) continue;
+        derived[key] = (derived[key] ?? 0) + unitCost;
       }
     }
 

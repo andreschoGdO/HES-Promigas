@@ -52,11 +52,11 @@ export async function GET() {
   if (projErr) return NextResponse.json({ error: projErr.message }, { status: 500 });
   const projectList = (projects ?? []) as unknown as ProjectRow[];
 
-  // 2. Catálogo de categorías para resolver marcas desde diseno_*_categoria_id
+  // 2. Catálogo de categorías para resolver marcas + costo default desde diseno_*_categoria_id
   const { data: cats } = await supabaseAdmin
     .from('inventory_categories')
-    .select('id, family, default_brand, default_model, default_capacity_value, default_capacity_unit');
-  const catById = new Map<string, { family: string; brand: string | null; model: string | null; cap: number | null; unit: string | null }>();
+    .select('id, family, default_brand, default_model, default_capacity_value, default_capacity_unit, default_cost_cop');
+  const catById = new Map<string, { family: string; brand: string | null; model: string | null; cap: number | null; unit: string | null; costCop: number | null }>();
   for (const c of cats ?? []) {
     catById.set(c.id, {
       family: c.family,
@@ -64,6 +64,7 @@ export async function GET() {
       model: c.default_model ?? null,
       cap: c.default_capacity_value ?? null,
       unit: c.default_capacity_unit ?? null,
+      costCop: c.default_cost_cop ?? null,
     });
   }
 
@@ -91,13 +92,18 @@ export async function GET() {
   };
   const derivedCostsByHouse = new Map<string, Record<string, number>>();
   for (const it of installedRows) {
-    if (!it.current_house_id || !it.category_id || it.acquired_cost_cop == null) continue;
-    const fam = catById.get(it.category_id)?.family;
-    if (!fam) continue;
-    const costKey = FAMILY_TO_COST[fam];
+    if (!it.current_house_id || !it.category_id) continue;
+    const cat = catById.get(it.category_id);
+    if (!cat) continue;
+    const costKey = FAMILY_TO_COST[cat.family];
     if (!costKey) continue;
+    // Item cost prevalece; si no, default de la categoría.
+    const unitCost = it.acquired_cost_cop != null ? Number(it.acquired_cost_cop)
+                   : cat.costCop != null ? Number(cat.costCop)
+                   : null;
+    if (unitCost == null) continue;
     const houseAgg = derivedCostsByHouse.get(it.current_house_id) ?? {};
-    houseAgg[costKey] = (houseAgg[costKey] ?? 0) + Number(it.acquired_cost_cop);
+    houseAgg[costKey] = (houseAgg[costKey] ?? 0) + unitCost;
     derivedCostsByHouse.set(it.current_house_id, houseAgg);
   }
   // Indexar por house_id + family

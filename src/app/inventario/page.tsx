@@ -33,7 +33,7 @@ interface InvItem {
   model: string | null;
   capacity_value: number | null;
   capacity_unit: string | null;
-  status: 'in_stock' | 'reserved' | 'installed' | 'in_repair' | 'rma' | 'decommissioned' | 'lost';
+  status: 'in_stock' | 'reserved' | 'installed' | 'in_repair' | 'rma';
   current_location: string | null;
   current_house_id: string | null;
   acquired_at: string | null;
@@ -73,13 +73,11 @@ interface Movement {
 }
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
-  in_stock:        { label: 'En stock',       color: '#10b981' },
-  reserved:        { label: 'Reservado',      color: '#3b82f6' },
-  installed:       { label: 'Instalado',      color: '#07c5a8' },
-  in_repair:       { label: 'En garantía',    color: '#f59e0b' },
-  rma:             { label: 'RMA',            color: '#8b5cf6' },
-  decommissioned:  { label: 'Decomisado',     color: '#94a3b8' },
-  lost:            { label: 'Perdido',        color: '#ef4444' },
+  in_stock:   { label: 'En stock',    color: '#10b981' },
+  reserved:   { label: 'Reservado',   color: '#3b82f6' },
+  installed:  { label: 'Instalado',   color: '#07c5a8' },
+  in_repair:  { label: 'En garantía', color: '#f59e0b' },
+  rma:        { label: 'RMA',         color: '#8b5cf6' },
 };
 
 const FAMILY_ICONS: Record<string, typeof Cpu> = {

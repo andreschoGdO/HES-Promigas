@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical } from 'lucide-react';
+import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload } from 'lucide-react';
 import {
   type CrmModule, type StageMeta, type TransitionDef,
   SALES_STAGES, ENGINEERING_STAGES, OPERATIONS_STAGES,
@@ -78,6 +78,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
   const [activeProject, setActiveProject] = useState<CrmProject | null>(null);
   const [transition, setTransition] = useState<{ project: CrmProject; def: TransitionDef } | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [configStage, setConfigStage] = useState<StageMeta | null>(null);
   const stages = MODULE_STAGES[module];
 
@@ -111,9 +112,16 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
           <p style={{ color: 'var(--text-secondary)', marginTop: 2, fontSize: '0.82rem' }}>{description}</p>
         </div>
         {(module === 'sales' || module === 'operations') && (
-          <button onClick={() => setShowCreate(true)} className="primary-btn" style={{ padding: '10px 16px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600, background: color, border: 'none' }}>
-            <Plus size={15} /> {module === 'operations' ? 'Nueva card manual' : 'Nuevo proyecto'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {module === 'operations' && (
+              <button onClick={() => setShowImport(true)} className="secondary-btn" style={{ padding: '10px 14px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600 }}>
+                <Upload size={15} /> Importar CSV
+              </button>
+            )}
+            <button onClick={() => setShowCreate(true)} className="primary-btn" style={{ padding: '10px 16px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600, background: color, border: 'none' }}>
+              <Plus size={15} /> {module === 'operations' ? 'Nueva card manual' : 'Nuevo proyecto'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -166,6 +174,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
       {activeProject && <ProjectDetailModal project={activeProject} onClose={() => setActiveProject(null)} onChanged={() => { setActiveProject(null); load(); }} userEmail={userEmail} module={module} onAdvance={(t) => { setActiveProject(null); setTransition(t); }} />}
       {transition && <TransitionModal project={transition.project} def={transition.def} userEmail={userEmail} onClose={() => setTransition(null)} onDone={() => { setTransition(null); load(); }} />}
       {showCreate && <CreateProjectModal userEmail={userEmail} module={module} onClose={() => setShowCreate(false)} onCreated={(p) => { setShowCreate(false); load(); setActiveProject(p); }} />}
+      {showImport && <ImportCsvModal userEmail={userEmail} onClose={() => setShowImport(false)} onImported={() => { setShowImport(false); load(); }} />}
       {configStage && <StageConfigModal module={module} stage={configStage} onClose={() => setConfigStage(null)} />}
     </div>
   );
@@ -1118,6 +1127,262 @@ function AddFieldForm({ module, stageKey, onCancel, onAdded }: {
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button onClick={onCancel} className="secondary-btn" disabled={saving}>Cancelar</button>
         <button onClick={submit} className="primary-btn" disabled={saving}>{saving ? 'Guardando…' : 'Crear campo'}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── ImportCsvModal: carga masiva de proyectos en Operaciones ──────────── */
+
+// Columnas que el endpoint /api/crm/projects/bulk acepta. Las del bloque "obligatorias"
+// son las que tienen sentido para una carga típica de Operaciones. El resto se mapea
+// si el CSV las incluye, se ignoran si no.
+const CSV_HEADERS_OBLIGATORIO = ['title'] as const;
+const CSV_HEADERS_RECOMENDADOS = [
+  'client_name', 'client_city', 'conjunto', 'casa_numero',
+  'diseno_kwp', 'diseno_paneles', 'diseno_baterias_cantidad', 'diseno_aprobado_por',
+] as const;
+const CSV_HEADERS_OPCIONALES = [
+  'client_email', 'client_phone', 'client_address', 'client_doc_type', 'client_doc_number',
+  'estrato', 'tipo_vivienda', 'lat', 'lng', 'carga_carro_electrico',
+  'autosuficiencia_objetivo_pct', 'invoice_kwh_mensual', 'invoice_valor_cop',
+  'propuesta_kwp', 'propuesta_valor_cop', 'propuesta_url', 'contrato_url', 'oferta_url',
+  'diseno_yield_estimado_kwh_mes', 'diseno_notes',
+  'contractor_name', 'contractor_email', 'installation_date',
+  'assigned_to', 'notes', 'stage',
+] as const;
+
+function parseCSV(text: string): Record<string, string>[] {
+  const records: string[][] = [];
+  let cur: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') { cell += '"'; i += 2; continue; }
+      if (ch === '"') { inQuotes = false; i++; continue; }
+      cell += ch; i++; continue;
+    }
+    if (ch === '"') { inQuotes = true; i++; continue; }
+    if (ch === ',') { cur.push(cell); cell = ''; i++; continue; }
+    if (ch === '\n' || ch === '\r') {
+      cur.push(cell); cell = '';
+      if (cur.length > 1 || (cur.length === 1 && cur[0] !== '')) records.push(cur);
+      cur = [];
+      if (ch === '\r' && text[i + 1] === '\n') i += 2; else i++;
+      continue;
+    }
+    cell += ch; i++;
+  }
+  if (cell.length > 0 || cur.length > 0) { cur.push(cell); records.push(cur); }
+  if (records.length < 2) return [];
+  // Normalizar headers: trim, strip BOM, minúsculas para matchear sin importar caps
+  const headers = records[0].map((h) => h.trim().replace(/^﻿/, '').toLowerCase());
+  const rows: Record<string, string>[] = [];
+  for (let r = 1; r < records.length; r++) {
+    const cells = records[r];
+    if (cells.length !== headers.length) continue;
+    const obj: Record<string, string> = {};
+    headers.forEach((h, idx) => { obj[h] = (cells[idx] ?? '').trim(); });
+    if (obj.title) rows.push(obj);
+  }
+  return rows;
+}
+
+function downloadCsvTemplate() {
+  const headers = [...CSV_HEADERS_OBLIGATORIO, ...CSV_HEADERS_RECOMENDADOS, ...CSV_HEADERS_OPCIONALES];
+  const exampleRow = [
+    'CONDOMINIO BOSQUES DE PANCE-1 (ERIKA BECERRA)',
+    'ERIKA VANESSA BECERRA', 'Cali', 'CONDOMINIO BOSQUES DE PANCE', '1',
+    '6', '10', '2', 'Santiago Andrés Osorio',
+  ];
+  while (exampleRow.length < headers.length) exampleRow.push('');
+  const lines = [
+    headers.join(','),
+    exampleRow.map((c) => (/[,"\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(','),
+  ];
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'crm_operaciones_template.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function ImportCsvModal({ userEmail, onClose, onImported }: {
+  userEmail: string;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const [rows, setRows] = useState<Record<string, string>[]>([]);
+  const [fileName, setFileName] = useState<string>('');
+  const [err, setErr] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<{ inserted: number; total: number; errors: Array<{ row: number; title: string; error: string }> } | null>(null);
+
+  const onFile = async (file: File) => {
+    setErr(null);
+    setResult(null);
+    setFileName(file.name);
+    try {
+      const text = await file.text();
+      const parsed = parseCSV(text);
+      if (parsed.length === 0) {
+        setErr('No se detectaron filas válidas. Verifica que el CSV tenga encabezado y que cada fila tenga "title".');
+        setRows([]);
+        return;
+      }
+      setRows(parsed);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'No se pudo leer el archivo');
+      setRows([]);
+    }
+  };
+
+  const submit = async () => {
+    if (rows.length === 0) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      const r = await fetch('/api/crm/projects/bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows, created_by: userEmail, module: 'operations' }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
+      setResult(j);
+      if (j.errors?.length === 0) {
+        // Si todo salió bien, dar un beat al usuario para ver el resultado y refrescar
+        setTimeout(() => onImported(), 1200);
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const preview = rows.slice(0, 5);
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: 820, maxHeight: '90vh', overflowY: 'auto', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ margin: 0, fontSize: '1.05rem', marginBottom: 4 }}>Importar CSV — Operaciones</h2>
+        <p style={{ margin: '0 0 14px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+          Cada fila se crea como un proyecto directo en Operaciones (etapa <strong>Dimensionado</strong> por defecto).
+          La única columna obligatoria es <code>title</code>. Para sobreescribir la etapa por fila, incluye una columna <code>stage</code>.
+        </p>
+
+        {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+
+        {!result && (
+          <>
+            <div style={{ marginBottom: 12, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+              <button onClick={downloadCsvTemplate} className="secondary-btn" style={{ padding: '6px 12px', fontSize: '0.78rem', borderRadius: 6 }}>
+                Descargar plantilla CSV
+              </button>
+              <span style={{ marginLeft: 10 }}>
+                Encabezados reconocidos: <code>title</code> (requerido) + {CSV_HEADERS_RECOMENDADOS.length + CSV_HEADERS_OPCIONALES.length} opcionales (cliente, dimensionado, instalación, etc.).
+              </span>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label className="input-label" style={{ fontSize: '0.78rem' }}>Archivo CSV</label>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+                style={{ display: 'block', fontSize: '0.82rem' }}
+              />
+              {fileName && rows.length > 0 && (
+                <div style={{ marginTop: 6, fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                  <strong>{fileName}</strong> — {rows.length} fila{rows.length === 1 ? '' : 's'} detectada{rows.length === 1 ? '' : 's'} · {headers.length} columna{headers.length === 1 ? '' : 's'}
+                </div>
+              )}
+            </div>
+
+            {preview.length > 0 && (
+              <div style={{ marginBottom: 14, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ padding: '8px 12px', fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
+                  Vista previa (primeras 5 filas)
+                </div>
+                <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.74rem' }}>
+                    <thead>
+                      <tr>
+                        {headers.map((h) => (
+                          <th key={h} style={{ textAlign: 'left', padding: '6px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.map((r, idx) => (
+                        <tr key={idx}>
+                          {headers.map((h) => (
+                            <td key={h} style={{ padding: '5px 10px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r[h]}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {result && (
+          <div style={{ marginBottom: 14 }}>
+            <div className={result.errors.length === 0 ? 'alert-success' : 'alert-warning'} style={{ fontSize: '0.86rem', marginBottom: 10 }}>
+              <strong>{result.inserted}</strong> de {result.total} proyectos creados.
+              {result.errors.length > 0 && <> · <strong>{result.errors.length}</strong> con error.</>}
+            </div>
+            {result.errors.length > 0 && (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ padding: '8px 12px', fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
+                  Filas con error
+                </div>
+                <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.74rem' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '6px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>Fila</th>
+                        <th style={{ textAlign: 'left', padding: '6px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>Título</th>
+                        <th style={{ textAlign: 'left', padding: '6px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>Error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.errors.map((e, idx) => (
+                        <tr key={idx}>
+                          <td style={{ padding: '5px 10px', borderBottom: '1px solid var(--border)' }}>{e.row}</td>
+                          <td style={{ padding: '5px 10px', borderBottom: '1px solid var(--border)' }}>{e.title || <em style={{ color: 'var(--text-muted)' }}>(vacío)</em>}</td>
+                          <td style={{ padding: '5px 10px', borderBottom: '1px solid var(--border)', color: '#ef4444' }}>{e.error}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          {result ? (
+            <button onClick={onImported} className="primary-btn">Cerrar y refrescar</button>
+          ) : (
+            <>
+              <button onClick={onClose} className="secondary-btn" disabled={submitting}>Cancelar</button>
+              <button onClick={submit} className="primary-btn" disabled={submitting || rows.length === 0}>
+                {submitting ? 'Importando…' : `Importar ${rows.length} fila${rows.length === 1 ? '' : 's'}`}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -155,7 +155,6 @@ export default function FacturacionPage() {
   const [editValue, setEditValue] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
-  const [showOnlyWithCosts, setShowOnlyWithCosts] = useState(false);
 
   useEffect(() => {
     const supa = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
@@ -183,19 +182,13 @@ export default function FacturacionPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    let res = rows;
-    if (q) {
-      res = res.filter((r) =>
-        [r.project_code, r.project_title, r.ciudad, r.conjunto, r.casa, r.constructor, r.marca_inversor, r.marca_panel, r.marca_bateria]
-          .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(q)),
-      );
-    }
-    if (showOnlyWithCosts) {
-      res = res.filter((r) => r.has_record);
-    }
-    return res;
-  }, [rows, query, showOnlyWithCosts]);
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.project_code, r.project_title, r.ciudad, r.conjunto, r.casa, r.constructor, r.marca_inversor, r.marca_panel, r.marca_bateria]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q)),
+    );
+  }, [rows, query]);
 
   const totals = useMemo(() => {
     const sum = (k: keyof Row) =>
@@ -298,24 +291,42 @@ export default function FacturacionPage() {
             Tabla consolidada por proyecto. Las celdas con borde turquesa son editables — clic para capturar costos.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ position: 'relative' }}>
-            <Search size={14} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
             <input
               type="text"
               placeholder="Buscar ciudad, conjunto, casa…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              style={{ padding: '7px 10px 7px 28px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)', fontSize: '0.85rem', width: 240 }}
+              style={{ padding: '8px 12px 8px 30px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', color: 'var(--text)', fontSize: '0.85rem', width: 260 }}
             />
           </div>
-          <label className="chip" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', cursor: 'pointer', padding: '6px 10px' }}>
-            <input type="checkbox" checked={showOnlyWithCosts} onChange={(e) => setShowOnlyWithCosts(e.target.checked)} style={{ margin: 0 }} />
-            Solo con datos
-          </label>
-          <button onClick={exportCsv} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <Download size={14} />
+          <button
+            onClick={exportCsv}
+            disabled={loading || filtered.length === 0}
+            title={filtered.length === 0 ? 'No hay filas para exportar' : `Descargar ${filtered.length} fila${filtered.length === 1 ? '' : 's'} en CSV`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '8px 16px',
+              borderRadius: 8,
+              border: '1px solid #07c5a8',
+              background: 'linear-gradient(180deg, rgba(7,197,168,0.18), rgba(7,197,168,0.10))',
+              color: '#07c5a8',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              cursor: loading || filtered.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: loading || filtered.length === 0 ? 0.5 : 1,
+              transition: 'background 0.15s, transform 0.05s',
+            }}
+            onMouseEnter={(e) => { if (!loading && filtered.length > 0) e.currentTarget.style.background = 'linear-gradient(180deg, rgba(7,197,168,0.28), rgba(7,197,168,0.16))'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(180deg, rgba(7,197,168,0.18), rgba(7,197,168,0.10))'; }}
+          >
+            <Download size={15} />
             Descargar CSV
+            <span style={{ fontSize: '0.72rem', opacity: 0.8, padding: '1px 6px', borderRadius: 10, background: 'rgba(7,197,168,0.2)', fontWeight: 700 }}>
+              {filtered.length}
+            </span>
           </button>
         </div>
       </div>

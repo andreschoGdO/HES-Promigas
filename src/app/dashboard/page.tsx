@@ -207,11 +207,48 @@ const dateStr = (d: Date) => d.toISOString().slice(0, 10);
 // solo si TODAS las dependencias existen para ese device específico.
 // Las descripciones (qué son, cómo se calculan, limitaciones) viven en
 // `variables-dict.ts` — aquí solo definimos las dependencias y la fórmula.
+interface ComputeContext {
+  ts: number;
+  hourLocal: number;   // 0-23, hora local Colombia (UTC-5)
+  isDaylight: boolean; // 06:00–18:00 COT
+  precomputed?: unknown;
+}
 interface DerivedKeyMeta {
+  // Keys que deben estar en el catálogo del device para que la derivada aparezca.
   deps: string[];
-  compute: (vals: Record<string, number>) => number;
+  // Subset de `deps` que deben estar presentes en CADA row para computar el valor.
+  // Default: igual que `deps`. Para derivadas que solo usan precompute (ej. envelope)
+  // y no necesitan dep en la row actual, pasar [].
+  perRowDeps?: string[];
+  // Paso opcional que recibe TODA la serie del device antes del loop por row.
+  // Útil para agregados (P95 por hora-del-día, baselines, etc.).
+  precompute?: (rows: Array<{ ts: number; vals: Record<string, number | null> }>) => unknown;
+  compute: (vals: Record<string, number>, ctx?: ComputeContext) => number | null;
   appliesToInverter: boolean;
 }
+
+// Helper: P95 por hora-del-día (COT) sobre los samples disponibles del rango visible.
+// Devuelve array indexado por hora local (0-23). Si una hora no tiene samples, null.
+function envelopeByHour(
+  rows: Array<{ ts: number; vals: Record<string, number | null> }>,
+  depKey: string,
+): Array<number | null> {
+  const byHour: number[][] = Array.from({ length: 24 }, () => []);
+  for (const r of rows) {
+    const v = r.vals[depKey];
+    if (v === null || v === undefined || !Number.isFinite(v)) continue;
+    const d = new Date(r.ts - 5 * 3600 * 1000); // COT = UTC-5
+    byHour[d.getUTCHours()].push(v);
+  }
+  return byHour.map((arr) => {
+    if (arr.length === 0) return null;
+    if (arr.length === 1) return arr[0];
+    arr.sort((a, b) => a - b);
+    const idx = Math.min(arr.length - 1, Math.floor(arr.length * 0.95));
+    return arr[idx];
+  });
+}
+
 const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
   Pdc_estimado: {
     deps: ['powerAPg', 'BattPower'],
@@ -219,6 +256,50 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     // No es Ppv puro porque incorpora la dinámica DC de la batería — refleja
     // el balance del bus DC del inversor, no la generación PV aislada.
     compute: (v) => (v.powerAPg ?? 0) - (v.BattPower ?? 0),
+    appliesToInverter: true,
+  },
+  // Envolvente DC: P95 por hora-del-día del rango visible. "Techo" de generación
+  // típico de esta casa a cada hora — referencia para detectar curtailment.
+  envelope_dc_LV: {
+    deps: ['powerAEgdc_LV'],
+    perRowDeps: [],
+    precompute: (rows) => envelopeByHour(rows, 'powerAEgdc_LV'),
+    compute: (_v, ctx) => {
+      const env = ctx?.precomputed as Array<number | null> | undefined;
+      if (!env || !ctx) return null;
+      return env[ctx.hourLocal] ?? null;
+    },
+    appliesToInverter: true,
+  },
+  // Curtailment DC instantáneo: max(0, envelope − real) cuando hay saturación
+  // (batería ≥95% AND no exportando AND de día). En momentos normales = 0.
+  curtailment_dc_w_LV: {
+    deps: ['powerAEgdc_LV', 'BattSOC', 'ExportGrid_LV'],
+    precompute: (rows) => envelopeByHour(rows, 'powerAEgdc_LV'),
+    compute: (v, ctx) => {
+      if (!ctx) return 0;
+      const env = ctx.precomputed as Array<number | null> | undefined;
+      const envH = env?.[ctx.hourLocal];
+      if (envH === null || envH === undefined) return 0;
+      const saturated = v.BattSOC >= 95 && Math.abs(v.ExportGrid_LV) < 100 && ctx.isDaylight;
+      if (!saturated) return 0;
+      return Math.max(0, envH - v.powerAEgdc_LV);
+    },
+    appliesToInverter: true,
+  },
+  // Sacrificio AC por reactiva: cuando |Q| > 200 var, mide la activa perdida
+  // contra el envelope de P. Solo Livoltek (DEYE no expone reactiva).
+  sacrificio_ac_w_LV: {
+    deps: ['powerAEg', 'powerREg_LV'],
+    precompute: (rows) => envelopeByHour(rows, 'powerAEg'),
+    compute: (v, ctx) => {
+      if (Math.abs(v.powerREg_LV) < 200) return 0;
+      if (!ctx) return 0;
+      const env = ctx.precomputed as Array<number | null> | undefined;
+      const envH = env?.[ctx.hourLocal];
+      if (envH === null || envH === undefined) return 0;
+      return Math.max(0, envH - v.powerAEg);
+    },
     appliesToInverter: true,
   },
 };
@@ -1237,20 +1318,44 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     }
     // 2) Calcular keys derivadas (virtuales) por device, donde el usuario las pidió
     //    y todas las deps existen en granData. Se inyectan al mismo row del timestamp.
+    //    Si la derivada define `precompute`, se ejecuta primero con toda la serie
+    //    del device (útil para envolventes P95 por hora-del-día, baselines, etc.).
     for (const [devId, selectedSet] of Object.entries(selectedKeysByDevice)) {
       for (const k of selectedSet) {
         if (!isDerivedKey(k)) continue;
         const meta = DERIVED_KEYS[k];
         const seriesKey = `${devId}__${k}`;
-        for (const [, row] of byTs) {
+        const perRowDeps = meta.perRowDeps ?? meta.deps;
+
+        let precomputed: unknown = undefined;
+        if (meta.precompute) {
+          const seriesRows: Array<{ ts: number; vals: Record<string, number | null> }> = [];
+          for (const [ts, row] of byTs) {
+            const vals: Record<string, number | null> = {};
+            for (const dep of meta.deps) vals[dep] = (row[`${devId}__${dep}`] ?? null) as number | null;
+            seriesRows.push({ ts, vals });
+          }
+          precomputed = meta.precompute(seriesRows);
+        }
+
+        for (const [ts, row] of byTs) {
           const vals: Record<string, number> = {};
           let allPresent = true;
-          for (const dep of meta.deps) {
+          for (const dep of perRowDeps) {
             const v = row[`${devId}__${dep}`];
             if (v === null || v === undefined || !Number.isFinite(v)) { allPresent = false; break; }
             vals[dep] = v;
           }
-          row[seriesKey] = allPresent ? meta.compute(vals) : null;
+          if (!allPresent) { row[seriesKey] = null; continue; }
+          const d = new Date(ts - 5 * 3600 * 1000); // COT = UTC-5
+          const hourLocal = d.getUTCHours();
+          const ctx: ComputeContext = {
+            ts,
+            hourLocal,
+            isDaylight: hourLocal >= 6 && hourLocal < 18,
+            precomputed,
+          };
+          row[seriesKey] = meta.compute(vals, ctx);
         }
       }
     }

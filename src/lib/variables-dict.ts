@@ -586,6 +586,51 @@ export const VARIABLES: VariableMeta[] = [
   //  exponen todas sus dependencias.
   // ═══════════════════════════════════════════════════════════════════════
   {
+    key: 'envelope_dc_LV', label: 'Envolvente DC (techo solar)', unit: 'W',
+    category: 'derivada', source: 'derived',
+    description:
+      'Curva "lo que el sistema pudo generar" en DC a cada hora del día. Se calcula como el ' +
+      'percentil 95 de powerAEgdc_LV agrupado por hora-del-día sobre el rango de fechas visible. ' +
+      'En cada hora, los días buenos del rango definen el techo solar de esta casa.\n\n' +
+      'NO es una medición — es una referencia construida con la propia historia del inversor. ' +
+      'Cuando la curva real (powerAEgdc_LV) va por DEBAJO de esta envolvente, puede haber: nube, ' +
+      'sombra, suciedad, falla, o curtailment involuntario (batería llena + zero-export). Para ' +
+      'aislar el curtailment del resto, usar curtailment_dc_w_LV que aplica la condición de saturación.\n\n' +
+      'LIMITACIÓN: con rango visible de 1 día (~4 samples por hora) el P95 es prácticamente el ' +
+      'máximo y la envolvente queda pegada a la curva real → curtailment ≈ 0. Requiere ≥7 días ' +
+      'para una referencia significativa. Solo Livoltek (depende de powerAEgdc_LV).',
+  },
+  {
+    key: 'curtailment_dc_w_LV', label: 'Curtailment DC instantáneo', unit: 'W',
+    category: 'derivada', source: 'derived',
+    description:
+      'Potencia DC perdida en este instante por curtailment involuntario — el sistema tenía sol ' +
+      'pero no podía colocarlo en ninguna parte. Solo despega de 0 cuando se cumplen las tres ' +
+      'condiciones a la vez:\n' +
+      '  • BattSOC ≥ 95% (batería prácticamente llena)\n' +
+      '  • |ExportGrid_LV| < 100 W (no exportando a la red)\n' +
+      '  • hora local entre 06:00 y 18:00 (de día)\n\n' +
+      'Magnitud: max(0, envelope_dc_LV − powerAEgdc_LV). Su integral en el día (kWh) es el ' +
+      '"kWh que se perdió" — útil para justificar más batería, gestionar permiso de exportación ' +
+      'con el comercializador, o programar cargas para absorber el sobrante (calentador, EV).\n\n' +
+      'En momentos normales la traza está pegada al cero. Los picos corresponden a saturación ' +
+      'activa. Solo Livoltek. Requiere ≥7 días en el rango visible para un envelope confiable.',
+  },
+  {
+    key: 'sacrificio_ac_w_LV', label: 'Sacrificio AC por reactiva', unit: 'W',
+    category: 'derivada', source: 'derived',
+    description:
+      'Potencia activa AC que se sacrificó por estar entregando reactiva. Cuando el inversor ' +
+      'comanda Q (reactiva) cerca del límite de su capacidad aparente, la activa P cae porque ' +
+      '|S|² = P² + Q² no puede pasar de Snom (placa). Esta key cuantifica ese hueco contra el ' +
+      'envelope de powerAEg (P95 por hora-del-día del rango visible).\n\n' +
+      'Solo despega de 0 cuando |powerREg_LV| > 200 var (es decir, hay reactiva siendo comandada). ' +
+      'Magnitud: max(0, envelope_p − powerAEg) durante esos momentos.\n\n' +
+      'Útil para ver en kWh el costo en activa de ajustar cos φ — sirve cuando comandes ' +
+      'set_reactive_power para corregir penalización CREG o dar soporte de voltaje, y querás ' +
+      'medir qué tanta activa estás canjeando por reactiva. Solo Livoltek (DEYE no expone powerREg).',
+  },
+  {
     key: 'Pdc_estimado', label: 'Potencia DC estimada (bus inversor)', unit: 'W',
     category: 'energia', source: 'derived',
     description:

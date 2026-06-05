@@ -173,7 +173,7 @@ export default function InventarioPage() {
       </div>
 
       {/* KPI cards + Atención requerida — siempre visibles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12, marginBottom: 14 }}>
         <KpiCard label="Equipos totales" value={headerStats?.totalItems ?? 0} sub={`${headerStats?.installed ?? 0} instalados`} color="#07c5a8" Icon={Cpu} />
         <KpiCard label="En stock (bodega)" value={headerStats?.inStock ?? 0} sub="Listos para instalar" color="#10b981" Icon={Boxes} />
         <KpiCard label="En garantía / RMA" value={headerStats?.inRepair ?? 0} sub={(headerStats?.inRepair ?? 0) === 0 ? 'Todo operando' : 'Fuera de servicio'} color="#f59e0b" Icon={AlertTriangle} />

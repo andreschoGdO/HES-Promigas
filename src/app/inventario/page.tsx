@@ -930,6 +930,7 @@ function CategoriasTab() {
   const [items, setItems] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<Category | null>(null);
   const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
   const load = async () => {
@@ -972,12 +973,25 @@ function CategoriasTab() {
       {header}
       {msg && <div className={msg.kind === 'success' ? 'alert-success' : 'alert-error'} style={{ fontSize: '0.82rem' }}>{msg.text}</div>}
       {showAdd && (
-        <NewCategoryModal
+        <CategoryModal
+          mode="create"
           onClose={() => setShowAdd(false)}
-          onCreated={(c) => {
+          onSaved={(c) => {
             setItems((cur) => [...cur, c]);
             setMsg({ kind: 'success', text: `Categoría "${c.name}" creada (código ${c.code}).` });
             setShowAdd(false);
+          }}
+        />
+      )}
+      {editing && (
+        <CategoryModal
+          mode="edit"
+          initial={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(c) => {
+            setItems((cur) => cur.map((it) => (it.id === c.id ? c : it)));
+            setMsg({ kind: 'success', text: `Categoría "${c.name}" actualizada.` });
+            setEditing(null);
           }}
         />
       )}
@@ -1030,7 +1044,10 @@ function CategoriasTab() {
                       <td style={{ fontSize: '0.78rem', textAlign: 'right', fontFamily: 'ui-monospace, monospace', color: c.default_cost_cop ? 'var(--text)' : 'var(--text-muted)' }}>
                         {c.default_cost_cop != null ? new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(c.default_cost_cop) : '—'}
                       </td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button onClick={() => setEditing(c)} title="Editar" style={{ padding: 6, background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', borderRadius: 4, marginRight: 2 }}>
+                          <Pencil size={14} />
+                        </button>
                         <button onClick={() => remove(c.id)} title="Eliminar" style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
                           <Trash2 size={14} />
                         </button>
@@ -1047,20 +1064,25 @@ function CategoriasTab() {
   );
 }
 
-/* ─── Modal: nueva categoría ─── */
-function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreated: (c: Category) => void }) {
+/* ─── Modal: crear o editar categoría ─── */
+function CategoryModal({ mode, initial, onClose, onSaved }: {
+  mode: 'create' | 'edit';
+  initial?: Category;
+  onClose: () => void;
+  onSaved: (c: Category) => void;
+}) {
   const [form, setForm] = useState({
-    code: '',
-    name: '',
-    family: 'inverter',
-    default_brand: '',
-    default_model: '',
-    default_capacity_value: '',
-    default_capacity_unit: '',
-    default_warranty_months: '',
-    default_cost_cop: '',
-    provider: '',
-    is_serialized: true,
+    code: initial?.code ?? '',
+    name: initial?.name ?? '',
+    family: initial?.family ?? 'inverter',
+    default_brand: initial?.default_brand ?? '',
+    default_model: initial?.default_model ?? '',
+    default_capacity_value: initial?.default_capacity_value != null ? String(initial.default_capacity_value) : '',
+    default_capacity_unit: initial?.default_capacity_unit ?? '',
+    default_warranty_months: initial?.default_warranty_months != null ? String(initial.default_warranty_months) : '',
+    default_cost_cop: initial?.default_cost_cop != null ? String(initial.default_cost_cop) : '',
+    provider: initial?.provider ?? '',
+    is_serialized: initial?.is_serialized ?? true,
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1069,13 +1091,12 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   const submit = async () => {
     setErr(null);
-    if (!form.code.trim()) return setErr('Código requerido (ej. INV_LIVOLTEK_HP3_10K)');
+    if (mode === 'create' && !form.code.trim()) return setErr('Código requerido (ej. INV_LIVOLTEK_HP3_10K)');
     if (!form.name.trim()) return setErr('Nombre requerido');
     if (!form.family) return setErr('Familia requerida');
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
-        code: form.code.trim(),
         name: form.name.trim(),
         family: form.family,
         default_brand: form.default_brand.trim() || null,
@@ -1087,13 +1108,22 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
         provider: form.provider.trim() || null,
         is_serialized: isServiceFamily(form.family) ? false : form.is_serialized,
       };
-      const r = await fetch('/api/inventory/categories', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let r: Response;
+      if (mode === 'edit' && initial) {
+        // En edit el código no se cambia (es la clave de negocio, lo bloquea el endpoint).
+        r = await fetch('/api/inventory/categories', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: initial.id, ...payload }),
+        });
+      } else {
+        r = await fetch('/api/inventory/categories', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: form.code.trim(), ...payload }),
+        });
+      }
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? 'Error');
-      onCreated(j.category as Category);
+      onSaved(j.category as Category);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -1102,13 +1132,24 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
   };
 
   return (
-    <ModalShell title="Nueva categoría" onClose={onClose}>
+    <ModalShell title={mode === 'edit' ? 'Editar categoría' : 'Nueva categoría'} onClose={onClose}>
       {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10 }}>
         <div className="input-group" style={{ margin: 0 }}>
-          <label className="input-label">Código <span style={{ color: '#ef4444' }}>*</span></label>
-          <input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="INV_LIVOLTEK_HP3_10K" autoFocus />
-          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>Se normaliza a MAYÚSCULAS, A-Z 0-9 _ — clave única.</p>
+          <label className="input-label">Código {mode === 'create' && <span style={{ color: '#ef4444' }}>*</span>}</label>
+          <input
+            value={form.code}
+            onChange={(e) => set('code', e.target.value)}
+            placeholder="INV_LIVOLTEK_HP3_10K"
+            autoFocus={mode === 'create'}
+            disabled={mode === 'edit'}
+            style={mode === 'edit' ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
+          />
+          <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>
+            {mode === 'edit'
+              ? 'El código es clave única y no puede modificarse.'
+              : 'Se normaliza a MAYÚSCULAS, A-Z 0-9 _ — clave única.'}
+          </p>
         </div>
         <div className="input-group" style={{ margin: 0 }}>
           <label className="input-label">Nombre <span style={{ color: '#ef4444' }}>*</span></label>
@@ -1195,7 +1236,11 @@ function NewCategoryModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
         <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
-        <button onClick={submit} className="primary-btn" disabled={saving}>{saving ? 'Creando…' : 'Crear categoría'}</button>
+        <button onClick={submit} className="primary-btn" disabled={saving}>
+          {saving
+            ? (mode === 'edit' ? 'Guardando…' : 'Creando…')
+            : (mode === 'edit' ? 'Guardar cambios' : 'Crear categoría')}
+        </button>
       </div>
     </ModalShell>
   );

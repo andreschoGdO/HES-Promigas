@@ -184,7 +184,6 @@ function EndpointTable({ endpoints }: { endpoints: EndpointDef[] }) {
 /* ───── Sección 3: módulos y arquitectura ───── */
 function ModulesSection({ isModuleVisible }: { isModuleVisible: (id: keyof SidebarVisibility | undefined) => boolean }) {
   const allModules: Array<{ id: keyof SidebarVisibility; path: string; name: string; desc: string }> = [
-    { id: 'inicio',        path: '/inicio',        name: 'Inicio',                  desc: 'Landing con diagramas de arquitectura + flujos + widget de status de crons en vivo.' },
     { id: 'dashboard',     path: '/dashboard',     name: 'Head End System',         desc: 'Operación diaria de la flota: vista granular multi-device, CREG mensual, alertas por casa, control manual de inversor.' },
     { id: 'operaciones',   path: '/operaciones',   name: 'Operaciones',             desc: 'Dimensionado, alistamiento de inventario (reserva auto), instalación con contratista, operativo. Import masivo vía CSV.' },
     { id: 'visitas',       path: '/visitas',       name: 'Visitas en Campo',        desc: '4 tipos de acta (previa, instalación, emergencia, normalización) con fotos, GPS, PDF y handoff bidireccional con inventario.' },

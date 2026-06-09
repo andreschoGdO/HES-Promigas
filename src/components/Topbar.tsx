@@ -6,8 +6,7 @@ import { ChevronRight, Menu } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
 const TITLES: Record<string, string> = {
-  '/': 'Inicio',
-  '/inicio': 'Inicio',
+  '/': 'Head End System',
   '/dashboard': 'Head End System',
   '/operaciones': 'Operaciones',
   '/reportes': 'Reportes',

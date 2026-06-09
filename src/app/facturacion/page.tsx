@@ -93,9 +93,9 @@ const GROUPS: Group[] = [
   {
     id: 'ubicacion', label: 'Ubicación', Icon: MapPin, color: '#0ea5e9',
     cols: [
-      { key: 'ciudad',   label: 'CIUDAD',                type: 'text', editable: false, sticky: true, minWidth: 110 },
-      { key: 'conjunto', label: 'CONJUNTO RESIDENCIAL',  type: 'text', editable: false, sticky: true, minWidth: 200 },
-      { key: 'casa',     label: 'CASA',                  type: 'text', editable: false, sticky: true, minWidth: 70 },
+      { key: 'ciudad',   label: 'CIUDAD',                type: 'text', editable: false, minWidth: 110 },
+      { key: 'conjunto', label: 'CONJUNTO RESIDENCIAL',  type: 'text', editable: false, minWidth: 200 },
+      { key: 'casa',     label: 'CASA',                  type: 'text', editable: false, minWidth: 70 },
     ],
   },
   {

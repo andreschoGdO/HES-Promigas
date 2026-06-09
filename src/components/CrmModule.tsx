@@ -279,7 +279,9 @@ function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
   stageColor: string;
 }) {
   const stage = project.operations_stage;
-  const availableTransitions = transitionsFrom(module, stage);
+  // Solo mostrar la transición forward en el footer del card (el "Volver atrás"
+  // se ve solo al abrir el detalle).
+  const availableTransitions = transitionsFrom(module, stage).filter((t) => t.direction !== 'backward');
 
   // Tags
   const tags: Array<{ label: string; bg: string; fg: string }> = [];
@@ -578,21 +580,45 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
           )}
         </div>
 
-        {/* Botones de transición */}
-        {trans.length > 0 && (
-          <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-            <div style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-muted)' }}>Próximas acciones disponibles:</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {trans.map((t) => (
-                <button key={t.action} onClick={() => onAdvance({ project, def: t })}
-                  className="primary-btn" style={{ justifyContent: 'space-between', textAlign: 'left' }}>
-                  <span>{t.buttonLabel}</span>
-                  <ArrowRight size={14} />
-                </button>
-              ))}
+        {/* Botones de transición — forward primero, backward al final como acciones secundarias */}
+        {trans.length > 0 && (() => {
+          const forward = trans.filter((t) => t.direction !== 'backward');
+          const backward = trans.filter((t) => t.direction === 'backward');
+          return (
+            <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              {forward.length > 0 && (
+                <>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600, marginBottom: 8, color: 'var(--text-muted)' }}>Próximas acciones disponibles:</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {forward.map((t) => (
+                      <button key={t.action} onClick={() => onAdvance({ project, def: t })}
+                        className="primary-btn" style={{ justifyContent: 'space-between', textAlign: 'left' }}>
+                        <span>{t.buttonLabel}</span>
+                        <ArrowRight size={14} />
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {backward.length > 0 && (
+                <div style={{ marginTop: forward.length > 0 ? 14 : 0 }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, marginBottom: 6, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Devolver a etapa anterior</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {backward.map((t) => (
+                      <button key={t.action} onClick={() => onAdvance({ project, def: t })}
+                        className="secondary-btn" style={{ justifyContent: 'flex-start', textAlign: 'left', fontSize: '0.82rem' }}>
+                        <span>{t.buttonLabel}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                    No se borra ninguna información ya capturada — solo se cambia la etapa.
+                  </p>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );

@@ -56,6 +56,9 @@ export interface TransitionDef {
   /** Lo que aparece como `notes` en el evento al ejecutarse */
   noteTemplate?: string;
   keepSourceStage?: boolean;
+  /** Marca transiciones que devuelven a una etapa anterior. La UI las renderiza
+   *  distinto (secundarias) y no las muestra en el footer del card del Kanban. */
+  direction?: 'backward';
 }
 
 const f = (
@@ -102,6 +105,34 @@ export const TRANSITIONS: TransitionDef[] = [
     fromModule: 'operations', fromStage: 'operativo', toModule: 'closed', toStage: 'completado',
     requiredFields: [],
     noteTemplate: 'Proyecto cerrado.',
+  },
+  // ─── BACKWARD: devolver a la etapa anterior, sin perder ningún campo guardado ───
+  {
+    action: 'operations_back_to_dimensionado',
+    label: 'Devolver a Dimensionado',
+    buttonLabel: '← Volver a Dimensionado',
+    fromModule: 'operations', fromStage: 'alistamiento', toModule: 'operations', toStage: 'dimensionado',
+    requiredFields: [],
+    noteTemplate: 'Devuelto a Dimensionado para revisar diseño.',
+    direction: 'backward',
+  },
+  {
+    action: 'operations_back_to_alistamiento',
+    label: 'Devolver a Alistamiento',
+    buttonLabel: '← Volver a Alistamiento',
+    fromModule: 'operations', fromStage: 'instalacion', toModule: 'operations', toStage: 'alistamiento',
+    requiredFields: [],
+    noteTemplate: 'Devuelto a Alistamiento (ej. faltó equipo o reserva).',
+    direction: 'backward',
+  },
+  {
+    action: 'operations_back_to_instalacion',
+    label: 'Devolver a Instalación',
+    buttonLabel: '← Volver a Instalación',
+    fromModule: 'operations', fromStage: 'operativo', toModule: 'operations', toStage: 'instalacion',
+    requiredFields: [],
+    noteTemplate: 'Devuelto a Instalación para ajustes.',
+    direction: 'backward',
   },
 ];
 

@@ -37,6 +37,10 @@ interface CrmProject {
   diseno_kwp: number | null;
   diseno_paneles: number | null;
   diseno_baterias_cantidad: number | null;
+  diseno_inversor_marca: string | null;
+  diseno_inversor_potencia_kw: number | null;
+  diseno_bateria_marca: string | null;
+  diseno_bateria_capacidad_kwh: number | null;
   diseno_inversor_categoria_id: string | null;
   diseno_panel_categoria_id: string | null;
   diseno_bateria_categoria_id: string | null;
@@ -44,6 +48,7 @@ interface CrmProject {
   diseno_notes: string | null;
   diseno_aprobado_por: string | null;
   diseno_aprobado_at: string | null;
+  tipo_red: string | null;
   visita_previa_id: string | null;
   visita_instalacion_id: string | null;
   reservation_id: string | null;
@@ -522,8 +527,13 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
 
         <DetailSection title="Ingeniería / Diseño">
           <KV label="kWp diseño" value={project.diseno_kwp} />
+          <KV label="Tipo de red" value={project.tipo_red} />
           <KV label="Paneles" value={project.diseno_paneles} />
-          <KV label="Baterías" value={project.diseno_baterias_cantidad} />
+          <KV label="Marca inversor" value={project.diseno_inversor_marca} />
+          <KV label="Potencia inversor (kW)" value={project.diseno_inversor_potencia_kw} />
+          <KV label="Baterías (cantidad)" value={project.diseno_baterias_cantidad} />
+          <KV label="Marca baterías" value={project.diseno_bateria_marca} />
+          <KV label="Capacidad batería (kWh)" value={project.diseno_bateria_capacidad_kwh} />
           <KV label="Yield estimado" value={project.diseno_yield_estimado_kwh_mes ? `${project.diseno_yield_estimado_kwh_mes} kWh/mes` : null} />
           <KV label="Aprobado por" value={project.diseno_aprobado_por} />
           <KV label="Aprobado en" value={project.diseno_aprobado_at ? new Date(project.diseno_aprobado_at).toLocaleString('es-CO') : null} />
@@ -876,7 +886,13 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
               <FormField label="Autosuficiencia objetivo (%)" type="number" value={form.autosuficiencia_objetivo_pct ?? ''} onChange={(v) => set('autosuficiencia_objetivo_pct', v)} placeholder="90" />
               <FormField label="kWp diseño" type="number" value={form.diseno_kwp ?? ''} onChange={(v) => set('diseno_kwp', v)} placeholder="6" />
               <FormField label="Paneles (cantidad)" type="number" value={form.diseno_paneles ?? ''} onChange={(v) => set('diseno_paneles', v)} placeholder="6" />
+              <FormFieldSelect label="Tipo de red" value={form.tipo_red ?? ''} onChange={(v) => set('tipo_red', v)}
+                options={['monofasica', 'bifasica', 'trifasica']} />
+              <FormField label="Marca inversor" value={form.diseno_inversor_marca ?? ''} onChange={(v) => set('diseno_inversor_marca', v)} placeholder="Livoltek" />
+              <FormField label="Potencia inversor (kW)" type="number" value={form.diseno_inversor_potencia_kw ?? ''} onChange={(v) => set('diseno_inversor_potencia_kw', v)} placeholder="10" />
               <FormField label="Baterías (cantidad)" type="number" value={form.diseno_baterias_cantidad ?? ''} onChange={(v) => set('diseno_baterias_cantidad', v)} placeholder="2" />
+              <FormField label="Marca baterías" value={form.diseno_bateria_marca ?? ''} onChange={(v) => set('diseno_bateria_marca', v)} placeholder="Livoltek BHF" />
+              <FormField label="Capacidad por batería (kWh)" type="number" value={form.diseno_bateria_capacidad_kwh ?? ''} onChange={(v) => set('diseno_bateria_capacidad_kwh', v)} placeholder="5" />
               <FormField label="Responsable" required value={form.diseno_aprobado_por ?? ''} onChange={(v) => set('diseno_aprobado_por', v)} placeholder="Santiago Andrés Osorio Huertas" />
               <FormField label="Notas del diseño" value={form.diseno_notes ?? ''} onChange={(v) => set('diseno_notes', v)} placeholder="Paneles JA Solar 595W · Inversor Livoltek 10K · Baterías Livoltek" fullWidth />
             </FormSection>

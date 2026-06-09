@@ -33,16 +33,19 @@ const STRING_COLS = [
   'client_doc_type', 'client_doc_number', 'tipo_vivienda',
   'conjunto', 'casa_numero', 'carga_carro_electrico',
   'propuesta_url', 'contrato_url', 'oferta_url',
+  'diseno_inversor_marca', 'diseno_bateria_marca',
   'diseno_inversor_categoria_id', 'diseno_panel_categoria_id', 'diseno_bateria_categoria_id',
   'diseno_notes', 'diseno_aprobado_por',
   'contractor_name', 'contractor_email', 'installation_date',
   'assigned_to', 'notes',
+  'tipo_red',
 ] as const;
 const NUM_COLS = [
   'estrato', 'lat', 'lng', 'autosuficiencia_objetivo_pct',
   'invoice_kwh_mensual', 'invoice_valor_cop',
   'propuesta_kwp', 'propuesta_valor_cop',
   'diseno_kwp', 'diseno_paneles', 'diseno_baterias_cantidad',
+  'diseno_inversor_potencia_kw', 'diseno_bateria_capacidad_kwh',
   'diseno_yield_estimado_kwh_mes',
 ] as const;
 

@@ -103,6 +103,10 @@ export async function POST(request: Request) {
       diseno_kwp: num(body.diseno_kwp),
       diseno_paneles: num(body.diseno_paneles),
       diseno_baterias_cantidad: num(body.diseno_baterias_cantidad),
+      diseno_inversor_marca: str(body.diseno_inversor_marca),
+      diseno_inversor_potencia_kw: num(body.diseno_inversor_potencia_kw),
+      diseno_bateria_marca: str(body.diseno_bateria_marca),
+      diseno_bateria_capacidad_kwh: num(body.diseno_bateria_capacidad_kwh),
       diseno_inversor_categoria_id: str(body.diseno_inversor_categoria_id),
       diseno_panel_categoria_id: str(body.diseno_panel_categoria_id),
       diseno_bateria_categoria_id: str(body.diseno_bateria_categoria_id),
@@ -110,6 +114,7 @@ export async function POST(request: Request) {
       diseno_notes: str(body.diseno_notes),
       diseno_aprobado_por: str(body.diseno_aprobado_por),
       diseno_aprobado_at: str(body.diseno_aprobado_por) ? new Date().toISOString() : null,
+      tipo_red: str(body.tipo_red),
       // Operación
       contractor_name: str(body.contractor_name),
       contractor_email: str(body.contractor_email),
@@ -169,8 +174,11 @@ const PATCHABLE_COLUMNS = new Set<string>([
   'contrato_url', 'oferta_url', 'contrato_sent_at', 'contrato_signed_at',
   // Diseño / Ingeniería
   'diseno_kwp', 'diseno_paneles', 'diseno_baterias_cantidad',
+  'diseno_inversor_marca', 'diseno_inversor_potencia_kw',
+  'diseno_bateria_marca', 'diseno_bateria_capacidad_kwh',
   'diseno_inversor_categoria_id', 'diseno_panel_categoria_id', 'diseno_bateria_categoria_id',
   'diseno_yield_estimado_kwh_mes', 'diseno_notes', 'diseno_aprobado_por', 'diseno_aprobado_at',
+  'tipo_red',
   // Operación / Instalación
   'visita_previa_id', 'visita_instalacion_id', 'reservation_id', 'house_id',
   'contractor_name', 'contractor_email', 'installation_date', 'lectura_inicial_kwh',

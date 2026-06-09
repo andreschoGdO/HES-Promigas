@@ -316,7 +316,7 @@ async function reportePipeline() {
 
   return {
     type: 'pipeline',
-    title: 'Pipeline CRM (Ventas + Ingeniería + Operaciones)',
+    title: 'Pipeline CRM (Operaciones)',
     headers: ['Código', 'Título', 'Módulo', 'Etapa', 'Cliente', 'Ciudad', 'kWh/mes', 'Propuesta kWp', 'Propuesta COP', 'Diseño kWp', 'Contratista', 'Fecha inst.', 'Operativo at', 'Legalizado at', 'Creado', 'Actualizado'],
     rows,
     summary: {

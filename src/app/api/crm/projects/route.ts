@@ -21,10 +21,7 @@ export async function GET(request: Request) {
     .limit(limit);
 
   if (moduleParam) query = query.eq('current_module', moduleParam);
-  if (stage && moduleParam) {
-    const col = moduleParam === 'sales' ? 'sales_stage' : moduleParam === 'engineering' ? 'engineering_stage' : 'operations_stage';
-    query = query.eq(col, stage);
-  }
+  if (stage && moduleParam === 'operations') query = query.eq('operations_stage', stage);
   if (q) {
     // Sanitizar: PostgREST.or() es un DSL — comas, paréntesis, asteriscos rompen sintaxis
     // y podrían usarse para inyectar filtros adicionales. Eliminarlos del input.
@@ -41,11 +38,11 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/crm/projects
- * Crea un proyecto. Por defecto en sales/prospecto.
+ * Crea un proyecto en Operaciones (único módulo activo).
  * Body soporta:
  *   - title (requerido)
- *   - module: sales | engineering | operations (default sales)
- *   - stage: etapa específica del módulo destino (default según módulo)
+ *   - module: 'operations' (opcional, único valor aceptado)
+ *   - stage: etapa de operations (default 'dimensionado')
  *   - cualquier campo de crm_projects (cliente, dimensionamiento, contractor, etc.)
  */
 const num = (v: unknown): number | null => {
@@ -64,23 +61,20 @@ export async function POST(request: Request) {
     const body = await request.json();
     if (!body.title) return NextResponse.json({ error: 'title requerido' }, { status: 400 });
 
-    const targetModule = (str(body.module) ?? 'sales') as 'sales' | 'engineering' | 'operations';
-    const targetStage = str(body.stage);
-    if (!['sales', 'engineering', 'operations'].includes(targetModule)) {
-      return NextResponse.json({ error: `module inválido: ${targetModule}` }, { status: 400 });
+    // Single módulo activo: operations. sales/engineering quedan como 'completado'
+    // por compatibilidad con las columnas de la BD pero ya no se usan en la UI.
+    const targetModule = 'operations' as const;
+    const targetStage = str(body.stage) ?? 'dimensionado';
+    if (str(body.module) && str(body.module) !== 'operations') {
+      return NextResponse.json({ error: `module inválido: "${str(body.module)}". Solo se acepta 'operations'.` }, { status: 400 });
     }
-
-    const initialSalesStage = targetModule === 'sales' ? (targetStage ?? 'prospecto') : 'completado';
-    const initialEngStage = targetModule === 'sales' ? 'pending'
-      : targetModule === 'engineering' ? (targetStage ?? 'pending') : 'completado';
-    const initialOpsStage = targetModule === 'operations' ? (targetStage ?? 'dimensionado') : 'pending';
 
     const payload: Record<string, unknown> = {
       title: String(body.title).trim(),
       current_module: targetModule,
-      sales_stage: initialSalesStage,
-      engineering_stage: initialEngStage,
-      operations_stage: initialOpsStage,
+      sales_stage: 'completado',
+      engineering_stage: 'completado',
+      operations_stage: targetStage,
       // Cliente
       client_name: str(body.client_name),
       client_email: str(body.client_email),
@@ -115,7 +109,7 @@ export async function POST(request: Request) {
       diseno_yield_estimado_kwh_mes: num(body.diseno_yield_estimado_kwh_mes),
       diseno_notes: str(body.diseno_notes),
       diseno_aprobado_por: str(body.diseno_aprobado_por),
-      diseno_aprobado_at: (str(body.diseno_aprobado_por) && (targetModule === 'operations' || targetStage === 'aprobado')) ? new Date().toISOString() : null,
+      diseno_aprobado_at: str(body.diseno_aprobado_por) ? new Date().toISOString() : null,
       // Operación
       contractor_name: str(body.contractor_name),
       contractor_email: str(body.contractor_email),
@@ -143,9 +137,9 @@ export async function POST(request: Request) {
       project_id: data.id,
       event_type: 'created',
       to_module: targetModule,
-      to_stage: targetModule === 'sales' ? initialSalesStage : targetModule === 'engineering' ? initialEngStage : initialOpsStage,
+      to_stage: targetStage,
       actor_email: str(body.created_by),
-      notes: targetModule === 'operations' ? 'Proyecto creado directo en Operaciones' : 'Proyecto creado',
+      notes: 'Proyecto creado en Operaciones',
     });
 
     return NextResponse.json({ project: data });

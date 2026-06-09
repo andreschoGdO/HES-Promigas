@@ -99,9 +99,7 @@ export async function POST(request: Request, context: Ctx) {
     if (getErr || !project) return NextResponse.json({ error: 'proyecto no encontrado' }, { status: 404 });
 
     const currentStageForModule =
-      def.fromModule === 'sales' ? project.sales_stage
-      : def.fromModule === 'engineering' ? project.engineering_stage
-      : def.fromModule === 'operations' ? project.operations_stage
+      def.fromModule === 'operations' ? project.operations_stage
       : null;
     if (project.current_module !== def.fromModule || currentStageForModule !== def.fromStage) {
       return NextResponse.json({
@@ -168,31 +166,20 @@ export async function POST(request: Request, context: Ctx) {
 
     // Construir update
     const updates: Record<string, unknown> = { ...coerced, current_module: def.toModule };
-    if (def.toModule === 'sales')       updates.sales_stage = def.toStage;
-    if (def.toModule === 'engineering') updates.engineering_stage = def.toStage;
     if (def.toModule === 'operations')  updates.operations_stage = def.toStage;
     if (def.toModule === 'closed')      updates.closed_at = new Date().toISOString();
 
     // Marcar fromModule como completado SOLO si no se pidió keepSourceStage
     if (def.fromModule !== def.toModule && !def.keepSourceStage) {
-      if (def.fromModule === 'sales')       updates.sales_stage = 'completado';
-      if (def.fromModule === 'engineering') updates.engineering_stage = 'completado';
       if (def.fromModule === 'operations')  updates.operations_stage = 'completado';
     }
 
     // Auto-stamps
-    if (def.action === 'engineering_aprobar') updates.diseno_aprobado_at = new Date().toISOString();
     if (def.action === 'operations_to_operativo') updates.operativo_at = new Date().toISOString();
-    // legalizado_at: si el usuario no lo mandó, ponemos now()
-    if (def.action === 'operations_to_legalizado' && !coerced.legalizado_at) {
-      updates.legalizado_at = new Date().toISOString();
-    }
 
     // UPDATE condicional con guard contra race: solo aplica si el estado no ha cambiado
     // desde nuestra lectura. Si otra request paralela ya ejecutó la transición, count=0.
-    const stageCol = def.fromModule === 'sales' ? 'sales_stage'
-      : def.fromModule === 'engineering' ? 'engineering_stage'
-      : 'operations_stage';
+    const stageCol = 'operations_stage';
     const { data: updated, error: updErr } = await supabaseAdmin
       .from('crm_projects')
       .update(updates)
@@ -237,10 +224,7 @@ export async function GET(_request: Request, context: Ctx) {
   if (!project) return NextResponse.json({ error: 'no encontrado' }, { status: 404 });
 
   const mod = project.current_module as CrmModule;
-  const stage = mod === 'sales' ? project.sales_stage
-    : mod === 'engineering' ? project.engineering_stage
-    : mod === 'operations' ? project.operations_stage
-    : null;
+  const stage = mod === 'operations' ? project.operations_stage : null;
 
   const available = TRANSITIONS.filter((t) => t.fromModule === mod && t.fromStage === stage);
   return NextResponse.json({ current_module: mod, current_stage: stage, transitions: available });

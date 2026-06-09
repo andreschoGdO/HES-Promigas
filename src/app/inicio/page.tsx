@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Home, BarChart3, ClipboardCheck, Bell, Settings, ArrowRight, Server, Database, Cloud, Cpu, Sun, FileText, AlertOctagon, Wrench, Settings2, Package, ScanLine, ChevronRight, ChevronDown, Clock, Lock, HardDrive, RefreshCw, CheckCircle2, AlertTriangle, XCircle, ShoppingCart, Ruler, HardHat, TrendingUp } from 'lucide-react';
+import { Home, BarChart3, ClipboardCheck, Bell, Settings, ArrowRight, Server, Database, Cloud, Sun, FileText, AlertOctagon, Wrench, Settings2, Package, ScanLine, ChevronRight, ChevronDown, Clock, Lock, HardDrive, RefreshCw, CheckCircle2, AlertTriangle, XCircle, HardHat } from 'lucide-react';
 
 interface Module {
   href: string;
@@ -30,61 +30,17 @@ const MODULES: Module[] = [
     ],
   },
   {
-    href: '/ventas',
-    title: 'CRM Ventas',
-    description: 'Pipeline comercial de 5 etapas: del prospecto al contrato firmado.',
-    Icon: ShoppingCart,
-    color: '#3b82f6',
-    details: [
-      '5 etapas: Prospecto → Levantamiento → Propuesta → Contrato → Firmado',
-      'Vista Kanban con drag-style buttons + vista Tabla con toggle',
-      'Modal de transición pide solo los campos mínimos para el siguiente paso',
-      'Captura factura mensual, valor COP, ubicación, estrato, tipo vivienda',
-      'Al firmar, handoff automático a Ingeniería',
-    ],
-  },
-  {
-    href: '/ingenieria',
-    title: 'Ingeniería',
-    description: 'Solicita prefactibilidad, dimensiona el sistema, aprueba el diseño.',
-    Icon: Ruler,
-    color: '#8b5cf6',
-    details: [
-      '5 etapas: Pendiente → Prefactibilidad OK → Dimensionamiento → Aprobación → Aprobado',
-      'Calculadora rápida arriba: sugiere kWp, paneles y categoría de inversor desde kWh/mes',
-      'Solicita visita previa a Operaciones (sin perder contexto, queda esperando)',
-      'Verifica disponibilidad de SKUs en Inventario al dimensionar',
-      'Aprobación por humano, queda firmada y con timestamp',
-      'Al aprobar, handoff automático a Operaciones para alistamiento',
-    ],
-  },
-  {
     href: '/operaciones',
-    title: 'Construcción',
-    description: 'Visita previa, alistamiento, instalación, operativo y legalización.',
+    title: 'Operaciones',
+    description: 'Dimensionado, alistamiento de inventario, instalación con contratista, puesta en marcha.',
     Icon: HardHat,
     color: '#f59e0b',
     details: [
-      '5 etapas: Visita previa → Alistamiento → Instalación → Operativo → Legalizado',
-      'La visita previa enlaza con el acta de /visitas (mismo flujo del técnico en campo)',
+      '4 etapas: Dimensionado → Alistamiento → Instalación → Operativo',
+      'Crea cards una a una con "Nueva card manual" o carga masiva con "Importar CSV"',
       'Alistamiento crea reserva en /inventario con los SKUs aprobados',
       'Instalación captura contratista, fecha y enlaza acta de instalación',
       'Operativo confirma generación con lectura inicial conectada a Metrum',
-      'Legalizado cierra el proyecto: actas, garantías, normalización con operador de red',
-    ],
-  },
-  {
-    href: '/funnel',
-    title: 'Funnel de Proyectos',
-    description: 'Seguimiento end-to-end del pipeline con gráfica y tabla.',
-    Icon: TrendingUp,
-    color: '#10b981',
-    details: [
-      'KPIs globales: valor del pipeline, kWp aprobados, operativos, legalizados',
-      'Gráfica de barras horizontales con conteo por etapa de cada módulo',
-      'Tasas de conversión Ventas → Ingeniería → Operaciones → Cerrado',
-      'Tabla de todos los proyectos con módulo actual, etapa y valor',
-      'Filtros por módulo para identificar dónde se atascan los proyectos',
     ],
   },
   {

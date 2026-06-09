@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload } from 'lucide-react';
 import {
   type CrmModule, type StageMeta, type TransitionDef,
-  SALES_STAGES, ENGINEERING_STAGES, OPERATIONS_STAGES,
+  OPERATIONS_STAGES,
   transitionsFrom,
 } from '@/lib/crm-stages';
 
@@ -57,15 +57,8 @@ interface CrmProject {
   assigned_to: string | null;
 }
 
-const MODULE_STAGES: Record<CrmModule, StageMeta[]> = {
-  sales: SALES_STAGES,
-  engineering: ENGINEERING_STAGES,
-  operations: OPERATIONS_STAGES,
-  closed: [],
-};
-
 export function CrmModulePage({ module, title, description, color, userEmail }: {
-  module: 'sales' | 'engineering' | 'operations';
+  module: 'operations';
   title: string;
   description: string;
   color: string;
@@ -80,7 +73,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [configStage, setConfigStage] = useState<StageMeta | null>(null);
-  const stages = MODULE_STAGES[module];
+  const stages = OPERATIONS_STAGES;
 
   const load = async () => {
     setLoading(true);
@@ -97,11 +90,11 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
     const m = new Map<string, CrmProject[]>();
     for (const s of stages) m.set(s.key, []);
     for (const p of projects) {
-      const stage = module === 'sales' ? p.sales_stage : module === 'engineering' ? p.engineering_stage : p.operations_stage;
+      const stage = p.operations_stage;
       if (m.has(stage)) m.get(stage)!.push(p);
     }
     return m;
-  }, [projects, stages, module]);
+  }, [projects, stages]);
 
   return (
     <div style={{ maxWidth: 1600, margin: '0 auto', paddingBottom: 40 }}>
@@ -111,18 +104,14 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
           <h1 style={{ margin: 0, fontSize: '1.5rem', letterSpacing: '-0.02em' }}>{title}</h1>
           <p style={{ color: 'var(--text-secondary)', marginTop: 2, fontSize: '0.82rem' }}>{description}</p>
         </div>
-        {(module === 'sales' || module === 'operations') && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {module === 'operations' && (
-              <button onClick={() => setShowImport(true)} className="secondary-btn" style={{ padding: '10px 14px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600 }}>
-                <Upload size={15} /> Importar CSV
-              </button>
-            )}
-            <button onClick={() => setShowCreate(true)} className="primary-btn" style={{ padding: '10px 16px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600, background: color, border: 'none' }}>
-              <Plus size={15} /> {module === 'operations' ? 'Nueva card manual' : 'Nuevo proyecto'}
-            </button>
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => setShowImport(true)} className="secondary-btn" style={{ padding: '10px 14px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600 }}>
+            <Upload size={15} /> Importar CSV
+          </button>
+          <button onClick={() => setShowCreate(true)} className="primary-btn" style={{ padding: '10px 16px', fontSize: '0.86rem', borderRadius: 8, fontWeight: 600, background: color, border: 'none' }}>
+            <Plus size={15} /> Nueva card manual
+          </button>
+        </div>
       </div>
 
       {/* Toolbar — búsqueda + view toggle */}
@@ -156,11 +145,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
           {/* Hint cuando no hay proyectos, pero el kanban se sigue mostrando con las etapas vacías */}
           {projects.length === 0 && (
             <div className="alert-warning" style={{ fontSize: '0.82rem', marginBottom: 14 }}>
-              {module === 'sales'
-                ? 'Aún no hay proyectos. Crea el primero con "Nuevo proyecto" — empezará en la etapa Prospecto.'
-                : module === 'engineering'
-                  ? 'No hay proyectos esperando ingeniería. Aparecen aquí cuando Ventas marca un proyecto como Firmado.'
-                  : 'No hay proyectos en operaciones. Aparecen aquí cuando Ingeniería solicita visita previa o aprueba un diseño.'}
+              No hay proyectos en operaciones. Crea uno con &quot;Nueva card manual&quot; o importa varios con &quot;Importar CSV&quot;.
             </div>
           )}
           {view === 'kanban' ? (
@@ -185,7 +170,7 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConf
   stages: StageMeta[];
   projectsByStage: Map<string, CrmProject[]>;
   onOpen: (p: CrmProject) => void;
-  module: 'sales' | 'engineering' | 'operations';
+  module: 'operations';
   onAdvance: (t: { project: CrmProject; def: TransitionDef }) => void;
   onConfigureStage: (stage: StageMeta) => void;
 }) {
@@ -282,35 +267,22 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConf
 function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
   project: CrmProject;
   onOpen: () => void;
-  module: 'sales' | 'engineering' | 'operations';
+  module: 'operations';
   onAdvance: (t: { project: CrmProject; def: TransitionDef }) => void;
   stageColor: string;
 }) {
-  const stage = module === 'sales' ? project.sales_stage : module === 'engineering' ? project.engineering_stage : project.operations_stage;
+  const stage = project.operations_stage;
   const availableTransitions = transitionsFrom(module, stage);
-  const fmt = (n: number | null) => n === null ? '—' : n.toLocaleString('es-CO');
 
-  // Tags por módulo
+  // Tags
   const tags: Array<{ label: string; bg: string; fg: string }> = [];
   if (project.client_city) tags.push({ label: project.client_city, bg: '#e2e8f0', fg: '#475569' });
-  if (module === 'sales') {
-    if (project.invoice_kwh_mensual) tags.push({ label: `${fmt(project.invoice_kwh_mensual)} kWh/mes`, bg: '#dbeafe', fg: '#1e40af' });
-    if (project.propuesta_kwp) tags.push({ label: `${project.propuesta_kwp} kWp`, bg: '#ede9fe', fg: '#6d28d9' });
-    if (project.propuesta_valor_cop) tags.push({ label: `$${(project.propuesta_valor_cop / 1_000_000).toFixed(1)}M`, bg: '#dcfce7', fg: '#166534' });
-  }
-  if (module === 'engineering') {
-    if (project.diseno_kwp) tags.push({ label: `${project.diseno_kwp} kWp`, bg: '#ede9fe', fg: '#6d28d9' });
-    if (project.diseno_paneles) tags.push({ label: `${project.diseno_paneles} paneles`, bg: '#fef3c7', fg: '#92400e' });
-    if (project.diseno_yield_estimado_kwh_mes) tags.push({ label: `${Math.round(project.diseno_yield_estimado_kwh_mes)} kWh/m`, bg: '#dbeafe', fg: '#1e40af' });
-  }
-  if (module === 'operations') {
-    if (project.diseno_kwp) tags.push({ label: `${project.diseno_kwp} kWp`, bg: '#ede9fe', fg: '#6d28d9' });
-    if (project.diseno_paneles) tags.push({ label: `${project.diseno_paneles} paneles`, bg: '#fef3c7', fg: '#92400e' });
-    if (project.diseno_baterias_cantidad) tags.push({ label: `${project.diseno_baterias_cantidad} bat.`, bg: '#fce7f3', fg: '#9d174d' });
-    if (project.diseno_aprobado_por) tags.push({ label: `R: ${project.diseno_aprobado_por.split('@')[0].split(' ')[0]}`, bg: '#dcfce7', fg: '#166534' });
-    if (project.installation_date) tags.push({ label: `Inst. ${project.installation_date}`, bg: '#fed7aa', fg: '#9a3412' });
-    if (project.contractor_name) tags.push({ label: project.contractor_name, bg: '#fecaca', fg: '#991b1b' });
-  }
+  if (project.diseno_kwp) tags.push({ label: `${project.diseno_kwp} kWp`, bg: '#ede9fe', fg: '#6d28d9' });
+  if (project.diseno_paneles) tags.push({ label: `${project.diseno_paneles} paneles`, bg: '#fef3c7', fg: '#92400e' });
+  if (project.diseno_baterias_cantidad) tags.push({ label: `${project.diseno_baterias_cantidad} bat.`, bg: '#fce7f3', fg: '#9d174d' });
+  if (project.diseno_aprobado_por) tags.push({ label: `R: ${project.diseno_aprobado_por.split('@')[0].split(' ')[0]}`, bg: '#dcfce7', fg: '#166534' });
+  if (project.installation_date) tags.push({ label: `Inst. ${project.installation_date}`, bg: '#fed7aa', fg: '#9a3412' });
+  if (project.contractor_name) tags.push({ label: project.contractor_name, bg: '#fecaca', fg: '#991b1b' });
 
   const next = availableTransitions[0];
 
@@ -442,7 +414,7 @@ function timeSince(iso: string): string {
 function TableView({ projects, stages, module, onOpen, onAdvance }: {
   projects: CrmProject[];
   stages: StageMeta[];
-  module: 'sales' | 'engineering' | 'operations';
+  module: 'operations';
   onOpen: (p: CrmProject) => void;
   onAdvance: (t: { project: CrmProject; def: TransitionDef }) => void;
 }) {
@@ -462,7 +434,7 @@ function TableView({ projects, stages, module, onOpen, onAdvance }: {
           </thead>
           <tbody>
             {projects.map((p) => {
-              const stage = module === 'sales' ? p.sales_stage : module === 'engineering' ? p.engineering_stage : p.operations_stage;
+              const stage = p.operations_stage;
               const meta = stages.find((s) => s.key === stage);
               const trans = transitionsFrom(module, stage);
               return (
@@ -495,7 +467,7 @@ function TableView({ projects, stages, module, onOpen, onAdvance }: {
 /* ─────────────── DETAIL MODAL ─────────────── */
 function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, module, onAdvance }: {
   project: CrmProject; onClose: () => void; onChanged: () => void; userEmail: string;
-  module: 'sales' | 'engineering' | 'operations';
+  module: 'operations';
   onAdvance: (t: { project: CrmProject; def: TransitionDef }) => void;
 }) {
   const [project, setProject] = useState<CrmProject>(initial);
@@ -509,7 +481,7 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
     });
   }, [initial.id]);
 
-  const stage = module === 'sales' ? project.sales_stage : module === 'engineering' ? project.engineering_stage : project.operations_stage;
+  const stage = project.operations_stage;
   const trans = transitionsFrom(module, stage);
 
   return (
@@ -520,9 +492,7 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
             <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{project.code}</div>
             <h2 style={{ margin: '4px 0 4px', fontSize: '1.15rem' }}>{project.title}</h2>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: '0.74rem' }}>
-              <ModuleBadge module="sales" stage={project.sales_stage} active={project.current_module === 'sales'} />
-              <ModuleBadge module="engineering" stage={project.engineering_stage} active={project.current_module === 'engineering'} />
-              <ModuleBadge module="operations" stage={project.operations_stage} active={project.current_module === 'operations'} />
+              <ModuleBadge stage={project.operations_stage} active={project.current_module === 'operations'} />
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
@@ -616,15 +586,13 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
   );
 }
 
-function ModuleBadge({ module, stage, active }: { module: 'sales' | 'engineering' | 'operations'; stage: string; active: boolean }) {
-  const labels: Record<string, string> = { sales: 'Ventas', engineering: 'Ingeniería', operations: 'Operaciones' };
-  const stages = MODULE_STAGES[module];
-  const meta = stages.find((s) => s.key === stage);
+function ModuleBadge({ stage, active }: { stage: string; active: boolean }) {
+  const meta = OPERATIONS_STAGES.find((s) => s.key === stage);
   const bg = active ? (meta?.color ?? '#94a3b8') : 'var(--bg-elevated)';
   const fg = active ? 'white' : 'var(--text-muted)';
   return (
     <span style={{ padding: '3px 8px', borderRadius: 6, background: bg, color: fg, fontWeight: active ? 700 : 500 }}>
-      {labels[module]}: {meta?.shortLabel ?? stage}
+      Operaciones: {meta?.shortLabel ?? stage}
     </span>
   );
 }
@@ -785,7 +753,7 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
 /* ─────────────── CREATE PROJECT MODAL ─────────────── */
 function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
   userEmail: string;
-  module: 'sales' | 'engineering' | 'operations';
+  module: 'operations';
   onClose: () => void;
   onCreated: (p: CrmProject) => void;
 }) {
@@ -929,7 +897,7 @@ function FormFieldSelect({ label, value, onChange, options, fullWidth }: { label
 
 /* ─────────────── STAGE CONFIG MODAL ─────────────── */
 function StageConfigModal({ module, stage, onClose }: {
-  module: 'sales' | 'engineering' | 'operations';
+  module: 'operations';
   stage: StageMeta;
   onClose: () => void;
 }) {
@@ -1038,7 +1006,7 @@ function StageConfigModal({ module, stage, onClose }: {
 }
 
 function AddFieldForm({ module, stageKey, onCancel, onAdded }: {
-  module: 'sales' | 'engineering' | 'operations';
+  module: 'operations';
   stageKey: string;
   onCancel: () => void;
   onAdded: () => void;

@@ -18,10 +18,7 @@
 export interface SidebarVisibility {
   inicio?: boolean;
   dashboard?: boolean;
-  ventas?: boolean;
-  ingenieria?: boolean;
   operaciones?: boolean;
-  funnel?: boolean;
   visitas?: boolean;
   inventario?: boolean;
   facturacion?: boolean;
@@ -42,10 +39,7 @@ export const ALWAYS_VISIBLE_IDS: ReadonlySet<string> = new Set();
 export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: string; group: 'general' | 'sistema' }> = [
   { id: 'inicio',        label: 'Inicio',                  group: 'general' },
   { id: 'dashboard',     label: 'Head End System',         group: 'general' },
-  { id: 'ventas',        label: 'CRM Ventas',              group: 'general' },
-  { id: 'ingenieria',    label: 'Ingeniería',              group: 'general' },
   { id: 'operaciones',   label: 'Operaciones',             group: 'general' },
-  { id: 'funnel',        label: 'Funnel',                  group: 'general' },
   { id: 'visitas',       label: 'Visitas en Campo',        group: 'general' },
   { id: 'inventario',    label: 'Inventario',              group: 'general' },
   { id: 'facturacion',   label: 'Facturación',             group: 'general' },

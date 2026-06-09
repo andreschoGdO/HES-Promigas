@@ -3,10 +3,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 /**
  * POST /api/crm/projects/bulk
- * Recibe { rows: object[], created_by: string, module?: 'sales'|'engineering'|'operations' }
+ * Recibe { rows: object[], created_by: string }
  *
- * Crea N proyectos. Por defecto module='operations' / stage='dimensionado' (uso típico:
- * cargar casas ya construidas). Cada row puede sobreescribir con su propia columna `stage`.
+ * Crea N proyectos en Operaciones (único módulo activo). Stage por defecto:
+ * 'dimensionado'. Cada row puede sobreescribir con su propia columna `stage`.
  * Devuelve { inserted, total, errors }.
  */
 const num = (v: unknown): number | null => {
@@ -53,9 +53,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'rows debe ser array' }, { status: 400 });
     }
     const createdBy = str(body.created_by);
-    const targetModule = (str(body.module) ?? 'operations') as 'sales' | 'engineering' | 'operations';
-    if (!['sales', 'engineering', 'operations'].includes(targetModule)) {
-      return NextResponse.json({ error: `module inválido: ${targetModule}` }, { status: 400 });
+    if (str(body.module) && str(body.module) !== 'operations') {
+      return NextResponse.json({ error: `module inválido: "${str(body.module)}". Solo se acepta 'operations'.` }, { status: 400 });
     }
 
     const inserted: Array<{ id: string; title: string }> = [];
@@ -69,26 +68,22 @@ export async function POST(request: Request) {
         continue;
       }
 
-      const rowStage = str(r.stage);
-      const initialSalesStage = targetModule === 'sales' ? (rowStage ?? 'prospecto') : 'completado';
-      const initialEngStage = targetModule === 'sales' ? 'pending'
-        : targetModule === 'engineering' ? (rowStage ?? 'pending') : 'completado';
-      const initialOpsStage = targetModule === 'operations' ? (rowStage ?? 'dimensionado') : 'pending';
+      const rowStage = str(r.stage) ?? 'dimensionado';
 
       const payload: Record<string, unknown> = {
         title,
-        current_module: targetModule,
-        sales_stage: initialSalesStage,
-        engineering_stage: initialEngStage,
-        operations_stage: initialOpsStage,
+        current_module: 'operations',
+        sales_stage: 'completado',
+        engineering_stage: 'completado',
+        operations_stage: rowStage,
         created_by: createdBy,
       };
       for (const c of STRING_COLS) payload[c] = str(r[c]);
       for (const c of NUM_COLS) payload[c] = num(r[c]);
       // assigned_to default = created_by
       if (!payload.assigned_to) payload.assigned_to = createdBy;
-      // Aprobación automática si viene aprobador (mismo criterio que el POST single).
-      if (str(r.diseno_aprobado_por) && (targetModule === 'operations' || rowStage === 'aprobado')) {
+      // Aprobación automática si viene aprobador
+      if (str(r.diseno_aprobado_por)) {
         payload.diseno_aprobado_at = new Date().toISOString();
       }
       // Limpiar nulls para que la BD aplique sus defaults
@@ -110,10 +105,8 @@ export async function POST(request: Request) {
       await supabaseAdmin.from('crm_project_events').insert({
         project_id: data.id,
         event_type: 'created',
-        to_module: targetModule,
-        to_stage: targetModule === 'sales' ? initialSalesStage
-          : targetModule === 'engineering' ? initialEngStage
-          : initialOpsStage,
+        to_module: 'operations',
+        to_stage: rowStage,
         actor_email: createdBy,
         notes: `Importado vía CSV (fila ${i + 1})`,
       });

@@ -24,6 +24,8 @@ interface CrmProject {
   client_city: string | null;
   estrato: number | null;
   tipo_vivienda: string | null;
+  conjunto: string | null;
+  casa_numero: string | null;
   invoice_kwh_mensual: number | null;
   invoice_valor_cop: number | null;
   propuesta_kwp: number | null;
@@ -722,17 +724,41 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
                 <label className="input-label" style={{ fontSize: '0.78rem' }}>
                   {f.field_label}{f.required && <span style={{ color: '#ef4444', marginLeft: 3 }}>*</span>}
                 </label>
-                {f.field_type === 'textarea' ? (
-                  <textarea value={values[f.field_key] ?? ''} onChange={(e) => setValues({ ...values, [f.field_key]: e.target.value })} placeholder={f.placeholder ?? undefined} rows={3} style={{ width: '100%' }} />
-                ) : f.field_type === 'select' ? (
-                  <select value={values[f.field_key] ?? ''} onChange={(e) => setValues({ ...values, [f.field_key]: e.target.value })}>
-                    <option value="">— Selecciona —</option>
-                    {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                ) : (
-                  <input type={f.field_type === 'number' ? 'text' : f.field_type === 'date' ? 'date' : f.field_type} inputMode={f.field_type === 'number' ? 'decimal' : undefined}
-                    value={values[f.field_key] ?? ''} onChange={(e) => setValues({ ...values, [f.field_key]: e.target.value })} placeholder={f.placeholder ?? undefined} style={{ width: '100%' }} />
-                )}
+                {(() => {
+                  // Pickers buscables para campos que enlazan otros recursos
+                  // (visitas + reservas de inventario). Reemplazan los inputs
+                  // de UUID a mano por una lista filtrable cargada vía API.
+                  const pickerKind: 'visita_previa' | 'visita_instalacion' | 'reservation' | null =
+                    f.field_key === 'visita_previa_id' ? 'visita_previa'
+                    : f.field_key === 'visita_instalacion_id' ? 'visita_instalacion'
+                    : f.field_key === 'reservation_id' ? 'reservation'
+                    : null;
+                  if (pickerKind) {
+                    return (
+                      <LinkedResourcePicker
+                        kind={pickerKind}
+                        casaHint={project.casa_numero ?? project.client_name ?? null}
+                        value={values[f.field_key] ?? ''}
+                        onChange={(v) => setValues({ ...values, [f.field_key]: v })}
+                      />
+                    );
+                  }
+                  if (f.field_type === 'textarea') {
+                    return <textarea value={values[f.field_key] ?? ''} onChange={(e) => setValues({ ...values, [f.field_key]: e.target.value })} placeholder={f.placeholder ?? undefined} rows={3} style={{ width: '100%' }} />;
+                  }
+                  if (f.field_type === 'select') {
+                    return (
+                      <select value={values[f.field_key] ?? ''} onChange={(e) => setValues({ ...values, [f.field_key]: e.target.value })}>
+                        <option value="">— Selecciona —</option>
+                        {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    );
+                  }
+                  return (
+                    <input type={f.field_type === 'number' ? 'text' : f.field_type === 'date' ? 'date' : f.field_type} inputMode={f.field_type === 'number' ? 'decimal' : undefined}
+                      value={values[f.field_key] ?? ''} onChange={(e) => setValues({ ...values, [f.field_key]: e.target.value })} placeholder={f.placeholder ?? undefined} style={{ width: '100%' }} />
+                  );
+                })()}
                 {f.help && <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '3px 0 0' }}>{f.help}</p>}
               </div>
             ))}
@@ -1352,6 +1378,210 @@ function ImportCsvModal({ userEmail, onClose, onImported }: {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─── LinkedResourcePicker: combobox buscable para visita_*_id / reservation_id ─── */
+// Reemplaza el input de UUID a mano por una lista filtrable cargada por API.
+// `casaHint` se usa para resaltar opciones de la misma casa al abrir.
+type PickerKind = 'visita_previa' | 'visita_instalacion' | 'reservation';
+interface PickerOption {
+  id: string;
+  label: string;
+  meta: string;
+  matchKey: string; // string concatenado para filtrar por search
+}
+
+function LinkedResourcePicker({ kind, casaHint, value, onChange }: {
+  kind: PickerKind;
+  casaHint: string | null;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [options, setOptions] = useState<PickerOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        if (kind === 'visita_previa' || kind === 'visita_instalacion') {
+          const type = kind === 'visita_previa' ? 'previa' : 'instalacion';
+          const r = await fetch(`/api/visits?type=${type}&status=completed&limit=200`);
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error ?? 'No se pudieron cargar visitas');
+          const visits = (j.visits ?? []) as Array<{
+            id: string; casa: string | null; visit_date: string | null;
+            technician_name: string | null; status: string;
+          }>;
+          const opts: PickerOption[] = visits.map((v) => ({
+            id: v.id,
+            label: `${v.casa ?? '(sin casa)'} · ${v.visit_date ?? '—'}`,
+            meta: `${v.status}${v.technician_name ? ` · ${v.technician_name}` : ''}`,
+            matchKey: `${v.casa ?? ''} ${v.visit_date ?? ''} ${v.technician_name ?? ''}`.toLowerCase(),
+          }));
+          if (!cancelled) setOptions(opts);
+        } else {
+          const r = await fetch(`/api/inventory/reservations?status=confirmed&limit=200`);
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error ?? 'No se pudieron cargar reservas');
+          const resvs = (j.reservations ?? []) as Array<{
+            id: string; title: string; status: string; created_at: string;
+            inventory_reservation_items?: Array<{ id: string }> | null;
+          }>;
+          const opts: PickerOption[] = resvs.map((rv) => {
+            const items = rv.inventory_reservation_items?.length ?? 0;
+            return {
+              id: rv.id,
+              label: `${rv.title} · ${items} items`,
+              meta: `${rv.status} · ${rv.created_at?.slice(0, 10) ?? ''}`,
+              matchKey: `${rv.title} ${rv.status}`.toLowerCase(),
+            };
+          });
+          if (!cancelled) setOptions(opts);
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Error');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [kind]);
+
+  // Ordenar: si hay casaHint y la opción coincide, ponerlas arriba
+  const sorted = useMemo(() => {
+    if (!casaHint) return options;
+    const hint = casaHint.toLowerCase();
+    const matches = options.filter((o) => o.matchKey.includes(hint));
+    const rest = options.filter((o) => !o.matchKey.includes(hint));
+    return [...matches, ...rest];
+  }, [options, casaHint]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return sorted;
+    const s = search.toLowerCase();
+    return sorted.filter((o) => o.matchKey.includes(s) || o.id.toLowerCase().startsWith(s));
+  }, [sorted, search]);
+
+  const selected = options.find((o) => o.id === value);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: '100%', textAlign: 'left',
+          padding: '8px 10px',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          cursor: 'pointer',
+          fontSize: '0.82rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {selected
+            ? selected.label
+            : <span style={{ color: 'var(--text-muted)' }}>— Selecciona —</span>}
+        </span>
+        <span style={{ color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%', left: 0, right: 0,
+          marginTop: 4,
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          maxHeight: 300,
+          overflowY: 'auto',
+          zIndex: 10,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+        }}>
+          <input
+            type="text"
+            placeholder="Buscar por casa, fecha, técnico…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoFocus
+            style={{
+              width: '100%',
+              padding: '8px 10px',
+              border: 'none',
+              borderBottom: '1px solid var(--border)',
+              fontSize: '0.82rem',
+              outline: 'none',
+              background: 'var(--bg-elevated)',
+              borderRadius: 0,
+              boxSizing: 'border-box',
+            }}
+          />
+          {loading ? (
+            <div style={{ padding: 12, fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cargando…</div>
+          ) : error ? (
+            <div style={{ padding: 12, fontSize: '0.8rem', color: '#ef4444' }}>{error}</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 12, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              {options.length === 0 ? 'Sin opciones disponibles.' : 'Sin resultados para esa búsqueda.'}
+            </div>
+          ) : (
+            filtered.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => { onChange(o.id); setOpen(false); setSearch(''); }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderBottom: '1px solid var(--border)',
+                  background: o.id === value ? 'rgba(7, 197, 168, 0.08)' : 'transparent',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                }}
+              >
+                <div style={{ fontWeight: 500 }}>{o.label}</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  {o.meta} · <code style={{ fontFamily: 'ui-monospace, monospace' }}>{o.id.slice(0, 8)}…</code>
+                </div>
+              </button>
+            ))
+          )}
+          {value && (
+            <button
+              type="button"
+              onClick={() => { onChange(''); setOpen(false); setSearch(''); }}
+              style={{
+                display: 'block', width: '100%',
+                textAlign: 'center',
+                padding: '6px 10px',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                fontSize: '0.74rem',
+                color: 'var(--text-muted)',
+                borderTop: '1px solid var(--border)',
+              }}
+            >
+              Limpiar selección
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

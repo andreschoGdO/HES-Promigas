@@ -85,7 +85,6 @@ export const TRANSITIONS: TransitionDef[] = [
       f('contractor_name', 'Contratista', 'text'),
       f('contractor_email', 'Email del contratista', 'email', false),
       f('installation_date', 'Fecha de instalación', 'date'),
-      f('reservation_id', 'ID reserva inventario', 'text', false, { help: 'UUID de la reserva confirmada en /inventario (opcional pero recomendado).' }),
     ],
   },
   {

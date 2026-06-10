@@ -643,17 +643,43 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
 }
 
 /* ─────────────── EDIT PROJECT MODAL ─────────────── */
+
+// Orden lineal de etapas de Operaciones — fuente única para "stage gating".
+const STAGE_INDEX: Record<string, number> = {
+  dimensionado: 0,
+  alistamiento: 1,
+  instalacion: 2,
+  operativo: 3,
+  completado: 4,
+};
+
+// Etiqueta legible por etapa (para el badge de candado)
+const STAGE_LABEL: Record<string, string> = {
+  dimensionado: 'Dimensionado',
+  alistamiento: 'Alistamiento',
+  instalacion: 'Instalación',
+  operativo: 'Operativo',
+  completado: 'Cerrado',
+};
+
+const stageIdx = (s: string | null | undefined) => (s ? (STAGE_INDEX[s] ?? 0) : 0);
+
 /**
- * Permite editar TODOS los campos que el usuario ya capturó en cualquier
- * etapa anterior (o quiera capturar adelantadamente). No cambia de etapa —
- * para eso está la acción de transición.
+ * Editor con bloqueo progresivo: solo las secciones de la etapa actual y
+ * anteriores son editables. Las secciones de etapas futuras se muestran
+ * deshabilitadas con un candado indicando cuándo se van a desbloquear.
  *
- * Los campos están agrupados por área temática (cliente, dimensionado,
- * instalación). Solo los campos modificados se mandan en el PATCH.
+ * - Estás en Dimensionado → solo puedes editar campos de Dimensionado.
+ * - Estás en Instalación → puedes editar todo lo de Dimensionado, Alistamiento
+ *   e Instalación. Los campos de Operativo siguen bloqueados.
+ *
+ * No cambia de etapa — la transición sigue siendo un botón aparte.
  */
 function EditProjectModal({ project, userEmail, onClose, onSaved }: {
   project: CrmProject; userEmail: string; onClose: () => void; onSaved: () => void;
 }) {
+  const currentIdx = stageIdx(project.operations_stage);
+  const canEdit = (sectionStage: string) => stageIdx(sectionStage) <= currentIdx;
   const initial: Record<string, string> = useMemo(() => ({
     title: project.title ?? '',
     client_name: project.client_name ?? '',
@@ -706,24 +732,63 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
   }, []);
   const catsByFamily = (fam: string) => cats.filter((c) => c.family === fam);
 
+  // Mapeo: cada CAMPO está asociado a la etapa donde se vuelve editable.
+  // Si el proyecto está en una etapa ≥ a la del campo, se puede editar.
+  const FIELD_STAGE: Record<string, string> = {
+    // Dimensionado (etapa inicial — todos los campos del create modal)
+    title: 'dimensionado',
+    client_name: 'dimensionado', client_email: 'dimensionado', client_phone: 'dimensionado',
+    client_address: 'dimensionado', client_city: 'dimensionado',
+    estrato: 'dimensionado', tipo_vivienda: 'dimensionado',
+    conjunto: 'dimensionado', casa_numero: 'dimensionado', carga_carro_electrico: 'dimensionado',
+    autosuficiencia_objetivo_pct: 'dimensionado',
+    invoice_kwh_mensual: 'dimensionado',
+    diseno_kwp: 'dimensionado', diseno_paneles: 'dimensionado', diseno_baterias_cantidad: 'dimensionado',
+    diseno_inversor_categoria_id: 'dimensionado',
+    diseno_bateria_categoria_id: 'dimensionado',
+    diseno_panel_categoria_id: 'dimensionado',
+    diseno_aprobado_por: 'dimensionado',
+    diseno_notes: 'dimensionado',
+    visita_previa_id: 'dimensionado',
+    notes: 'dimensionado',
+    // Alistamiento (contratista + fecha de instalación)
+    contractor_name: 'alistamiento',
+    contractor_email: 'alistamiento',
+    installation_date: 'alistamiento',
+    // Instalación (lectura inicial + acta de instalación)
+    lectura_inicial_kwh: 'instalacion',
+    visita_instalacion_id: 'instalacion',
+  };
+
   const submit = async () => {
     setErr(null);
     setSaving(true);
     try {
-      // Construir delta: solo campos cambiados
+      // Construir delta: solo campos cambiados Y que estén desbloqueados en
+      // la etapa actual. Cualquier intento de cambiar un campo de etapa
+      // futura se ignora silenciosamente (la UI lo deshabilita pero por
+      // si acaso lo blindamos).
       const delta: Record<string, unknown> = {};
+      const ignored: string[] = [];
       for (const k of Object.keys(form)) {
         const before = initial[k] ?? '';
         const after = form[k] ?? '';
-        if (before !== after) delta[k] = after;
+        if (before === after) continue;
+        const fieldStage = FIELD_STAGE[k];
+        if (fieldStage && !canEdit(fieldStage)) {
+          ignored.push(k);
+          continue;
+        }
+        delta[k] = after;
       }
       if (Object.keys(delta).length === 0) {
-        onClose();
+        if (ignored.length > 0) setErr('No puedes editar campos de etapas futuras todavía.');
+        else onClose();
         return;
       }
       const r = await fetch('/api/crm/projects', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: project.id, ...delta, actor_email: userEmail, note: 'Campos editados desde el detalle' }),
+        body: JSON.stringify({ id: project.id, ...delta, actor_email: userEmail, note: `Campos editados (etapa: ${project.operations_stage})` }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? 'Error');
@@ -743,7 +808,7 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
             <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{project.code}</div>
             <h2 style={{ margin: '4px 0 0', fontSize: '1.05rem' }}>Editar campos del proyecto</h2>
             <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-              Cambia cualquier campo capturado, sin importar la etapa. La transición se hace aparte con el botón de avanzar.
+              Etapa actual: <strong>{STAGE_LABEL[project.operations_stage] ?? project.operations_stage}</strong>. Puedes editar campos de esta etapa y de etapas anteriores. Las futuras se desbloquearán al avanzar.
             </p>
           </div>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
@@ -751,62 +816,84 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
 
         {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
 
-        <FormSection title="Identificación">
-          <FormField label="Título" required value={form.title} onChange={(v) => set('title', v)} fullWidth />
-        </FormSection>
+        <StageSection title="Identificación" stage="dimensionado" canEdit={canEdit('dimensionado')}>
+          <FormField label="Título" required value={form.title} onChange={(v) => set('title', v)} fullWidth disabled={!canEdit('dimensionado')} />
+        </StageSection>
 
-        <FormSection title="Cliente">
-          <FormField label="Nombre" value={form.client_name} onChange={(v) => set('client_name', v)} />
-          <FormField label="Email"  value={form.client_email} onChange={(v) => set('client_email', v)} />
-          <FormField label="Teléfono" value={form.client_phone} onChange={(v) => set('client_phone', v)} />
-          <FormField label="Dirección" value={form.client_address} onChange={(v) => set('client_address', v)} />
-          <FormField label="Ciudad" value={form.client_city} onChange={(v) => set('client_city', v)} />
-          <FormField label="Conjunto" value={form.conjunto} onChange={(v) => set('conjunto', v)} />
-          <FormField label="Casa #" value={form.casa_numero} onChange={(v) => set('casa_numero', v)} />
-          <FormField label="Estrato" type="number" value={form.estrato} onChange={(v) => set('estrato', v)} />
+        <StageSection title="Cliente" stage="dimensionado" canEdit={canEdit('dimensionado')}>
+          <FormField label="Nombre" value={form.client_name} onChange={(v) => set('client_name', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Email"  value={form.client_email} onChange={(v) => set('client_email', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Teléfono" value={form.client_phone} onChange={(v) => set('client_phone', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Dirección" value={form.client_address} onChange={(v) => set('client_address', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Ciudad" value={form.client_city} onChange={(v) => set('client_city', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Conjunto" value={form.conjunto} onChange={(v) => set('conjunto', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Casa #" value={form.casa_numero} onChange={(v) => set('casa_numero', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Estrato" type="number" value={form.estrato} onChange={(v) => set('estrato', v)} disabled={!canEdit('dimensionado')} />
           <FormFieldSelect label="Carga carro eléctrico" value={form.carga_carro_electrico} onChange={(v) => set('carga_carro_electrico', v)}
-            options={['No tenemos carro eléctrico', 'Sí - Wallbox 7 kW', 'Sí - Wallbox 11 kW', 'Sí - Wallbox 22 kW', 'Sí - otro']} fullWidth />
-        </FormSection>
+            options={['No tenemos carro eléctrico', 'Sí - Wallbox 7 kW', 'Sí - Wallbox 11 kW', 'Sí - Wallbox 22 kW', 'Sí - otro']} fullWidth disabled={!canEdit('dimensionado')} />
+        </StageSection>
 
-        <FormSection title="Dimensionado">
-          <FormField label="Promedio consumo (kWh/mes)" type="number" value={form.invoice_kwh_mensual} onChange={(v) => set('invoice_kwh_mensual', v)} />
-          <FormField label="Autosuficiencia objetivo (%)" type="number" value={form.autosuficiencia_objetivo_pct} onChange={(v) => set('autosuficiencia_objetivo_pct', v)} />
-          <FormField label="kWp diseño" type="number" value={form.diseno_kwp} onChange={(v) => set('diseno_kwp', v)} />
-          <FormField label="Paneles (cantidad)" type="number" value={form.diseno_paneles} onChange={(v) => set('diseno_paneles', v)} />
-          <FormField label="Baterías (cantidad)" type="number" value={form.diseno_baterias_cantidad} onChange={(v) => set('diseno_baterias_cantidad', v)} />
-          <FormField label="Responsable diseño" value={form.diseno_aprobado_por} onChange={(v) => set('diseno_aprobado_por', v)} />
-          <FormField label="Notas del diseño" value={form.diseno_notes} onChange={(v) => set('diseno_notes', v)} fullWidth />
-        </FormSection>
+        <StageSection title="Dimensionado" stage="dimensionado" canEdit={canEdit('dimensionado')}>
+          <FormField label="Promedio consumo (kWh/mes)" type="number" value={form.invoice_kwh_mensual} onChange={(v) => set('invoice_kwh_mensual', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Autosuficiencia objetivo (%)" type="number" value={form.autosuficiencia_objetivo_pct} onChange={(v) => set('autosuficiencia_objetivo_pct', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="kWp diseño" type="number" value={form.diseno_kwp} onChange={(v) => set('diseno_kwp', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Paneles (cantidad)" type="number" value={form.diseno_paneles} onChange={(v) => set('diseno_paneles', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Baterías (cantidad)" type="number" value={form.diseno_baterias_cantidad} onChange={(v) => set('diseno_baterias_cantidad', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Responsable diseño" value={form.diseno_aprobado_por} onChange={(v) => set('diseno_aprobado_por', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Notas del diseño" value={form.diseno_notes} onChange={(v) => set('diseno_notes', v)} fullWidth disabled={!canEdit('dimensionado')} />
+        </StageSection>
 
-        <FormSection title="Equipos del diseño (catálogo)">
-          <CategoryPicker label="Modelo de inversor" value={form.diseno_inversor_categoria_id} onChange={(v) => set('diseno_inversor_categoria_id', v)} options={catsByFamily('inverter')} />
-          <CategoryPicker label="Modelo de batería"  value={form.diseno_bateria_categoria_id}  onChange={(v) => set('diseno_bateria_categoria_id', v)}  options={catsByFamily('battery')} />
-          <CategoryPicker label="Modelo de panel"    value={form.diseno_panel_categoria_id}    onChange={(v) => set('diseno_panel_categoria_id', v)}    options={catsByFamily('panel')} fullWidth />
-        </FormSection>
-
-        <FormSection title="Operaciones / Instalación">
-          <FormField label="Contratista" value={form.contractor_name} onChange={(v) => set('contractor_name', v)} />
-          <FormField label="Email contratista" value={form.contractor_email} onChange={(v) => set('contractor_email', v)} />
-          <FormField label="Fecha instalación" type="date" value={form.installation_date} onChange={(v) => set('installation_date', v)} />
-          <FormField label="Lectura inicial (kWh)" type="number" value={form.lectura_inicial_kwh} onChange={(v) => set('lectura_inicial_kwh', v)} />
+        <StageSection title="Equipos del diseño (catálogo)" stage="dimensionado" canEdit={canEdit('dimensionado')}>
+          <CategoryPicker label="Modelo de inversor" value={form.diseno_inversor_categoria_id} onChange={(v) => set('diseno_inversor_categoria_id', v)} options={catsByFamily('inverter')} disabled={!canEdit('dimensionado')} />
+          <CategoryPicker label="Modelo de batería"  value={form.diseno_bateria_categoria_id}  onChange={(v) => set('diseno_bateria_categoria_id', v)}  options={catsByFamily('battery')} disabled={!canEdit('dimensionado')} />
+          <CategoryPicker label="Modelo de panel"    value={form.diseno_panel_categoria_id}    onChange={(v) => set('diseno_panel_categoria_id', v)}    options={catsByFamily('panel')} fullWidth disabled={!canEdit('dimensionado')} />
           <div style={{ gridColumn: '1 / -1' }}>
             <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>Acta de visita previa</label>
-            <LinkedResourcePicker kind="visita_previa" casaHint={form.casa_numero || form.client_name || null} value={form.visita_previa_id} onChange={(v) => set('visita_previa_id', v)} />
+            <LinkedResourcePicker kind="visita_previa" casaHint={form.casa_numero || form.client_name || null} value={form.visita_previa_id} onChange={(v) => set('visita_previa_id', v)} disabled={!canEdit('dimensionado')} />
           </div>
+        </StageSection>
+
+        <StageSection title="Alistamiento (contratista)" stage="alistamiento" canEdit={canEdit('alistamiento')}>
+          <FormField label="Contratista" value={form.contractor_name} onChange={(v) => set('contractor_name', v)} disabled={!canEdit('alistamiento')} />
+          <FormField label="Email contratista" value={form.contractor_email} onChange={(v) => set('contractor_email', v)} disabled={!canEdit('alistamiento')} />
+          <FormField label="Fecha instalación" type="date" value={form.installation_date} onChange={(v) => set('installation_date', v)} disabled={!canEdit('alistamiento')} />
+        </StageSection>
+
+        <StageSection title="Instalación (puesta en marcha)" stage="instalacion" canEdit={canEdit('instalacion')}>
+          <FormField label="Lectura inicial (kWh)" type="number" value={form.lectura_inicial_kwh} onChange={(v) => set('lectura_inicial_kwh', v)} disabled={!canEdit('instalacion')} />
           <div style={{ gridColumn: '1 / -1' }}>
             <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>Acta de visita de instalación</label>
-            <LinkedResourcePicker kind="visita_instalacion" casaHint={form.casa_numero || form.client_name || null} value={form.visita_instalacion_id} onChange={(v) => set('visita_instalacion_id', v)} />
+            <LinkedResourcePicker kind="visita_instalacion" casaHint={form.casa_numero || form.client_name || null} value={form.visita_instalacion_id} onChange={(v) => set('visita_instalacion_id', v)} disabled={!canEdit('instalacion')} />
           </div>
-        </FormSection>
+        </StageSection>
 
-        <FormSection title="Otros">
-          <FormField label="Notas del proyecto" value={form.notes} onChange={(v) => set('notes', v)} fullWidth />
-        </FormSection>
+        <StageSection title="Otros" stage="dimensionado" canEdit={canEdit('dimensionado')}>
+          <FormField label="Notas del proyecto" value={form.notes} onChange={(v) => set('notes', v)} fullWidth disabled={!canEdit('dimensionado')} />
+        </StageSection>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
           <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
           <button onClick={submit} className="primary-btn" disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Sección que se renderiza deshabilitada con candado si la etapa todavía no se alcanzó. */
+function StageSection({ title, stage, canEdit, children }: { title: string; stage: string; canEdit: boolean; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 16, position: 'relative', opacity: canEdit ? 1 : 0.55 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>{title}</div>
+        {!canEdit && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 10, background: 'rgba(148, 163, 184, 0.15)', color: 'var(--text-muted)', fontSize: '0.66rem', fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>
+            🔒 Se desbloquea al avanzar a {STAGE_LABEL[stage] ?? stage}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, pointerEvents: canEdit ? 'auto' : 'none' }}>
+        {children}
       </div>
     </div>
   );
@@ -1196,19 +1283,19 @@ function FormSection({ title, children }: { title: string; children: React.React
     </div>
   );
 }
-function FormField({ label, value, onChange, required, placeholder, type, fullWidth }: { label: string; value: string; onChange: (v: string) => void; required?: boolean; placeholder?: string; type?: string; fullWidth?: boolean }) {
+function FormField({ label, value, onChange, required, placeholder, type, fullWidth, disabled }: { label: string; value: string; onChange: (v: string) => void; required?: boolean; placeholder?: string; type?: string; fullWidth?: boolean; disabled?: boolean }) {
   return (
     <div style={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
       <label className="input-label" style={{ fontSize: '0.74rem' }}>{label}{required && <span style={{ color: '#ef4444' }}> *</span>}</label>
-      <input type={type === 'number' ? 'text' : (type ?? 'text')} inputMode={type === 'number' ? 'decimal' : undefined} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+      <input type={type === 'number' ? 'text' : (type ?? 'text')} inputMode={type === 'number' ? 'decimal' : undefined} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} />
     </div>
   );
 }
-function FormFieldSelect({ label, value, onChange, options, fullWidth }: { label: string; value: string; onChange: (v: string) => void; options: string[]; fullWidth?: boolean }) {
+function FormFieldSelect({ label, value, onChange, options, fullWidth, disabled }: { label: string; value: string; onChange: (v: string) => void; options: string[]; fullWidth?: boolean; disabled?: boolean }) {
   return (
     <div style={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
       <label className="input-label" style={{ fontSize: '0.74rem' }}>{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
         <option value="">— Selecciona —</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -1217,14 +1304,14 @@ function FormFieldSelect({ label, value, onChange, options, fullWidth }: { label
 }
 
 /** Select específico para categorías del inventario: la key es el id, el label es el nombre. */
-function CategoryPicker({ label, value, onChange, options, fullWidth }: {
+function CategoryPicker({ label, value, onChange, options, fullWidth, disabled }: {
   label: string; value: string; onChange: (v: string) => void;
-  options: Array<{ id: string; name: string }>; fullWidth?: boolean;
+  options: Array<{ id: string; name: string }>; fullWidth?: boolean; disabled?: boolean;
 }) {
   return (
     <div style={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
       <label className="input-label" style={{ fontSize: '0.74rem' }}>{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <select value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
         <option value="">{options.length === 0 ? '(no hay modelos en /inventario)' : '— Selecciona —'}</option>
         {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
@@ -1704,11 +1791,12 @@ interface PickerOption {
   matchKey: string; // string concatenado para filtrar por search
 }
 
-function LinkedResourcePicker({ kind, casaHint, value, onChange }: {
+function LinkedResourcePicker({ kind, casaHint, value, onChange, disabled }: {
   kind: PickerKind;
   casaHint: string | null;
   value: string;
   onChange: (v: string) => void;
+  disabled?: boolean;
 }) {
   const [options, setOptions] = useState<PickerOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1787,14 +1875,16 @@ function LinkedResourcePicker({ kind, casaHint, value, onChange }: {
     <div style={{ position: 'relative' }}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => { if (!disabled) setOpen((v) => !v); }}
+        disabled={disabled}
         style={{
           width: '100%', textAlign: 'left',
           padding: '8px 10px',
           background: 'var(--bg-surface)',
           border: '1px solid var(--border)',
           borderRadius: 6,
-          cursor: 'pointer',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.5 : 1,
           fontSize: '0.82rem',
           display: 'flex',
           justifyContent: 'space-between',

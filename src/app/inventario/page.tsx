@@ -197,6 +197,7 @@ export default function InventarioPage() {
           totalItems: items.length,
           totalConsumables: consumables.length,
           inStock: byStatus.in_stock ?? 0,
+          reserved: byStatus.reserved ?? 0,
           installed: byStatus.installed ?? 0,
           inRepair: (byStatus.in_repair ?? 0) + (byStatus.rma ?? 0),
           lowStockCount: lowStock.length,
@@ -204,16 +205,10 @@ export default function InventarioPage() {
         });
       } catch {
         // Si falla, mostramos los cards con cero pero la página sigue operando
-        setHeaderStats({ totalItems: 0, totalConsumables: 0, inStock: 0, installed: 0, inRepair: 0, lowStockCount: 0, warrantyExpiring: 0 });
+        setHeaderStats({ totalItems: 0, totalConsumables: 0, inStock: 0, reserved: 0, installed: 0, inRepair: 0, lowStockCount: 0, warrantyExpiring: 0 });
       }
     })();
   }, []);
-
-  const attention: Array<{ label: string; color: string; jump: Tab }> = headerStats ? [
-    headerStats.lowStockCount > 0 && { label: `${headerStats.lowStockCount} consumible${headerStats.lowStockCount === 1 ? '' : 's'} con stock bajo`, color: '#ef4444', jump: 'consumibles' as Tab },
-    headerStats.warrantyExpiring > 0 && { label: `${headerStats.warrantyExpiring} garantía${headerStats.warrantyExpiring === 1 ? '' : 's'} próxima${headerStats.warrantyExpiring === 1 ? '' : 's'} a vencer`, color: '#ec4899', jump: 'equipos' as Tab },
-    headerStats.inRepair > 0 && { label: `${headerStats.inRepair} en garantía / RMA`, color: '#f59e0b', jump: 'equipos' as Tab },
-  ].filter(Boolean) as Array<{ label: string; color: string; jump: Tab }> : [];
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 40 }}>
@@ -228,30 +223,13 @@ export default function InventarioPage() {
         </p>
       </div>
 
-      {/* KPI cards + Atención requerida — siempre visibles */}
+      {/* KPI cards: breakdown por estado */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 12, marginBottom: 14 }}>
-        <KpiCard label="Equipos totales" value={headerStats?.totalItems ?? 0} sub={`${headerStats?.installed ?? 0} instalados`} color="#07c5a8" Icon={Cpu} />
-        <KpiCard label="En stock (bodega)" value={headerStats?.inStock ?? 0} sub="Listos para instalar" color="#10b981" Icon={Boxes} />
-        <KpiCard label="En garantía / RMA" value={headerStats?.inRepair ?? 0} sub={(headerStats?.inRepair ?? 0) === 0 ? 'Todo operando' : 'Fuera de servicio'} color="#f59e0b" Icon={AlertTriangle} />
+        <KpiCard label="En stock"    value={headerStats?.inStock    ?? 0} sub="Listos para instalar"                                        color="#10b981" Icon={Boxes} />
+        <KpiCard label="En reserva"  value={headerStats?.reserved   ?? 0} sub="Apartados para una visita"                                  color="#3b82f6" Icon={ClipboardList} />
+        <KpiCard label="En garantía" value={headerStats?.inRepair   ?? 0} sub={(headerStats?.inRepair ?? 0) === 0 ? 'Todo operando' : 'En taller / proveedor'} color="#f59e0b" Icon={AlertTriangle} />
+        <KpiCard label="Instalado"   value={headerStats?.installed  ?? 0} sub="Operando en campo"                                          color="#07c5a8" Icon={Cpu} />
         <KpiCard label="Consumibles" value={headerStats?.totalConsumables ?? 0} sub={`${headerStats?.lowStockCount ?? 0} con stock bajo`} color="#8b5cf6" Icon={Cable} />
-        {/* Atención requerida — al lado, mismo nivel que los KPIs */}
-        <div className="glass-panel" style={{ padding: '14px 16px', borderLeft: '4px solid #ef4444', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-            <AlertTriangle size={13} style={{ color: '#ef4444' }} /> Atención requerida
-          </div>
-          {attention.length === 0 ? (
-            <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Sin alertas — todo en orden</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {attention.map((a, i) => (
-                <button key={i} onClick={() => setTab(a.jump)}
-                  style={{ background: 'transparent', border: 'none', borderLeft: `2px solid ${a.color}`, padding: '2px 0 2px 8px', textAlign: 'left', cursor: 'pointer', color: 'var(--text-primary)', fontSize: '0.82rem', lineHeight: 1.3 }}>
-                  {a.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* TABS — primary navigation */}
@@ -284,6 +262,7 @@ interface HeaderStats {
   totalItems: number;
   totalConsumables: number;
   inStock: number;
+  reserved: number;
   installed: number;
   inRepair: number;
   lowStockCount: number;

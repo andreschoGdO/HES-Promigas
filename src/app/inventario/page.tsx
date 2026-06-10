@@ -3360,9 +3360,11 @@ function ReservasTab({ userEmail }: { userEmail: string }) {
                     </div>
                     <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>
                       {r.field_visits ? (
-                        <>Visita: <strong>{r.field_visits.visit_type}</strong> · {r.field_visits.casa ?? 'sin casa'} · {r.field_visits.visit_date}</>
+                        <>Visita instalación: <strong>{r.field_visits.casa ?? 'sin casa'}</strong> · {r.field_visits.visit_date}</>
+                      ) : r.status === 'fulfilled' ? (
+                        <em>visita ya cumplida</em>
                       ) : (
-                        <em>sin visita vinculada</em>
+                        <em>visita de instalación pendiente — se enlaza al completarla</em>
                       )}
                       {r.requested_by && <> · solicitada por {r.requested_by}</>}
                       <> · creada {new Date(r.created_at).toLocaleDateString('es-CO')}</>

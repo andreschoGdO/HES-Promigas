@@ -17,6 +17,12 @@ interface Row {
   lectura_inicial_kwh: number | null;
   estado: string | null;
   tipo_red: string | null;
+  numero_contrato_or: string | null;
+  capacidad_transformador: number | null;
+  nivel_tension: number | null;
+  operador_telefonia: string | null;
+  cuadrilla: string | null;
+  tecnico_instalador: string | null;
   solucion: string | null;
   plan: string | null;
   paneles: number | null;
@@ -135,12 +141,23 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    id: 'tecnico_acta', label: 'Datos técnicos (del acta)', Icon: HardHat, color: '#0ea5e9',
+    cols: [
+      { key: 'numero_contrato_or',      label: 'Nº CONTRATO OR',       type: 'text', editable: false, minWidth: 130 },
+      { key: 'capacidad_transformador', label: 'TRANSFORMADOR (kVA)',  type: 'num',  editable: false, minWidth: 120 },
+      { key: 'nivel_tension',           label: 'NIVEL TENSIÓN (V)',    type: 'num',  editable: false, minWidth: 120 },
+      { key: 'operador_telefonia',      label: 'OPERADOR TELEFONÍA',   type: 'text', editable: false, minWidth: 120 },
+    ],
+  },
+  {
     id: 'actores', label: 'Actores y marcas', Icon: HardHat, color: '#f59e0b',
     cols: [
-      { key: 'constructor',    label: 'Constructor',     type: 'text', editable: false, minWidth: 130 },
-      { key: 'marca_bateria',  label: 'Marca Bateria',   type: 'text', editable: false, minWidth: 130 },
-      { key: 'marca_inversor', label: 'Marca Inversor',  type: 'text', editable: false, minWidth: 130 },
-      { key: 'marca_panel',    label: 'Marca Panel',     type: 'text', editable: false, minWidth: 130 },
+      { key: 'constructor',        label: 'Constructor',     type: 'text', editable: false, minWidth: 130 },
+      { key: 'cuadrilla',          label: 'Cuadrilla',       type: 'text', editable: false, minWidth: 130 },
+      { key: 'tecnico_instalador', label: 'Técnico inst.',   type: 'text', editable: false, minWidth: 130 },
+      { key: 'marca_bateria',      label: 'Marca Bateria',   type: 'text', editable: false, minWidth: 130 },
+      { key: 'marca_inversor',     label: 'Marca Inversor',  type: 'text', editable: false, minWidth: 130 },
+      { key: 'marca_panel',        label: 'Marca Panel',     type: 'text', editable: false, minWidth: 130 },
     ],
   },
   {

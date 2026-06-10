@@ -79,6 +79,7 @@ export default function PlannerPage() {
   const [editing, setEditing] = useState<PlannerTask | null>(null);
   const [previewing, setPreviewing] = useState<PlannerTask | null>(null);
   const [creating, setCreating] = useState(false);
+  const [creatingInstall, setCreatingInstall] = useState(false);
   const [importing, setImporting] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -266,6 +267,9 @@ export default function PlannerPage() {
           <button className="secondary-btn" onClick={() => setImporting(true)}>
             <Upload size={14} /> Importar CSV
           </button>
+          <button className="secondary-btn" onClick={() => setCreatingInstall(true)} style={{ borderColor: '#8b5cf6', color: '#8b5cf6' }}>
+            <Plus size={14} /> Nueva tarea instalación
+          </button>
           <button className="primary-btn" onClick={() => setCreating(true)}>
             <Plus size={14} /> Nueva tarea
           </button>
@@ -412,6 +416,13 @@ export default function PlannerPage() {
           users={users}
           onClose={() => setCreating(false)}
           onSaved={(t) => { setTasks((cur) => [t, ...cur]); setCreating(false); }}
+        />
+      )}
+      {creatingInstall && (
+        <InstallTaskModal
+          users={users}
+          onClose={() => setCreatingInstall(false)}
+          onSaved={(t) => { setTasks((cur) => [t, ...cur]); setCreatingInstall(false); }}
         />
       )}
       {editing && (
@@ -1413,6 +1424,204 @@ function TaskFormModal({ mode, initial, users, onClose, onSaved, onDeleted }: {
               {saving ? 'Guardando…' : (mode === 'create' ? 'Crear tarea' : 'Guardar cambios')}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────── Modal: Nueva tarea de instalación ───────────────
+ *
+ * Tareas ad-hoc del flujo operativo que NO vienen de las transiciones
+ * automáticas del CRM. Cubre:
+ *   - Cambio de consumibles (cable, breakers)
+ *   - Cambio / swap de equipos (logística inversa)
+ *   - Mantenimiento preventivo
+ *   - Retorno de equipos / RMA
+ *   - Inspección no programada
+ *
+ * Pre-llena título, tags, team y urgencia según el tipo elegido.
+ */
+type InstallTaskType = 'cambio_consumible' | 'cambio_equipo' | 'mantenimiento' | 'retiro_equipo' | 'inspeccion' | 'otro';
+
+const INSTALL_TYPE_META: Record<InstallTaskType, { label: string; icon: string; titlePrefix: string; team: string; tags: string[]; urgency: 'low'|'medium'|'high'|'critical' }> = {
+  cambio_consumible: { label: 'Cambio de consumible',         icon: '🔧', titlePrefix: 'Cambio consumible',        team: 'Construcción', tags: ['consumible', 'instalacion-ad-hoc'], urgency: 'medium' },
+  cambio_equipo:     { label: 'Cambio / Swap de equipo',      icon: '🔄', titlePrefix: 'Swap equipo',              team: 'Operaciones',  tags: ['swap', 'logistica-inversa'],         urgency: 'high'   },
+  mantenimiento:     { label: 'Mantenimiento preventivo',     icon: '🛠️', titlePrefix: 'Mantenimiento',            team: 'Mantenimiento',tags: ['mantenimiento'],                     urgency: 'low'    },
+  retiro_equipo:     { label: 'Retiro / Devolución a bodega', icon: '↩️', titlePrefix: 'Retiro equipo',            team: 'Operaciones',  tags: ['retiro', 'logistica-inversa'],       urgency: 'medium' },
+  inspeccion:        { label: 'Inspección no programada',     icon: '🔍', titlePrefix: 'Inspección',               team: 'Operaciones',  tags: ['inspeccion'],                        urgency: 'medium' },
+  otro:              { label: 'Otro',                         icon: '📋', titlePrefix: 'Tarea',                    team: 'Operaciones',  tags: ['instalacion-ad-hoc'],                urgency: 'medium' },
+};
+
+function InstallTaskModal({ users, onClose, onSaved }: {
+  users: AppUser[]; onClose: () => void; onSaved: (t: PlannerTask) => void;
+}) {
+  type ProjectLite = { id: string; code: string | null; title: string; conjunto: string | null; casa_numero: string | null; client_name: string | null };
+  const [projects, setProjects] = useState<ProjectLite[]>([]);
+  const [type, setType] = useState<InstallTaskType>('cambio_consumible');
+  const [projectId, setProjectId] = useState<string>('');
+  const [casaDescriptor, setCasaDescriptor] = useState('');
+  const [itemDescriptor, setItemDescriptor] = useState('');
+  const [description, setDescription] = useState('');
+  const [assignedTo, setAssignedTo] = useState('');
+  const [startDate, setStartDate] = useState(todayIso());
+  const [dueDate, setDueDate] = useState(todayIso());
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/crm/projects?limit=1000')
+      .then((r) => r.json())
+      .then((j) => setProjects((j.projects ?? []) as ProjectLite[]))
+      .catch(() => {});
+  }, []);
+
+  // Cuando seleccionas un proyecto, pre-llena la casa
+  useEffect(() => {
+    if (!projectId) return;
+    const p = projects.find((x) => x.id === projectId);
+    if (p) {
+      const casa = p.conjunto && p.casa_numero ? `${p.conjunto} · Casa ${p.casa_numero}` : (p.casa_numero ? `Casa ${p.casa_numero}` : p.title);
+      setCasaDescriptor(casa);
+    }
+  }, [projectId, projects]);
+
+  const meta = INSTALL_TYPE_META[type];
+  const autoTitle = `${meta.titlePrefix}: ${casaDescriptor || '(casa por definir)'}${itemDescriptor ? ' — ' + itemDescriptor : ''}`;
+
+  const submit = async () => {
+    setErr(null);
+    if (!casaDescriptor.trim() && !projectId) { setErr('Selecciona un proyecto o describe la casa'); return; }
+    setSaving(true);
+    try {
+      const payload = {
+        title: autoTitle,
+        description: description.trim() || `${meta.label}${itemDescriptor ? ` · ${itemDescriptor}` : ''}`,
+        assigned_to: assignedTo.trim() || null,
+        urgency: meta.urgency,
+        status: 'todo',
+        start_date: startDate || null,
+        due_date: dueDate || null,
+        tags: meta.tags,
+        team: meta.team,
+        project_id: projectId || null,
+      };
+      const r = await fetch('/api/planner/tasks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      onSaved(j.task);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto', padding: 24, borderTop: '3px solid #8b5cf6' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Nueva tarea de instalación</h2>
+            <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+              Para actividades de campo que no salen del flujo de Construcción (cambios de consumibles, swaps, mantenimientos).
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
+        </div>
+
+        {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+
+        {/* Tipo de actividad */}
+        <div style={{ marginBottom: 14 }}>
+          <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 6 }}>Tipo de actividad *</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 6 }}>
+            {(Object.keys(INSTALL_TYPE_META) as InstallTaskType[]).map((k) => {
+              const m = INSTALL_TYPE_META[k];
+              const active = type === k;
+              return (
+                <button key={k} onClick={() => setType(k)}
+                  style={{ padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                    border: `1px solid ${active ? '#8b5cf6' : 'var(--border)'}`,
+                    background: active ? 'rgba(139, 92, 246, 0.08)' : 'var(--bg-surface)',
+                    color: active ? '#8b5cf6' : 'var(--text)',
+                    fontSize: '0.78rem', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: '1rem' }}>{m.icon}</span>
+                  <span style={{ fontWeight: active ? 700 : 500 }}>{m.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Proyecto vinculado (opcional pero recomendado) */}
+        <div style={{ marginBottom: 12 }}>
+          <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Proyecto vinculado (opcional)</label>
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ width: '100%' }}>
+            <option value="">— Sin proyecto (tarea libre) —</option>
+            {projects.map((p) => {
+              const label = p.code ? `${p.code} · ` : '';
+              const casa = p.conjunto && p.casa_numero ? `${p.conjunto} Casa ${p.casa_numero}` : (p.casa_numero ? `Casa ${p.casa_numero}` : '');
+              return <option key={p.id} value={p.id}>{label}{p.client_name ?? p.title}{casa ? ' · ' + casa : ''}</option>;
+            })}
+          </select>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div>
+            <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Casa / sitio</label>
+            <input type="text" value={casaDescriptor} onChange={(e) => setCasaDescriptor(e.target.value)} placeholder="Ej: CONDOMINIO QA · Casa 12" style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>
+              {type === 'cambio_consumible' ? 'Consumible afectado' : type === 'cambio_equipo' ? 'Equipo a cambiar (serial)' : 'Detalle (opcional)'}
+            </label>
+            <input type="text" value={itemDescriptor} onChange={(e) => setItemDescriptor(e.target.value)}
+              placeholder={type === 'cambio_consumible' ? 'Ej: 5 m cable PV1-F' : type === 'cambio_equipo' ? 'Ej: SN-LVT-INV-001' : 'Detalle'}
+              style={{ width: '100%' }} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Descripción / instrucciones</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} style={{ width: '100%' }} placeholder="Pasos a ejecutar, materiales necesarios, contacto del cliente…" />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+          <div>
+            <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Asignado a</label>
+            <input type="text" list="install-users" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} placeholder="email@bia.app" style={{ width: '100%' }} />
+            <datalist id="install-users">
+              {users.map((u) => <option key={u.id} value={u.email}>{u.name ?? u.email}</option>)}
+            </datalist>
+          </div>
+          <div>
+            <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Fecha inicio</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: '100%' }} />
+          </div>
+          <div>
+            <label className="input-label" style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: 4 }}>Fecha límite</label>
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} style={{ width: '100%' }} />
+          </div>
+        </div>
+
+        {/* Preview del título */}
+        <div style={{ padding: 10, background: 'rgba(139, 92, 246, 0.06)', border: '1px solid rgba(139, 92, 246, 0.25)', borderRadius: 8, marginBottom: 14, fontSize: '0.82rem' }}>
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Título que se creará</div>
+          <div style={{ fontWeight: 600 }}>{autoTitle}</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: 4 }}>
+            Equipo: <strong>{meta.team}</strong> · Urgencia: <strong>{meta.urgency}</strong> · Tags: {meta.tags.join(', ')}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+          <button onClick={() => void submit()} className="primary-btn" disabled={saving} style={{ background: '#8b5cf6' }}>
+            {saving ? 'Creando…' : 'Crear tarea'}
+          </button>
         </div>
       </div>
     </div>

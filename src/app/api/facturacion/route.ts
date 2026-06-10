@@ -39,6 +39,8 @@ type ProjectRow = {
   operations_stage: string;
   current_module: string;
   tipo_red: string | null;
+  visita_previa_id: string | null;
+  visita_instalacion_id: string | null;
   updated_at: string;
 };
 
@@ -54,6 +56,7 @@ export async function GET() {
       'diseno_inversor_categoria_id, diseno_panel_categoria_id, diseno_bateria_categoria_id, ' +
       'contractor_name, house_id, ' +
       'installation_date, operativo_at, lectura_inicial_kwh, operations_stage, current_module, tipo_red, ' +
+      'visita_previa_id, visita_instalacion_id, ' +
       'updated_at',
     )
     .order('updated_at', { ascending: false })
@@ -61,6 +64,29 @@ export async function GET() {
 
   if (projErr) return NextResponse.json({ error: projErr.message }, { status: 500 });
   const projectList = (projects ?? []) as unknown as ProjectRow[];
+
+  // 1b. Cargar form_data de visitas previas + instalación de cada proyecto.
+  // Sirve para extraer Nº contrato OR, capacidad transformador, nivel tensión
+  // y cuadrilla / técnico responsable.
+  const visitIds = projectList.flatMap((p) => [p.visita_previa_id, p.visita_instalacion_id].filter(Boolean) as string[]);
+  type VisitRow = { id: string; visit_type: string; form_data: Record<string, unknown> | null };
+  let visits: VisitRow[] = [];
+  if (visitIds.length > 0) {
+    const { data: vData } = await supabaseAdmin
+      .from('field_visits')
+      .select('id, visit_type, form_data')
+      .in('id', visitIds);
+    visits = (vData ?? []) as VisitRow[];
+  }
+  const visitById = new Map<string, VisitRow>();
+  for (const v of visits) visitById.set(v.id, v);
+  // Helper: get a form_data key from a visit (typed)
+  const visitField = (visitId: string | null, key: string): unknown => {
+    if (!visitId) return null;
+    const v = visitById.get(visitId);
+    if (!v?.form_data) return null;
+    return (v.form_data as Record<string, unknown>)[key];
+  };
 
   // 2. Catálogo de categorías para resolver marcas + costo default desde diseno_*_categoria_id
   const { data: cats } = await supabaseAdmin
@@ -288,6 +314,13 @@ export async function GET() {
       lectura_inicial_kwh: p.lectura_inicial_kwh ?? null,
       estado: p.current_module === 'closed' ? 'cerrado' : (p.operations_stage ?? null),
       tipo_red: p.tipo_red ?? null,
+      // Fase 2 — datos extraídos de las actas
+      numero_contrato_or:        (visitField(p.visita_previa_id, 'numero_contrato_or') as string | null) ?? null,
+      capacidad_transformador:   (visitField(p.visita_previa_id, 'capacidad_transformador_kva') as number | null) ?? null,
+      nivel_tension:             (visitField(p.visita_previa_id, 'nivel_tension_v') as number | null) ?? null,
+      operador_telefonia:        (visitField(p.visita_previa_id, 'operador_telefonia_mejor_senal') as string | null) ?? null,
+      cuadrilla:                 (visitField(p.visita_instalacion_id, 'cuadrilla') as string | null) ?? null,
+      tecnico_instalador:        (visitField(p.visita_instalacion_id, 'quien_realiza_visita') as string | null) ?? null,
       solucion: (fact.solucion as string | null) ?? null,
       plan: (fact.plan as string | null) ?? null,
       paneles: p.diseno_paneles ?? null,

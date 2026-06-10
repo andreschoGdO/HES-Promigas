@@ -184,6 +184,16 @@ export async function POST(request: Request, context: Ctx) {
     // ─── Preflight: validar prerequisitos ANTES de aplicar la transición ───
     // Si alguno falla, la etapa NO cambia y el frontend recibe un mensaje claro.
     if (def.action === 'operations_dimensionado_to_alistamiento') {
+      // 1. Categorías del diseño deben estar seleccionadas — si no, no hay qué reservar.
+      const missingCats = await checkDesignCategoriesPresent(id);
+      if (missingCats.length > 0) {
+        return NextResponse.json({
+          error: `Falta seleccionar el modelo de catálogo para: ${missingCats.join(', ')}. Abre el proyecto, clic en "Editar" y elige los modelos en la sección "Equipos del diseño (catálogo)" antes de alistar.`,
+          missing_categories: missingCats,
+        }, { status: 409 });
+      }
+
+      // 2. Stock disponible para esas categorías
       const preflight = await checkStockForAlistamiento(id);
       if (!preflight.ok) {
         // Auto-tag 'sin stock' para que el card lo refleje visualmente
@@ -252,6 +262,24 @@ export async function POST(request: Request, context: Ctx) {
 const FAMILY_LABEL: Record<string, string> = {
   inverter: 'Inversor', battery: 'Batería', panel: 'Panel',
 };
+
+/**
+ * Devuelve los labels de las categorías que faltan en el diseño del proyecto.
+ * Solo se exige Inversor (siempre 1) y, si la cantidad es > 0, Baterías y Paneles.
+ */
+async function checkDesignCategoriesPresent(projectId: string): Promise<string[]> {
+  const { data: p } = await supabaseAdmin
+    .from('crm_projects')
+    .select('diseno_inversor_categoria_id, diseno_bateria_categoria_id, diseno_panel_categoria_id, diseno_paneles, diseno_baterias_cantidad')
+    .eq('id', projectId)
+    .single();
+  if (!p) return [];
+  const missing: string[] = [];
+  if (!p.diseno_inversor_categoria_id) missing.push('Inversor');
+  if ((p.diseno_baterias_cantidad ?? 0) > 0 && !p.diseno_bateria_categoria_id) missing.push('Batería');
+  if ((p.diseno_paneles ?? 0) > 0 && !p.diseno_panel_categoria_id) missing.push('Panel');
+  return missing;
+}
 
 /** Añade un tag al proyecto (idempotente, sin duplicados). */
 async function addProjectTag(projectId: string, tag: string): Promise<void> {

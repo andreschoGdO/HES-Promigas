@@ -1182,6 +1182,10 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
         const lines = r.shortages.map((s) => `${s.family}: necesario ${s.needed}, disponibles ${s.available}`);
         sideMessages.push(`Faltante de stock — ${lines.join(' · ')}`);
       }
+    } else if (def.action === 'operations_dimensionado_to_alistamiento') {
+      // La transición a Alistamiento pasó pero no se creó reserva. Algo raro pasó
+      // (categorías sin definir, ya tenía reservation_id previa, etc.). Avisar.
+      sideMessages.push('⚠️ No se creó reserva automática. Revisa que los modelos de equipo estén configurados en el diseño del proyecto.');
     }
     if (se.facturacion?.created) {
       sideMessages.push('Registro de Facturación inicializado para este proyecto');

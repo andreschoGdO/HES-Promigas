@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 
   let q = supabaseAdmin
     .from('inventory_reservations')
-    .select('*, field_visits(visit_type, casa, visit_date), inventory_reservation_items(id, picked_at, inventory_items(id, serial_number, brand, model, status, inventory_categories(name, family)))')
+    .select('*, field_visits(visit_type, casa, visit_date), inventory_reservation_items(id, picked_at, inventory_items(id, serial_number, brand, model, status, inventory_categories(name, family))), inventory_reservation_consumables(id, quantity, fulfilled_at, inventory_consumables(id, name, sku, unit, stock_quantity))')
     .order('created_at', { ascending: false });
   if (status) q = q.eq('status', status);
   if (visitId) q = q.eq('visit_id', visitId);
@@ -88,10 +88,20 @@ export async function PATCH(request: Request) {
       .eq('reservation_id', body.id);
     const itemIds = (lines ?? []).map((l) => l.item_id);
 
+    // Cargar líneas de consumibles para confirm/cancel/fulfill
+    const { data: consLines } = await supabaseAdmin
+      .from('inventory_reservation_consumables')
+      .select('id, consumable_id, quantity, fulfilled_at, inventory_consumables(stock_quantity, name)')
+      .eq('reservation_id', body.id);
+    type ConsLine = { id: string; consumable_id: string; quantity: number; fulfilled_at: string | null; inventory_consumables?: { stock_quantity: number; name: string } | { stock_quantity: number; name: string }[] | null };
+    const cons: ConsLine[] = (consLines ?? []) as ConsLine[];
+
     if (body.action === 'confirm') {
       if (resv.status !== 'draft') return NextResponse.json({ error: `No se puede confirmar desde ${resv.status}` }, { status: 400 });
-      if (itemIds.length === 0) return NextResponse.json({ error: 'La reserva no tiene items' }, { status: 400 });
-      // Reservar items (solo los que están en stock)
+      if (itemIds.length === 0 && cons.length === 0) {
+        return NextResponse.json({ error: 'La reserva no tiene items ni consumibles' }, { status: 400 });
+      }
+      // Reservar items serializados (solo los que están en stock)
       const { data: updated } = await supabaseAdmin
         .from('inventory_items')
         .update({ status: 'reserved' })
@@ -99,7 +109,6 @@ export async function PATCH(request: Request) {
         .eq('status', 'in_stock')
         .select('id');
       const updatedIds = (updated ?? []).map((u) => u.id);
-      // Movimiento por cada item reservado
       if (updatedIds.length > 0) {
         await supabaseAdmin.from('inventory_movements').insert(
           updatedIds.map((id) => ({
@@ -113,6 +122,32 @@ export async function PATCH(request: Request) {
           })),
         );
       }
+
+      // Descontar consumibles del stock (con guard contra stock insuficiente)
+      const consShortages: string[] = [];
+      for (const line of cons) {
+        const stock = Array.isArray(line.inventory_consumables) ? line.inventory_consumables[0] : line.inventory_consumables;
+        if (!stock) continue;
+        if (Number(stock.stock_quantity) < Number(line.quantity)) {
+          consShortages.push(`${stock.name}: necesario ${line.quantity}, disponible ${stock.stock_quantity}`);
+          continue;
+        }
+        const newQty = Number(stock.stock_quantity) - Number(line.quantity);
+        await supabaseAdmin
+          .from('inventory_consumables')
+          .update({ stock_quantity: newQty })
+          .eq('id', line.consumable_id)
+          .gte('stock_quantity', line.quantity);  // guard contra race
+        await supabaseAdmin.from('inventory_movements').insert({
+          consumable_id: line.consumable_id,
+          type: 'reserve',
+          quantity: line.quantity,
+          related_visit_id: resv.visit_id,
+          responsible_email: body.responsible_email ?? null,
+          notes: `Reservado para "${resv.title}"`,
+        });
+      }
+
       const { data: out } = await supabaseAdmin
         .from('inventory_reservations')
         .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
@@ -123,6 +158,8 @@ export async function PATCH(request: Request) {
         reservation: out,
         reserved_count: updatedIds.length,
         not_available: itemIds.length - updatedIds.length,
+        consumables_reserved: cons.length - consShortages.length,
+        consumable_shortages: consShortages,
       });
     }
 
@@ -131,7 +168,6 @@ export async function PATCH(request: Request) {
       const houseId = (resv as { field_visits?: { house_id?: string | null } | null }).field_visits?.house_id ?? null;
       const tech = (resv as { field_visits?: { technician_email?: string | null } | null }).field_visits?.technician_email ?? null;
       if (itemIds.length > 0) {
-        // Marcar como instalados
         await supabaseAdmin
           .from('inventory_items')
           .update({
@@ -141,7 +177,6 @@ export async function PATCH(request: Request) {
           })
           .in('id', itemIds)
           .eq('status', 'reserved');
-        // Movimientos
         await supabaseAdmin.from('inventory_movements').insert(
           itemIds.map((id) => ({
             item_id: id,
@@ -156,13 +191,36 @@ export async function PATCH(request: Request) {
           })),
         );
       }
+
+      // Marcar consumibles como entregados (stock ya se descontó al confirmar).
+      // Generamos un movimiento 'install' por consumible para auditoría del consumo.
+      const now = new Date().toISOString();
+      if (cons.length > 0) {
+        await supabaseAdmin
+          .from('inventory_reservation_consumables')
+          .update({ fulfilled_at: now })
+          .eq('reservation_id', body.id);
+        await supabaseAdmin.from('inventory_movements').insert(
+          cons.map((line) => ({
+            consumable_id: line.consumable_id,
+            type: 'install',
+            quantity: line.quantity,
+            to_location: 'house',
+            to_house_id: houseId,
+            related_visit_id: resv.visit_id,
+            responsible_email: tech ?? body.responsible_email ?? null,
+            notes: `Consumido en instalación desde reserva "${resv.title}"`,
+          })),
+        );
+      }
+
       const { data: out } = await supabaseAdmin
         .from('inventory_reservations')
-        .update({ status: 'fulfilled', fulfilled_at: new Date().toISOString() })
+        .update({ status: 'fulfilled', fulfilled_at: now })
         .eq('id', body.id)
         .select('*')
         .single();
-      return NextResponse.json({ reservation: out, installed_count: itemIds.length });
+      return NextResponse.json({ reservation: out, installed_count: itemIds.length, consumables_count: cons.length });
     }
 
     if (body.action === 'cancel') {
@@ -184,6 +242,27 @@ export async function PATCH(request: Request) {
             notes: `Reserva cancelada: "${resv.title}"`,
           })),
         );
+      }
+      // Restituir stock de consumibles si la reserva había sido confirmada
+      // (en draft o cancelled previa, el stock no se había descontado).
+      if (resv.status === 'confirmed' && cons.length > 0) {
+        for (const line of cons) {
+          const stock = Array.isArray(line.inventory_consumables) ? line.inventory_consumables[0] : line.inventory_consumables;
+          if (!stock) continue;
+          const newQty = Number(stock.stock_quantity) + Number(line.quantity);
+          await supabaseAdmin
+            .from('inventory_consumables')
+            .update({ stock_quantity: newQty })
+            .eq('id', line.consumable_id);
+          await supabaseAdmin.from('inventory_movements').insert({
+            consumable_id: line.consumable_id,
+            type: 'unreserve',
+            quantity: line.quantity,
+            related_visit_id: resv.visit_id,
+            responsible_email: body.responsible_email ?? null,
+            notes: `Reserva cancelada: "${resv.title}"`,
+          });
+        }
       }
       const { data: out } = await supabaseAdmin
         .from('inventory_reservations')

@@ -1642,6 +1642,18 @@ interface Reservation {
       inventory_categories?: { name: string; family: string } | null;
     } | null;
   }>;
+  inventory_reservation_consumables?: Array<{
+    id: string;
+    quantity: number;
+    fulfilled_at: string | null;
+    inventory_consumables: {
+      id: string;
+      name: string;
+      sku: string | null;
+      unit: string;
+      stock_quantity: number;
+    } | null;
+  }>;
 }
 
 const RESV_STATUS_META: Record<string, { label: string; color: string; Icon: typeof Cpu }> = {
@@ -1768,23 +1780,43 @@ function ReservasTab({ userEmail }: { userEmail: string }) {
                     )}
                   </div>
                 </div>
-                {lines.length === 0 ? (
+                {lines.length === 0 && (r.inventory_reservation_consumables?.length ?? 0) === 0 ? (
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin items asignados.</div>
                 ) : (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {lines.map((line) => {
-                      const it = line.inventory_items;
-                      if (!it) return null;
-                      const itemMeta = STATUS_META[it.status];
-                      return (
-                        <div key={line.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: '0.74rem', borderLeft: `3px solid ${itemMeta?.color ?? '#94a3b8'}` }}>
-                          <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{it.serial_number}</span>
-                          <span style={{ color: 'var(--text-muted)' }}>·</span>
-                          <span>{it.inventory_categories?.name ?? [it.brand, it.model].filter(Boolean).join(' ')}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <>
+                    {lines.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {lines.map((line) => {
+                          const it = line.inventory_items;
+                          if (!it) return null;
+                          const itemMeta = STATUS_META[it.status];
+                          return (
+                            <div key={line.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: '0.74rem', borderLeft: `3px solid ${itemMeta?.color ?? '#94a3b8'}` }}>
+                              <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{it.serial_number}</span>
+                              <span style={{ color: 'var(--text-muted)' }}>·</span>
+                              <span>{it.inventory_categories?.name ?? [it.brand, it.model].filter(Boolean).join(' ')}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {(r.inventory_reservation_consumables?.length ?? 0) > 0 && (
+                      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {(r.inventory_reservation_consumables ?? []).map((cl) => {
+                          const c = cl.inventory_consumables;
+                          if (!c) return null;
+                          return (
+                            <div key={cl.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: '0.74rem', borderLeft: '3px solid #8b5cf6' }}>
+                              <Cable size={11} style={{ color: '#8b5cf6' }} />
+                              <span>{c.name}</span>
+                              <span style={{ color: 'var(--text-muted)' }}>·</span>
+                              <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{cl.quantity} {c.unit}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             );
@@ -1859,25 +1891,30 @@ function NewReservationModal({ onClose, onSaved, userEmail }: { onClose: () => v
   );
 }
 
+interface ConsumableOpt { id: string; name: string; sku: string | null; unit: string; stock_quantity: number; }
+
 function EditReservationItemsModal({ reservationId, onClose, onSaved }: { reservationId: string; onClose: () => void; onSaved: () => void }) {
   const [availableItems, setAvailableItems] = useState<InvItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [existingIds, setExistingIds] = useState<Set<string>>(new Set());
+  const [consumables, setConsumables] = useState<ConsumableOpt[]>([]);
+  const [consQty, setConsQty] = useState<Record<string, string>>({});  // consumable_id → qty (str)
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     (async () => {
-      // Cargar items en stock + los ya en la reserva
-      const [stockR, resvR] = await Promise.all([
+      // Cargar items en stock + los ya en la reserva + consumibles + líneas de consumibles en la reserva
+      const [stockR, resvR, consR, resvConsR] = await Promise.all([
         fetch('/api/inventory/items?status=in_stock&limit=500').then((r) => r.json()),
         fetch(`/api/inventory/reservations?status=draft&limit=200`).then((r) => r.json()),
+        fetch('/api/inventory/consumables').then((r) => r.json()).catch(() => ({ consumables: [] })),
+        fetch(`/api/inventory/reservations/${reservationId}/consumables`).then((r) => r.json()).catch(() => ({ lines: [] })),
       ]);
       const thisResv: Reservation | undefined = (resvR.reservations ?? []).find((r: Reservation) => r.id === reservationId);
       const resvLines = thisResv?.inventory_reservation_items ?? [];
       const alreadyIn = new Set<string>(resvLines.map((l) => l.inventory_items?.id ?? '').filter(Boolean));
-      // Combinar: in_stock + los que ya están en esta reserva (aunque ya no estén in_stock)
       const inStock: InvItem[] = stockR.items ?? [];
       const alreadyInItems: InvItem[] = resvLines
         .map((l) => l.inventory_items)
@@ -1888,6 +1925,16 @@ function EditReservationItemsModal({ reservationId, onClose, onSaved }: { reserv
       setAvailableItems(Array.from(dedup.values()));
       setSelectedIds(new Set(alreadyIn));
       setExistingIds(new Set(alreadyIn));
+
+      // Consumibles disponibles + cantidades ya seleccionadas
+      setConsumables((consR.consumables ?? []) as ConsumableOpt[]);
+      const initialQty: Record<string, string> = {};
+      type ConsLine = { consumable_id: string; quantity: number; inventory_consumables: ConsumableOpt | ConsumableOpt[] | null };
+      for (const raw of (resvConsR.lines ?? []) as ConsLine[]) {
+        initialQty[raw.consumable_id] = String(raw.quantity);
+      }
+      setConsQty(initialQty);
+
       setLoading(false);
     })();
   }, [reservationId]);
@@ -1917,6 +1964,14 @@ function EditReservationItemsModal({ reservationId, onClose, onSaved }: { reserv
       for (const id of toRemove) {
         await fetch(`/api/inventory/reservations/${reservationId}/items?item_id=${id}`, { method: 'DELETE' });
       }
+      // Persistir consumibles (replace-all): solo entradas con qty > 0
+      const consLines = Object.entries(consQty)
+        .map(([consumable_id, qty]) => ({ consumable_id, quantity: Number(qty) }))
+        .filter((l) => Number.isFinite(l.quantity) && l.quantity > 0);
+      await fetch(`/api/inventory/reservations/${reservationId}/consumables`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines: consLines }),
+      });
       onSaved();
     } finally {
       setSaving(false);
@@ -1962,6 +2017,50 @@ function EditReservationItemsModal({ reservationId, onClose, onSaved }: { reserv
             );
           })}
         </div>
+      )}
+
+      {/* Consumibles */}
+      {!loading && consumables.length > 0 && (
+        <>
+          <div style={{ marginTop: 18, marginBottom: 8, fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Consumibles a reservar
+          </div>
+          <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+            {consumables.map((c) => {
+              const qty = consQty[c.id] ?? '';
+              const qtyNum = Number(qty);
+              const overStock = Number.isFinite(qtyNum) && qtyNum > c.stock_quantity;
+              return (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 500 }}>{c.name}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      {c.sku ?? '—'} · Stock: <strong style={{ color: c.stock_quantity > 0 ? 'var(--text)' : '#ef4444' }}>{c.stock_quantity} {c.unit}</strong>
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    placeholder="0"
+                    value={qty}
+                    onChange={(e) => setConsQty((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                    style={{
+                      width: 80, padding: '4px 8px', borderRadius: 6,
+                      border: `1px solid ${overStock ? '#ef4444' : 'var(--border)'}`,
+                      background: 'var(--bg-surface)', color: 'var(--text)',
+                      fontSize: '0.82rem', textAlign: 'right',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', width: 26 }}>{c.unit}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p style={{ marginTop: 6, fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            El stock se descontará al <strong>confirmar</strong> la reserva. Si cancelas la reserva, el stock se restituye.
+          </p>
+        </>
       )}
 
       <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>

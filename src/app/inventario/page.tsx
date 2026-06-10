@@ -10,7 +10,7 @@ const supa = () => createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias' | 'panorama';
+type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias' | 'panorama' | 'inversa';
 
 interface Category {
   id: string;
@@ -148,8 +148,9 @@ const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu }> 
   ubicaciones: { label: 'Ubicaciones', color: '#0ea5e9', Icon: MapPin },
   reservas:    { label: 'Reservas',    color: '#ec4899', Icon: ClipboardList },
   movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History },
-  categorias:  { label: 'Categorías',  color: '#10b981', Icon: Tags },
-  panorama:    { label: 'Panorama',    color: '#07c5a8', Icon: Boxes },
+  categorias:  { label: 'Categorías',          color: '#10b981', Icon: Tags },
+  panorama:    { label: 'Panorama',             color: '#07c5a8', Icon: Boxes },
+  inversa:     { label: 'Logística inversa',    color: '#ef4444', Icon: Repeat },
 };
 
 const LOCATION_TYPE_META: Record<string, { label: string; color: string; Icon: typeof Cpu }> = {
@@ -270,6 +271,7 @@ export default function InventarioPage() {
       {tab === 'movimientos' && <MovimientosTab />}
       {tab === 'categorias' && <CategoriasTab />}
       {tab === 'panorama' && <PanoramaTab />}
+      {tab === 'inversa' && <LogisticaInversaTab />}
     </div>
   );
 }
@@ -1535,6 +1537,190 @@ function PanoramaKpi({ label, value, sub, color, Icon }: { label: string; value:
       <div style={{ fontSize: '1.4rem', fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: 'var(--text)', lineHeight: 1.1 }}>{value}</div>
       <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{sub}</div>
     </div>
+  );
+}
+
+/* ─── Tab Logística inversa: tabla de operaciones reversas ─── */
+
+const REVERSE_MOVE_TYPES = ['uninstall', 'decommission', 'rma_send', 'unreserve'] as const;
+
+const REVERSE_TYPE_META: Record<string, { label: string; color: string }> = {
+  uninstall:     { label: 'Retirada / Swap', color: '#0ea5e9' },
+  decommission:  { label: 'Decomisado',      color: '#64748b' },
+  rma_send:      { label: 'Garantía',        color: '#f59e0b' },
+  unreserve:     { label: 'Reserva cancel.', color: '#94a3b8' },
+};
+
+function LogisticaInversaTab() {
+  type Movement = {
+    id: string;
+    type: string;
+    from_status: string | null;
+    to_status: string | null;
+    from_house_id: string | null;
+    related_visit_id: string | null;
+    quantity: number | null;
+    responsible_email: string | null;
+    notes: string | null;
+    created_at: string;
+    inventory_items?: { serial_number: string; brand: string | null; model: string | null; inventory_categories?: { name: string; family: string } | null } | null;
+    inventory_consumables?: { name: string; sku: string | null; unit: string } | null;
+    client_houses?: { casa: string } | null;
+  };
+  const [moves, setMoves] = useState<Movement[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState<string>('all');
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const r = await fetch('/api/inventory/movements?limit=500');
+        const j = await r.json();
+        const all = (j.movements ?? []) as Movement[];
+        const reverse = all.filter((m) => REVERSE_MOVE_TYPES.includes(m.type as typeof REVERSE_MOVE_TYPES[number]));
+        setMoves(reverse);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const filtered = useMemo(() => {
+    let list = moves;
+    if (filterType !== 'all') list = list.filter((m) => m.type === filterType);
+    const q = search.toLowerCase().trim();
+    if (q) {
+      list = list.filter((m) =>
+        (m.inventory_items?.serial_number ?? '').toLowerCase().includes(q) ||
+        (m.inventory_items?.brand ?? '').toLowerCase().includes(q) ||
+        (m.inventory_items?.model ?? '').toLowerCase().includes(q) ||
+        (m.notes ?? '').toLowerCase().includes(q) ||
+        (m.responsible_email ?? '').toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [moves, filterType, search]);
+
+  // Resumen por tipo
+  const summary = useMemo(() => {
+    const acc: Record<string, number> = {};
+    for (const m of moves) acc[m.type] = (acc[m.type] ?? 0) + 1;
+    return acc;
+  }, [moves]);
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+        <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Logística inversa</h2>
+        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+          Movimientos de retorno: retiradas, decomisiones, garantías, cancelaciones de reserva.
+        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={14} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+            <input
+              type="text"
+              placeholder="Buscar serial, marca, notas, técnico…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ padding: '6px 8px 6px 28px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)', fontSize: '0.82rem', width: 280 }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* KPIs por tipo */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
+        <button
+          onClick={() => setFilterType('all')}
+          className={`chip ${filterType === 'all' ? 'active' : ''}`}
+          style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, fontSize: '0.78rem' }}
+        >
+          <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Todos</span>
+          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '1.1rem', fontWeight: 700 }}>{moves.length}</span>
+        </button>
+        {REVERSE_MOVE_TYPES.map((t) => {
+          const m = REVERSE_TYPE_META[t];
+          return (
+            <button
+              key={t}
+              onClick={() => setFilterType(t)}
+              className={`chip ${filterType === t ? 'active' : ''}`}
+              style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, borderLeft: `3px solid ${m.color}`, fontSize: '0.78rem' }}
+            >
+              <span style={{ color: m.color, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>{m.label}</span>
+              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '1.1rem', fontWeight: 700 }}>{summary[t] ?? 0}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
+      ) : filtered.length === 0 ? (
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+          {moves.length === 0 ? 'Sin operaciones de logística inversa registradas todavía.' : 'No hay operaciones que coincidan con los filtros.'}
+        </div>
+      ) : (
+        <div className="glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: '0.82rem' }}>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Equipo</th>
+                  <th>Categoría</th>
+                  <th>Origen → Destino</th>
+                  <th>Notas</th>
+                  <th>Técnico</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((m) => {
+                  const meta = REVERSE_TYPE_META[m.type] ?? { label: m.type, color: '#94a3b8' };
+                  return (
+                    <tr key={m.id}>
+                      <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.74rem', whiteSpace: 'nowrap' }}>
+                        {new Date(m.created_at).toLocaleDateString('es-CO')} {new Date(m.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td>
+                        <span style={{ padding: '2px 8px', borderRadius: 10, background: meta.color + '20', color: meta.color, fontSize: '0.7rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {meta.label}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: '0.78rem' }}>
+                        {m.inventory_items ? (
+                          <div>
+                            <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.76rem', fontWeight: 600 }}>{m.inventory_items.serial_number}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{[m.inventory_items.brand, m.inventory_items.model].filter(Boolean).join(' ')}</div>
+                          </div>
+                        ) : m.inventory_consumables ? (
+                          <div>
+                            <div style={{ fontSize: '0.76rem', fontWeight: 600 }}>{m.inventory_consumables.name}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{m.quantity ?? 0} {m.inventory_consumables.unit}</div>
+                          </div>
+                        ) : '—'}
+                      </td>
+                      <td style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>{m.inventory_items?.inventory_categories?.name ?? '—'}</td>
+                      <td style={{ fontSize: '0.74rem', whiteSpace: 'nowrap' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>{m.from_status ?? '—'}</span>
+                        {' → '}
+                        <span style={{ fontWeight: 600 }}>{m.to_status ?? '—'}</span>
+                      </td>
+                      <td style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', maxWidth: 320 }}>{m.notes ?? '—'}</td>
+                      <td style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{m.responsible_email ?? '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

@@ -65,6 +65,8 @@ interface CrmProject {
   notes: string | null;
   assigned_to: string | null;
   tags: string[] | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
 }
 
 export function CrmModulePage({ module, title, description, color, userEmail }: {
@@ -622,6 +624,7 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
   const [events, setEvents] = useState<Array<{ id: string; event_type: string; from_module: string | null; to_module: string | null; from_stage: string | null; to_stage: string | null; actor_email: string | null; notes: string | null; created_at: string }>>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const reload = () => {
     fetch(`/api/crm/projects/${initial.id}`).then((r) => r.json()).then((j) => {
@@ -661,9 +664,21 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
             <button onClick={() => setEditing(true)} className="secondary-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: '0.82rem' }}>
               <Pencil size={12} /> Editar
             </button>
+            {!project.cancelled_at && (
+              <button onClick={() => setCancelling(true)} className="secondary-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: '0.82rem', borderColor: '#ef4444', color: '#ef4444' }}>
+                <Trash2 size={12} /> Cancelar
+              </button>
+            )}
             <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
           </div>
         </div>
+
+        {project.cancelled_at && (
+          <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 8, padding: 10, marginBottom: 12, fontSize: '0.85rem' }}>
+            <strong style={{ color: '#ef4444' }}>Proyecto cancelado</strong> el {new Date(project.cancelled_at).toLocaleDateString('es-CO')}.
+            {project.cancellation_reason && <> Motivo: {project.cancellation_reason}</>}
+          </div>
+        )}
 
         <DetailSection title="Cliente">
           <KV label="Nombre" value={project.client_name} />
@@ -787,6 +802,101 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
           onSaved={() => { setEditing(false); reload(); onChanged(); }}
         />
       )}
+      {cancelling && (
+        <CancelProjectModal
+          project={project}
+          userEmail={userEmail}
+          onClose={() => setCancelling(false)}
+          onSaved={() => { setCancelling(false); reload(); onChanged(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─────────────── CANCEL PROJECT MODAL ─────────────── */
+/**
+ * Cancela el proyecto y recupera los equipos instalados de la casa. Si
+ * había reserva activa, también la cancela. El proyecto NO se borra —
+ * queda como histórico con cancelled_at y cancellation_reason.
+ */
+function CancelProjectModal({ project, userEmail, onClose, onSaved }: {
+  project: CrmProject; userEmail: string; onClose: () => void; onSaved: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [destStatus, setDestStatus] = useState<string>('in_stock');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    setErr(null);
+    if (!reason.trim()) { setErr('Motivo requerido'); return; }
+    if (!confirm(`¿Cancelar el proyecto ${project.code}? Esta acción recuperará todos los equipos instalados (si los hay) y marcará el proyecto como cerrado.`)) return;
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/crm/projects/${project.id}/cancel`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason.trim(), destination_status: destStatus, actor_email: userEmail }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      if (j.recovered_count > 0) {
+        alert(`Proyecto cancelado. ${j.recovered_count} equipo(s) recuperado(s) a ${destStatus === 'in_stock' ? 'bodega' : destStatus === 'in_repair' ? 'garantía' : destStatus}.`);
+      } else {
+        alert('Proyecto cancelado. No había equipos instalados para recuperar.');
+      }
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: 540, padding: 24 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{project.code} · {project.title}</div>
+            <h2 style={{ margin: '4px 0 0', fontSize: '1.05rem' }}>Cancelar proyecto</h2>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: '0.82rem' }}>
+          <strong>⚠ Acción definitiva</strong>
+          <p style={{ margin: '6px 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+            Al cancelar:<br />
+            • La reserva activa de inventario (si la hay) se cancela y los items vuelven a bodega.<br />
+            • Los equipos instalados en la casa de este proyecto se recuperan al destino que elijas.<br />
+            • El proyecto pasa a estado <strong>Cerrado</strong> con timestamp y motivo.<br />
+            • Cada item recuperado queda registrado en facturación_upgrades para auditoría.
+          </p>
+        </div>
+
+        <div className="input-group" style={{ marginBottom: 10 }}>
+          <label className="input-label">Destino de los equipos recuperados *</label>
+          <select value={destStatus} onChange={(e) => setDestStatus(e.target.value)}>
+            <option value="in_stock">Devolver a bodega</option>
+            <option value="in_repair">A garantía / taller (revisar antes de re-stockear)</option>
+          </select>
+        </div>
+
+        <div className="input-group" style={{ marginBottom: 10 }}>
+          <label className="input-label">Motivo de la cancelación *</label>
+          <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Cliente desistió, error de dimensionamiento, etc." rows={3} style={{ width: '100%' }} />
+        </div>
+
+        {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={onClose} className="secondary-btn" disabled={saving}>Volver</button>
+          <button onClick={() => void submit()} className="primary-btn" disabled={saving} style={{ background: '#ef4444' }}>
+            {saving ? 'Cancelando…' : 'Cancelar proyecto'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

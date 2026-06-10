@@ -179,6 +179,27 @@ export async function GET() {
   const factByProject = new Map<string, Record<string, unknown>>();
   for (const f of facts ?? []) factByProject.set(f.project_id, f);
 
+  // 4b. Upgrades acumulados por proyecto (swaps post-instalación)
+  type UpgradeRow = { project_id: string; motivo: string; costo_neto: number | null };
+  let upgradesData: UpgradeRow[] = [];
+  try {
+    const { data } = await supabaseAdmin
+      .from('facturacion_upgrades')
+      .select('project_id, motivo, costo_neto');
+    upgradesData = (data ?? []) as UpgradeRow[];
+  } catch {
+    // Migration 25 sin aplicar — ignoramos.
+  }
+  type UpgradesAgg = { count: number; net_delta: number; motives: Record<string, number> };
+  const upgradesByProject = new Map<string, UpgradesAgg>();
+  for (const u of upgradesData) {
+    const agg = upgradesByProject.get(u.project_id) ?? { count: 0, net_delta: 0, motives: {} };
+    agg.count++;
+    agg.net_delta += Number(u.costo_neto ?? 0);
+    agg.motives[u.motivo] = (agg.motives[u.motivo] ?? 0) + 1;
+    upgradesByProject.set(u.project_id, agg);
+  }
+
   // 5. Componer filas
   const resolveBrand = (p: ProjectRow, family: string, designCategoryId: string | null): string | null => {
     const installed = p.house_id ? installedByHouse.get(p.house_id)?.get(family) : null;
@@ -287,6 +308,11 @@ export async function GET() {
       frozen_at: (fact.frozen_at as string | null) ?? null,
       frozen_by: (fact.frozen_by as string | null) ?? null,
       periodo: (fact.periodo as string | null) ?? null,
+
+      // Upgrades acumulados post-instalación (swaps de logística inversa)
+      upgrades_count: upgradesByProject.get(p.id)?.count ?? 0,
+      upgrades_net_delta: upgradesByProject.get(p.id)?.net_delta ?? 0,
+      upgrades_motives: upgradesByProject.get(p.id)?.motives ?? {},
     };
   });
 

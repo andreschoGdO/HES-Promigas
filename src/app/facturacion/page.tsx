@@ -44,6 +44,9 @@ interface Row {
   frozen_at: string | null;
   frozen_by: string | null;
   periodo: string | null;
+  upgrades_count?: number;
+  upgrades_net_delta?: number;
+  upgrades_motives?: Record<string, number>;
 }
 
 interface FactEvent {
@@ -516,7 +519,29 @@ export default function FacturacionPage() {
                       );
                     })}
                     <td className="fact-cell fact-subtotal-col mono" style={{ textAlign: 'right', fontWeight: 600 }}>
-                      {subtotal > 0 ? fmtMoney(subtotal) : <span style={{ opacity: 0.3 }}>—</span>}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                        <span>{subtotal > 0 ? fmtMoney(subtotal) : <span style={{ opacity: 0.3 }}>—</span>}</span>
+                        {(row.upgrades_count ?? 0) > 0 && (
+                          <span
+                            title={`${row.upgrades_count} upgrade(s) post-instalación. Delta neto: ${fmtMoney(row.upgrades_net_delta ?? 0)} COP. ${row.upgrades_motives ? Object.entries(row.upgrades_motives).map(([m, c]) => `${m}: ${c}`).join(' · ') : ''}`}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 3,
+                              fontSize: '0.62rem', fontWeight: 700,
+                              padding: '2px 6px', borderRadius: 8,
+                              background: 'rgba(14, 165, 233, 0.12)', color: '#0ea5e9',
+                              textTransform: 'uppercase', letterSpacing: '0.03em',
+                              fontFamily: 'system-ui, sans-serif',
+                            }}
+                          >
+                            ⇄ {row.upgrades_count} {row.upgrades_count === 1 ? 'upgrade' : 'upgrades'}
+                            {(row.upgrades_net_delta ?? 0) !== 0 && (
+                              <span style={{ fontFamily: 'ui-monospace, monospace' }}>
+                                {' '}{(row.upgrades_net_delta ?? 0) > 0 ? '+' : ''}{fmtMoney(row.upgrades_net_delta ?? 0)}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="fact-cell fact-actions-col" style={{ textAlign: 'center' }}>
                       <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>

@@ -243,6 +243,73 @@ export async function POST(request: Request, context: Ctx) {
       await removeProjectTag(id, 'reserva falló');
     }
 
+    // ─── Para Instalación: validar que el proyecto tiene contractor + fecha.
+    if (def.action === 'operations_to_instalacion') {
+      const blockers = await checkReadyForInstalacion(id, coerced);
+      if (blockers.length > 0) {
+        await addProjectTag(id, 'falta contratista');
+        return NextResponse.json({
+          error: `No se puede iniciar instalación. Faltan: ${blockers.join(', ')}.`,
+          blockers,
+        }, { status: 409 });
+      }
+      await removeProjectTag(id, 'falta contratista');
+    }
+
+    // ─── Para Operativo: la reserva DEBE poder cumplirse — items pasan a installed
+    // antes de cambiar la etapa. Si no se puede instalar nada, NO avanzar.
+    let preInstallation: Awaited<ReturnType<typeof fulfillReservationOnOperativo>> = null;
+    if (def.action === 'operations_to_operativo') {
+      const { data: projOp } = await supabaseAdmin
+        .from('crm_projects')
+        .select('id, code, title, house_id, reservation_id, diseno_inversor_categoria_id, diseno_bateria_categoria_id, diseno_panel_categoria_id, diseno_paneles, diseno_baterias_cantidad')
+        .eq('id', id)
+        .single();
+      if (!projOp) {
+        return NextResponse.json({ error: 'Proyecto no encontrado al verificar instalación' }, { status: 404 });
+      }
+      // Validaciones bloqueantes
+      if (!projOp.house_id) {
+        await addProjectTag(id, 'sin casa');
+        return NextResponse.json({
+          error: 'El proyecto no tiene casa asignada (house_id). Vincula la casa en /inicio antes de pasar a Operativo.',
+        }, { status: 409 });
+      }
+      await removeProjectTag(id, 'sin casa');
+      if (!projOp.reservation_id) {
+        return NextResponse.json({
+          error: 'El proyecto no tiene reserva activa. Debió haberse creado en Alistamiento — vuelve a esa etapa.',
+        }, { status: 409 });
+      }
+      // Intentar instalar los items
+      preInstallation = await fulfillReservationOnOperativo(projOp as ProjRow, body.actor_email ?? null);
+      if (!preInstallation) {
+        return NextResponse.json({
+          error: 'No se pudo procesar la instalación de los items reservados.',
+        }, { status: 500 });
+      }
+      const totalSuccess = preInstallation.installed.length + preInstallation.already_installed.length;
+      if (totalSuccess === 0) {
+        await addProjectTag(id, 'no se instaló');
+        return NextResponse.json({
+          error: `No se instaló ningún equipo. ${preInstallation.skipped.length > 0 ? 'Items omitidos:\n' + preInstallation.skipped.join('\n') : 'Verifica que los items de la reserva estén en estado reserved.'}`,
+          skipped: preInstallation.skipped,
+        }, { status: 409 });
+      }
+      await removeProjectTag(id, 'no se instaló');
+    }
+
+    // ─── Para Cerrar Proyecto: validar que todos los items siguen instalados en la casa
+    if (def.action === 'operations_to_completado') {
+      const blockers = await checkReadyForClose(id);
+      if (blockers.length > 0) {
+        return NextResponse.json({
+          error: `No se puede cerrar el proyecto. Pendientes: ${blockers.join(', ')}.`,
+          blockers,
+        }, { status: 409 });
+      }
+    }
+
     // UPDATE condicional con guard contra race: solo aplica si el estado no ha cambiado
     // desde nuestra lectura. Si otra request paralela ya ejecutó la transición, count=0.
     const stageCol = 'operations_stage';
@@ -276,10 +343,8 @@ export async function POST(request: Request, context: Ctx) {
     // ─── Side effects automáticos al cambiar de etapa ───
     const sideEffects: Record<string, unknown> = {};
     if (preReservation) sideEffects.reservation = preReservation;
+    if (preInstallation) sideEffects.installation = preInstallation;
     if (def.action === 'operations_to_operativo') {
-      // Fulfillment: items reservados pasan a 'installed' en la casa.
-      const inst = await fulfillReservationOnOperativo(updated[0], body.actor_email ?? null);
-      if (inst) sideEffects.installation = inst;
       const r = await ensureFacturacionRecord(updated[0], body.actor_email ?? null);
       if (r) sideEffects.facturacion = r;
     }
@@ -683,6 +748,60 @@ async function autoReserveInventoryForProject(
     reserved: reservedItems.map((it) => ({ family: it.family, serial: it.serial_number })),
     shortages,
   };
+}
+
+/**
+ * Preflight Alistamiento → Instalación: validar que contractor_name y
+ * installation_date estén presentes (o se estén capturando en esta transición).
+ * Devuelve lista de bloqueadores (vacío si todo OK).
+ */
+async function checkReadyForInstalacion(projectId: string, incomingFields: Record<string, unknown>): Promise<string[]> {
+  const { data: p } = await supabaseAdmin
+    .from('crm_projects')
+    .select('contractor_name, installation_date, reservation_id')
+    .eq('id', projectId)
+    .single();
+  if (!p) return ['proyecto no encontrado'];
+  const blockers: string[] = [];
+  const contractor = (incomingFields.contractor_name as string | undefined) ?? p.contractor_name;
+  const date = (incomingFields.installation_date as string | undefined) ?? p.installation_date;
+  if (!contractor || !String(contractor).trim()) blockers.push('contratista');
+  if (!date) blockers.push('fecha de instalación');
+  if (!p.reservation_id) blockers.push('reserva de inventario (regresa a alistamiento)');
+  return blockers;
+}
+
+/**
+ * Preflight Operativo → Cerrado: validar que el proyecto está limpio para cerrar.
+ * Bloqueadores: no hay equipos installed en la casa o queda algo en reserved.
+ */
+async function checkReadyForClose(projectId: string): Promise<string[]> {
+  const { data: p } = await supabaseAdmin
+    .from('crm_projects')
+    .select('house_id, reservation_id')
+    .eq('id', projectId)
+    .single();
+  if (!p?.house_id) return ['casa no asignada — no se puede verificar el estado de los equipos'];
+
+  const blockers: string[] = [];
+  // ¿Hay items en la reserva que NO estén installed?
+  if (p.reservation_id) {
+    const { data: lines } = await supabaseAdmin
+      .from('inventory_reservation_items')
+      .select('inventory_items(serial_number, status)')
+      .eq('reservation_id', p.reservation_id);
+    type LI = { serial_number: string | null; status: string | null };
+    const pending: string[] = [];
+    for (const l of (lines ?? []) as Array<{ inventory_items: LI | LI[] | null }>) {
+      const it = Array.isArray(l.inventory_items) ? l.inventory_items[0] : l.inventory_items;
+      if (!it) continue;
+      if (it.status !== 'installed') pending.push(`${it.serial_number ?? '?'} (${it.status ?? 'unknown'})`);
+    }
+    if (pending.length > 0) {
+      blockers.push(`${pending.length} equipo(s) sin instalar: ${pending.slice(0, 5).join(', ')}${pending.length > 5 ? '…' : ''}`);
+    }
+  }
+  return blockers;
 }
 
 /**

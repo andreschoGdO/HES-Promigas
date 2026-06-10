@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   let query = supabaseAdmin
     .from('crm_projects')
-    .select('*')
+    .select('*, previa:field_visits!visita_previa_id(form_data, lat, lng)')
     .order('updated_at', { ascending: false })
     .limit(limit);
 
@@ -33,7 +33,23 @@ export async function GET(request: Request) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ projects: data });
+
+  // Resolver lat/lng: si el proyecto no tiene, fallback a la visita previa.
+  type Project = Record<string, unknown> & { lat: number | null; lng: number | null; previa?: { form_data?: Record<string, unknown> | null; lat?: number | null; lng?: number | null } | { form_data?: Record<string, unknown> | null; lat?: number | null; lng?: number | null }[] | null };
+  const enriched = ((data ?? []) as Project[]).map((p) => {
+    if (p.lat != null && p.lng != null) return p;
+    const previa = Array.isArray(p.previa) ? p.previa[0] : p.previa;
+    if (!previa) return p;
+    // Visit lat/lng tienen precedencia sobre form_data.coordenadas
+    if (previa.lat != null && previa.lng != null) {
+      return { ...p, lat: Number(previa.lat), lng: Number(previa.lng) };
+    }
+    const coords = parseCoords(previa.form_data?.coordenadas);
+    if (coords) return { ...p, lat: coords[0], lng: coords[1] };
+    return p;
+  });
+
+  return NextResponse.json({ projects: enriched });
 }
 
 /**
@@ -50,6 +66,50 @@ const num = (v: unknown): number | null => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
+
+/**
+ * Parsea coordenadas en texto ("3.3197, -76.5443" o "3.3197 -76.5443").
+ * Retorna [lat, lng] o null si no se puede.
+ */
+const parseCoords = (raw: unknown): [number, number] | null => {
+  if (!raw || typeof raw !== 'string') return null;
+  const parts = raw.trim().split(/[\s,;]+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  // Colombia: lat aproximadamente -4..13, lng -82..-66
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return [lat, lng];
+};
+
+/**
+ * Si el proyecto tiene visita_previa_id y NO tiene lat/lng aún, lee las
+ * coordenadas del acta previa (form_data.coordenadas) y las copia al proyecto.
+ */
+async function syncCoordsFromPrevia(projectId: string, visitaPreviaId: string | null): Promise<{ lat: number; lng: number } | null> {
+  if (!visitaPreviaId) return null;
+  const { data: visit } = await supabaseAdmin
+    .from('field_visits')
+    .select('form_data, lat, lng')
+    .eq('id', visitaPreviaId)
+    .maybeSingle();
+  if (!visit) return null;
+
+  // Preferir lat/lng directos del field_visits si existen
+  let lat: number | null = visit.lat != null ? Number(visit.lat) : null;
+  let lng: number | null = visit.lng != null ? Number(visit.lng) : null;
+  // Fallback: parsear form_data.coordenadas
+  if ((lat == null || lng == null) && visit.form_data && typeof visit.form_data === 'object') {
+    const coordsRaw = (visit.form_data as Record<string, unknown>).coordenadas;
+    const parsed = parseCoords(coordsRaw);
+    if (parsed) { lat = parsed[0]; lng = parsed[1]; }
+  }
+  if (lat == null || lng == null) return null;
+
+  await supabaseAdmin.from('crm_projects').update({ lat, lng }).eq('id', projectId);
+  return { lat, lng };
+}
 const str = (v: unknown): string | null => {
   if (v === null || v === undefined) return null;
   const s = String(v).trim();
@@ -147,6 +207,16 @@ export async function POST(request: Request) {
       notes: 'Proyecto creado en Operaciones',
     });
 
+    // Sync coords desde la visita previa si fue vinculada en la creación
+    const previaId = str(body.visita_previa_id);
+    if (previaId) {
+      const coords = await syncCoordsFromPrevia(data.id, previaId);
+      if (coords) {
+        data.lat = coords.lat;
+        data.lng = coords.lng;
+      }
+    }
+
     return NextResponse.json({ project: data });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
@@ -227,6 +297,15 @@ export async function PATCH(request: Request) {
       notes: body.note ?? 'Campos actualizados',
       data: updates,
     });
+
+    // Si se cambió visita_previa_id Y el proyecto no tiene lat/lng → sync
+    if ('visita_previa_id' in updates && (data.lat == null || data.lng == null)) {
+      const coords = await syncCoordsFromPrevia(body.id, data.visita_previa_id);
+      if (coords) {
+        data.lat = coords.lat;
+        data.lng = coords.lng;
+      }
+    }
 
     return NextResponse.json({ project: data });
   } catch (err) {

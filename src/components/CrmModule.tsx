@@ -2086,19 +2086,30 @@ function LinkedResourcePicker({ kind, casaHint, value, onChange, disabled }: {
       try {
         if (kind === 'visita_previa' || kind === 'visita_instalacion') {
           const type = kind === 'visita_previa' ? 'previa' : 'instalacion';
-          const r = await fetch(`/api/visits?type=${type}&status=completed&limit=200`);
+          // Sin filtro de status → muestra draft + completed. Sin status las
+          // visitas recién creadas (que aún no se completaron) también aparecen
+          // para vincular ahora y completar después.
+          const r = await fetch(`/api/visits?type=${type}&limit=200`);
           const j = await r.json();
           if (!r.ok) throw new Error(j.error ?? 'No se pudieron cargar visitas');
           const visits = (j.visits ?? []) as Array<{
             id: string; casa: string | null; visit_date: string | null;
             technician_name: string | null; status: string;
           }>;
-          const opts: PickerOption[] = visits.map((v) => ({
-            id: v.id,
-            label: `${v.casa ?? '(sin casa)'} · ${v.visit_date ?? '—'}`,
-            meta: `${v.status}${v.technician_name ? ` · ${v.technician_name}` : ''}`,
-            matchKey: `${v.casa ?? ''} ${v.visit_date ?? ''} ${v.technician_name ?? ''}`.toLowerCase(),
-          }));
+          // Ordenar: completed primero (más relevantes), luego draft
+          visits.sort((a, b) => {
+            const order = (s: string) => s === 'completed' ? 0 : s === 'draft' ? 1 : 2;
+            return order(a.status) - order(b.status);
+          });
+          const opts: PickerOption[] = visits.map((v) => {
+            const statusBadge = v.status === 'completed' ? '✓ completada' : v.status === 'draft' ? '⋯ borrador' : v.status;
+            return {
+              id: v.id,
+              label: `${v.casa ?? '(sin casa)'} · ${v.visit_date ?? '—'}`,
+              meta: `${statusBadge}${v.technician_name ? ` · ${v.technician_name}` : ''}`,
+              matchKey: `${v.casa ?? ''} ${v.visit_date ?? ''} ${v.technician_name ?? ''} ${v.status}`.toLowerCase(),
+            };
+          });
           if (!cancelled) setOptions(opts);
         } else {
           const r = await fetch(`/api/inventory/reservations?status=confirmed&limit=200`);
@@ -2209,7 +2220,18 @@ function LinkedResourcePicker({ kind, casaHint, value, onChange, disabled }: {
             <div style={{ padding: 12, fontSize: '0.8rem', color: '#ef4444' }}>{error}</div>
           ) : filtered.length === 0 ? (
             <div style={{ padding: 12, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              {options.length === 0 ? 'Sin opciones disponibles.' : 'Sin resultados para esa búsqueda.'}
+              {options.length === 0 ? (
+                <>
+                  Sin opciones disponibles.
+                  {(kind === 'visita_previa' || kind === 'visita_instalacion') && (
+                    <div style={{ marginTop: 6 }}>
+                      <a href="/visitas" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+                        Crear una visita en /visitas →
+                      </a>
+                    </div>
+                  )}
+                </>
+              ) : 'Sin resultados para esa búsqueda.'}
             </div>
           ) : (
             filtered.map((o) => (

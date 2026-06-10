@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CalendarRange, ListTodo, BarChartHorizontal, Calendar as CalendarIcon, LayoutGrid,
+  CalendarRange, ListTodo, BarChartHorizontal, Calendar as CalendarIcon, LayoutGrid, MapPin,
   Plus, Upload, Download, Trash2, Pencil, Search, AlertCircle, AlertTriangle, Zap, Info,
   ChevronLeft, ChevronRight, X, CheckCircle2, Clock, Circle, MinusCircle,
 } from 'lucide-react';
@@ -49,7 +49,7 @@ interface AppUser {
   name: string | null;
 }
 
-type ViewMode = 'kanban' | 'lista' | 'gantt' | 'calendario';
+type ViewMode = 'kanban' | 'lista' | 'gantt' | 'calendario' | 'mapa';
 
 const URGENCY_META: Record<Urgency, { label: string; color: string; icon: typeof AlertCircle }> = {
   critical: { label: 'Crítica', color: '#dc2626', icon: Zap },
@@ -292,6 +292,7 @@ export default function PlannerPage() {
             { key: 'lista' as const, label: 'Lista', icon: ListTodo, color: '#07c5a8' },
             { key: 'gantt' as const, label: 'Gantt', icon: BarChartHorizontal, color: '#8b5cf6' },
             { key: 'calendario' as const, label: 'Calendario', icon: CalendarIcon, color: '#f59e0b' },
+            { key: 'mapa' as const, label: 'Mapa', icon: MapPin, color: '#10b981' },
           ]).map((v) => (
             <button key={v.key} onClick={() => setView(v.key)} className={`chip ${view === v.key ? 'active' : ''}`}
               style={{ fontSize: '0.8rem', padding: '6px 10px', borderLeft: `3px solid ${v.color}`, display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
@@ -371,8 +372,10 @@ export default function PlannerPage() {
         <TaskListView tasks={filtered} onEdit={onOpenTask} onDelete={onDelete} onCycleStatus={onCycleStatus} displayAssignee={displayAssignee} />
       ) : view === 'gantt' ? (
         <GanttView tasks={filtered} onEdit={onOpenTask} displayAssignee={displayAssignee} />
-      ) : (
+      ) : view === 'calendario' ? (
         <CalendarView tasks={filtered} onEdit={onOpenTask} displayAssignee={displayAssignee} />
+      ) : (
+        <MapView tasks={filtered} onEdit={onOpenTask} />
       )}
 
       {/* MODALS */}
@@ -1503,6 +1506,194 @@ function CsvImportModal({ onClose, onDone }: { onClose: () => void; onDone: (ins
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─────────────── MAP VIEW ─────────────── */
+type MapProject = {
+  id: string;
+  code: string | null;
+  title: string;
+  conjunto: string | null;
+  casa_numero: string | null;
+  client_name: string | null;
+  lat: number;
+  lng: number;
+  operations_stage: string;
+  current_module: string;
+  contractor_name: string | null;
+  installation_date: string | null;
+  installedCount: number;
+  reservedCount: number;
+  tasks: PlannerTask[];
+};
+
+const STAGE_PIN_COLOR: Record<string, string> = {
+  dimensionado:      '#94a3b8',
+  alistamiento:      '#3b82f6',
+  instalacion:       '#8b5cf6',
+  operativo:         '#10b981',
+  logistica_inversa: '#ec4899',
+  desistido:         '#f97316',
+  sin_renovacion:    '#64748b',
+  completado:        '#64748b',
+};
+
+function MapView({ tasks }: { tasks: PlannerTask[]; onEdit: (t: PlannerTask) => void }) {
+  const [projects, setProjects] = useState<MapProject[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r1 = await fetch('/api/crm/projects?limit=1000');
+        const j1 = await r1.json();
+        type ProjRaw = { id: string; code: string | null; title: string; conjunto: string | null; casa_numero: string | null; client_name: string | null; lat: number | null; lng: number | null; operations_stage: string; current_module: string; contractor_name: string | null; installation_date: string | null; house_id: string | null };
+        const allProjects = (j1.projects ?? []) as ProjRaw[];
+        const withCoords = allProjects.filter((p) => p.lat != null && p.lng != null);
+
+        const houseIds = withCoords.map((p) => p.house_id).filter((x): x is string => Boolean(x));
+        const itemsByHouse = new Map<string, { installed: number; reserved: number }>();
+        if (houseIds.length > 0) {
+          const r2 = await fetch('/api/inventory/items?limit=2000');
+          const j2 = await r2.json();
+          type Item = { current_house_id: string | null; status: string };
+          for (const it of (j2.items ?? []) as Item[]) {
+            if (!it.current_house_id) continue;
+            const cur = itemsByHouse.get(it.current_house_id) ?? { installed: 0, reserved: 0 };
+            if (it.status === 'installed') cur.installed++;
+            if (it.status === 'reserved') cur.reserved++;
+            itemsByHouse.set(it.current_house_id, cur);
+          }
+        }
+
+        const tasksByProject = new Map<string, PlannerTask[]>();
+        for (const t of tasks) {
+          if (!t.project_id) continue;
+          const list = tasksByProject.get(t.project_id) ?? [];
+          list.push(t);
+          tasksByProject.set(t.project_id, list);
+        }
+
+        const enriched: MapProject[] = withCoords.map((p) => ({
+          id: p.id, code: p.code, title: p.title, conjunto: p.conjunto, casa_numero: p.casa_numero, client_name: p.client_name,
+          lat: Number(p.lat!), lng: Number(p.lng!),
+          operations_stage: p.operations_stage, current_module: p.current_module,
+          contractor_name: p.contractor_name, installation_date: p.installation_date,
+          installedCount: p.house_id ? (itemsByHouse.get(p.house_id)?.installed ?? 0) : 0,
+          reservedCount: p.house_id ? (itemsByHouse.get(p.house_id)?.reserved ?? 0) : 0,
+          tasks: tasksByProject.get(p.id) ?? [],
+        }));
+        setProjects(enriched);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : 'Error');
+      }
+    })();
+  }, [tasks]);
+
+  if (err) return <div className="glass-panel" style={{ padding: 24, color: '#ef4444' }}>Error: {err}</div>;
+  if (projects === null) return <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando mapa…</div>;
+
+  return <LeafletMap projects={projects} />;
+}
+
+function LeafletMap({ projects }: { projects: MapProject[] }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const legend = Object.entries(STAGE_PIN_COLOR).filter(([k]) => k !== 'completado');
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    let map: import('leaflet').Map | null = null;
+    let cancelled = false;
+
+    (async () => {
+      const L = (await import('leaflet')).default;
+      if (cancelled) return;
+      // Inject leaflet.css from CDN
+      if (typeof document !== 'undefined' && !document.querySelector('link[data-leaflet]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        link.setAttribute('data-leaflet', '1');
+        document.head.appendChild(link);
+      }
+
+      const valid = projects.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+      const center: [number, number] = valid.length > 0
+        ? [valid.reduce((a, b) => a + b.lat, 0) / valid.length, valid.reduce((a, b) => a + b.lng, 0) / valid.length]
+        : [3.4516, -76.5320];
+
+      map = L.map(mapRef.current!).setView(center, valid.length > 0 ? 12 : 6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      for (const p of valid) {
+        const color = STAGE_PIN_COLOR[p.operations_stage] ?? '#64748b';
+        const icon = L.divIcon({
+          html: `<div style="width:20px;height:20px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 0 0 2px ${color}66;"></div>`,
+          className: '',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10],
+        });
+        const popupContent = `
+          <div style="font-family: system-ui; font-size: 0.82rem; min-width: 200px;">
+            <div style="font-family: ui-monospace, monospace; font-size: 0.68rem; color: #64748b;">${p.code ?? ''}</div>
+            <div style="font-weight: 600; margin: 2px 0 4px;">${p.title}</div>
+            <div style="font-size: 0.74rem; color: #475569; margin-bottom: 6px;">
+              ${p.conjunto ? p.conjunto + ' · ' : ''}${p.casa_numero ? 'Casa ' + p.casa_numero : ''}
+              ${p.client_name ? '<br/>' + p.client_name : ''}
+            </div>
+            <div style="display:inline-block; padding:2px 8px; border-radius:8px; background:${color}22; color:${color}; font-size:0.66rem; font-weight:700; text-transform:uppercase;">
+              ${p.operations_stage.replace(/_/g, ' ')}
+            </div>
+            <div style="margin-top:8px; font-size:0.7rem; color:#475569;">
+              <div>Contratista: <strong>${p.contractor_name ?? '—'}</strong></div>
+              ${p.installation_date ? `<div>Fecha instalación: <strong>${p.installation_date}</strong></div>` : ''}
+              <div>Equipos: <strong style="color:#10b981">${p.installedCount} instalados</strong>${p.reservedCount > 0 ? ` · ${p.reservedCount} reservados` : ''}</div>
+              <div>Tareas Planner: <strong>${p.tasks.length}</strong></div>
+            </div>
+            <a href="/operaciones" style="display:inline-block; margin-top:8px; color:#0ea5e9; font-size:0.72rem; text-decoration:underline;">Abrir en Operaciones →</a>
+          </div>
+        `;
+        L.marker([p.lat, p.lng], { icon }).addTo(map).bindPopup(popupContent);
+      }
+
+      if (valid.length > 1) {
+        const bounds = L.latLngBounds(valid.map((p) => [p.lat, p.lng] as [number, number]));
+        map.fitBounds(bounds, { padding: [40, 40] });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      map?.remove();
+    };
+  }, [projects]);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <div
+        ref={mapRef}
+        style={{ height: '70vh', minHeight: 500, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}
+      />
+      <div className="glass-panel" style={{ position: 'absolute', top: 12, right: 12, padding: 10, zIndex: 1000, fontSize: '0.72rem' }}>
+        <div style={{ fontWeight: 700, marginBottom: 6, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontSize: '0.66rem' }}>Etapa</div>
+        {legend.map(([stage, color]) => (
+          <div key={stage} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, border: '1.5px solid #fff' }} />
+            <span style={{ textTransform: 'capitalize' }}>{stage.replace(/_/g, ' ')}</span>
+          </div>
+        ))}
+      </div>
+      {projects.length === 0 && (
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', background: 'rgba(255,255,255,0.95)', padding: 16, borderRadius: 8, color: '#475569' }}>
+          <div style={{ fontWeight: 600 }}>Sin proyectos con coordenadas</div>
+          <div style={{ fontSize: '0.78rem', marginTop: 4 }}>Edita los proyectos y agrega lat/lng para verlos en el mapa.</div>
+        </div>
+      )}
     </div>
   );
 }

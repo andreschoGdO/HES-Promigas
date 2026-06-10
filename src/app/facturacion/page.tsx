@@ -11,6 +11,12 @@ interface Row {
   ciudad: string | null;
   conjunto: string | null;
   casa: string | null;
+  cliente: string | null;
+  installation_date: string | null;
+  operativo_at: string | null;
+  lectura_inicial_kwh: number | null;
+  estado: string | null;
+  tipo_red: string | null;
   solucion: string | null;
   plan: string | null;
   paneles: number | null;
@@ -102,6 +108,16 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    id: 'cliente_fechas', label: 'Cliente y fechas', Icon: Tag, color: '#0ea5e9',
+    cols: [
+      { key: 'cliente',             label: 'CLIENTE',          type: 'text', editable: false, minWidth: 160 },
+      { key: 'estado',              label: 'ESTADO',           type: 'text', editable: false, minWidth: 120 },
+      { key: 'installation_date',   label: 'F. INSTALACIÓN',   type: 'text', editable: false, minWidth: 110 },
+      { key: 'operativo_at',        label: 'F. OPERATIVO',     type: 'text', editable: false, minWidth: 110 },
+      { key: 'lectura_inicial_kwh', label: 'LECTURA INICIAL',  type: 'num',  editable: false, minWidth: 110 },
+    ],
+  },
+  {
     id: 'plan', label: 'Plan comercial', Icon: Tag, color: '#10b981',
     cols: [
       { key: 'solucion', label: 'SOLUCIÓN', type: 'text', editable: true, minWidth: 160 },
@@ -111,10 +127,11 @@ const GROUPS: Group[] = [
   {
     id: 'diseno', label: 'Diseño', Icon: Layers, color: '#8b5cf6',
     cols: [
-      { key: 'paneles', label: 'PANELES', type: 'num', editable: false, minWidth: 80 },
-      { key: 'kwp',     label: 'kwp',     type: 'num', editable: false, minWidth: 70 },
-      { key: 'bateria', label: 'BATERIA', type: 'num', editable: false, minWidth: 80 },
-      { key: 'kwh',     label: 'kwh',     type: 'num', editable: false, minWidth: 70 },
+      { key: 'tipo_red', label: 'TIPO RED', type: 'text', editable: false, minWidth: 100 },
+      { key: 'paneles',  label: 'PANELES', type: 'num', editable: false, minWidth: 80 },
+      { key: 'kwp',      label: 'kwp',     type: 'num', editable: false, minWidth: 70 },
+      { key: 'bateria',  label: 'BATERIA', type: 'num', editable: false, minWidth: 80 },
+      { key: 'kwh',      label: 'kwh',     type: 'num', editable: false, minWidth: 70 },
     ],
   },
   {

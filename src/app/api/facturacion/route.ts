@@ -18,6 +18,7 @@ type ProjectRow = {
   id: string;
   code: string | null;
   title: string;
+  client_name: string | null;
   client_city: string | null;
   conjunto: string | null;
   casa_numero: string | null;
@@ -31,6 +32,13 @@ type ProjectRow = {
   diseno_bateria_categoria_id: string | null;
   contractor_name: string | null;
   house_id: string | null;
+  // Fase 1 — datos expuestos del flujo
+  installation_date: string | null;
+  operativo_at: string | null;
+  lectura_inicial_kwh: number | null;
+  operations_stage: string;
+  current_module: string;
+  tipo_red: string | null;
   updated_at: string;
 };
 
@@ -40,11 +48,13 @@ export async function GET() {
   const { data: projects, error: projErr } = await supabaseAdmin
     .from('crm_projects')
     .select(
-      'id, code, title, client_city, conjunto, casa_numero, ' +
+      'id, code, title, client_name, client_city, conjunto, casa_numero, ' +
       'propuesta_kwp, diseno_kwp, propuesta_valor_cop, ' +
       'diseno_paneles, diseno_baterias_cantidad, ' +
       'diseno_inversor_categoria_id, diseno_panel_categoria_id, diseno_bateria_categoria_id, ' +
-      'contractor_name, house_id, updated_at',
+      'contractor_name, house_id, ' +
+      'installation_date, operativo_at, lectura_inicial_kwh, operations_stage, current_module, tipo_red, ' +
+      'updated_at',
     )
     .order('updated_at', { ascending: false })
     .limit(1000);
@@ -271,6 +281,13 @@ export async function GET() {
       ciudad: p.client_city ?? null,
       conjunto: p.conjunto ?? null,
       casa: p.casa_numero ?? null,
+      cliente: p.client_name ?? null,
+      // Fase 1 — datos del flujo
+      installation_date: p.installation_date ?? null,
+      operativo_at: p.operativo_at ? p.operativo_at.slice(0, 10) : null,
+      lectura_inicial_kwh: p.lectura_inicial_kwh ?? null,
+      estado: p.current_module === 'closed' ? 'cerrado' : (p.operations_stage ?? null),
+      tipo_red: p.tipo_red ?? null,
       solucion: (fact.solucion as string | null) ?? null,
       plan: (fact.plan as string | null) ?? null,
       paneles: p.diseno_paneles ?? null,

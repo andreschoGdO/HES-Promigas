@@ -1296,6 +1296,21 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
         sideMessages.push(`Faltante de stock — ${lines.join(' · ')}`);
       }
     }
+    if (se.installation) {
+      const inst = se.installation as { installed: string[]; already_installed: string[]; skipped: string[]; reservation_fulfilled: boolean };
+      if (inst.installed.length > 0) {
+        sideMessages.push(`✅ ${inst.installed.length} equipo(s) marcados como Instalado en la casa: ${inst.installed.join(', ')}`);
+      }
+      if (inst.already_installed.length > 0) {
+        sideMessages.push(`ℹ️ ${inst.already_installed.length} ya estaban instalados (skip): ${inst.already_installed.join(', ')}`);
+      }
+      if (inst.skipped.length > 0) {
+        sideMessages.push(`⚠️ Items no procesados:\n${inst.skipped.join('\n')}`);
+      }
+      if (inst.reservation_fulfilled) {
+        sideMessages.push('Reserva marcada como fulfilled.');
+      }
+    }
     if (se.facturacion?.created) {
       sideMessages.push('Registro de Facturación inicializado para este proyecto');
     }

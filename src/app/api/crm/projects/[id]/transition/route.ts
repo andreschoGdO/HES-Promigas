@@ -277,6 +277,9 @@ export async function POST(request: Request, context: Ctx) {
     const sideEffects: Record<string, unknown> = {};
     if (preReservation) sideEffects.reservation = preReservation;
     if (def.action === 'operations_to_operativo') {
+      // Fulfillment: items reservados pasan a 'installed' en la casa.
+      const inst = await fulfillReservationOnOperativo(updated[0], body.actor_email ?? null);
+      if (inst) sideEffects.installation = inst;
       const r = await ensureFacturacionRecord(updated[0], body.actor_email ?? null);
       if (r) sideEffects.facturacion = r;
     }
@@ -680,6 +683,118 @@ async function autoReserveInventoryForProject(
     reserved: reservedItems.map((it) => ({ family: it.family, serial: it.serial_number })),
     shortages,
   };
+}
+
+/**
+ * Al pasar a Operativo: tomar la reserva confirmada del proyecto y
+ * materializar los items como 'installed' en la casa del proyecto.
+ *
+ * Idempotente: items ya en 'installed' con la casa correcta se skipean.
+ * Items que cambiaron a otro estado (in_repair, decommissioned) se reportan
+ * pero no se tocan.
+ *
+ * Resultado: items: reserved → installed, current_house_id = project.house_id,
+ * movimientos type='install', reserva → fulfilled.
+ */
+async function fulfillReservationOnOperativo(
+  project: ProjRow,
+  actorEmail: string | null,
+): Promise<null | { installed: string[]; already_installed: string[]; skipped: string[]; reservation_fulfilled: boolean }> {
+  if (!project.reservation_id) {
+    return { installed: [], already_installed: [], skipped: ['Proyecto sin reservation_id — nada que instalar'], reservation_fulfilled: false };
+  }
+  if (!project.house_id) {
+    return { installed: [], already_installed: [], skipped: ['Proyecto sin house_id — asigna la casa antes de marcar Operativo'], reservation_fulfilled: false };
+  }
+
+  // Cargar reserva con sus líneas
+  const { data: resvRaw } = await supabaseAdmin
+    .from('inventory_reservations')
+    .select('id, title, status, inventory_reservation_items(item_id, inventory_items(id, serial_number, status, current_house_id))')
+    .eq('id', project.reservation_id)
+    .maybeSingle();
+  type LineItem = { id?: string; serial_number?: string | null; status?: string | null; current_house_id?: string | null };
+  type Line = { item_id: string; inventory_items?: LineItem | LineItem[] | null };
+  const resv = resvRaw as unknown as { id: string; title: string; status: string; inventory_reservation_items?: Line[] } | null;
+
+  if (!resv) {
+    return { installed: [], already_installed: [], skipped: ['Reserva del proyecto no existe'], reservation_fulfilled: false };
+  }
+  if (resv.status === 'cancelled') {
+    return { installed: [], already_installed: [], skipped: ['Reserva está cancelada'], reservation_fulfilled: false };
+  }
+
+  const lines = resv.inventory_reservation_items ?? [];
+  const installed: string[] = [];
+  const already: string[] = [];
+  const skipped: string[] = [];
+
+  // Items a marcar como installed: los que están en 'reserved'
+  const toInstall: Array<{ id: string; serial: string }> = [];
+  for (const l of lines) {
+    const itRaw = l.inventory_items;
+    const it = Array.isArray(itRaw) ? itRaw[0] : itRaw;
+    if (!it || !it.id) continue;
+    const serial = it.serial_number ?? '';
+    if (it.status === 'installed' && it.current_house_id === project.house_id) {
+      already.push(serial);
+      continue;
+    }
+    if (it.status === 'reserved') {
+      toInstall.push({ id: it.id, serial });
+      continue;
+    }
+    skipped.push(`${serial} (estado: ${it.status ?? 'unknown'})`);
+  }
+
+  // Aplicar UPDATE con guard para no pisar items que cambiaron entre SELECT y UPDATE
+  if (toInstall.length > 0) {
+    const { data: updated } = await supabaseAdmin
+      .from('inventory_items')
+      .update({
+        status: 'installed',
+        current_location: 'house',
+        current_house_id: project.house_id,
+      })
+      .in('id', toInstall.map((it) => it.id))
+      .eq('status', 'reserved')
+      .select('id, serial_number');
+    const updatedIds = new Set((updated ?? []).map((u) => u.id));
+
+    if (updatedIds.size > 0) {
+      await supabaseAdmin.from('inventory_movements').insert(
+        toInstall
+          .filter((it) => updatedIds.has(it.id))
+          .map((it) => ({
+            item_id: it.id,
+            type: 'install',
+            from_status: 'reserved',
+            to_status: 'installed',
+            to_location: 'house',
+            to_house_id: project.house_id,
+            responsible_email: actorEmail,
+            notes: `Instalado al marcar Operativo (reserva ${resv.title})`,
+          })),
+      );
+    }
+
+    for (const it of toInstall) {
+      if (updatedIds.has(it.id)) installed.push(it.serial);
+      else skipped.push(`${it.serial} (cambió de estado mientras se procesaba)`);
+    }
+  }
+
+  // Marcar la reserva como fulfilled (solo si pudimos instalar al menos uno)
+  let fulfilled = false;
+  if (installed.length > 0 && resv.status === 'confirmed') {
+    await supabaseAdmin
+      .from('inventory_reservations')
+      .update({ status: 'fulfilled', fulfilled_at: new Date().toISOString() })
+      .eq('id', resv.id);
+    fulfilled = true;
+  }
+
+  return { installed, already_installed: already, skipped, reservation_fulfilled: fulfilled };
 }
 
 /**

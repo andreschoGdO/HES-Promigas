@@ -43,14 +43,46 @@ export async function linkVisitToInventory(opts: {
   const form = opts.formData ?? {};
 
   if (opts.visitType === 'instalacion') {
-    // Camino preferido: si hay una reserva CONFIRMADA vinculada a esta visita,
-    // los items ya están como 'reserved'; los pasamos a 'installed' en bloque.
-    const { data: confirmedResv } = await supabaseAdmin
-      .from('inventory_reservations')
-      .select('id, title, inventory_reservation_items(item_id, inventory_items(serial_number, status))')
-      .eq('visit_id', opts.visitId)
-      .eq('status', 'confirmed')
-      .maybeSingle();
+    // Camino preferido: encontrar la reserva CONFIRMED vinculada al proyecto
+    // de esta casa. La búsqueda tiene 2 caminos:
+    //   (1) inventory_reservations.visit_id = visit.id (link directo, raro)
+    //   (2) crm_projects.house_id = visit.house_id → project.reservation_id
+    //       (el camino normal porque la auto-reserva en alistamiento no
+    //        conoce aún el id de la visita)
+    let confirmedResv: { id: string; title: string } | null = null;
+    {
+      const { data: direct } = await supabaseAdmin
+        .from('inventory_reservations')
+        .select('id, title, inventory_reservation_items(item_id, inventory_items(serial_number, status))')
+        .eq('visit_id', opts.visitId)
+        .eq('status', 'confirmed')
+        .maybeSingle();
+      if (direct) confirmedResv = direct as { id: string; title: string };
+    }
+    if (!confirmedResv && opts.houseId) {
+      // Buscar el proyecto por house_id y obtener su reservation_id
+      const { data: project } = await supabaseAdmin
+        .from('crm_projects')
+        .select('reservation_id')
+        .eq('house_id', opts.houseId)
+        .maybeSingle();
+      if (project?.reservation_id) {
+        const { data: viaProject } = await supabaseAdmin
+          .from('inventory_reservations')
+          .select('id, title, inventory_reservation_items(item_id, inventory_items(serial_number, status))')
+          .eq('id', project.reservation_id)
+          .eq('status', 'confirmed')
+          .maybeSingle();
+        if (viaProject) {
+          confirmedResv = viaProject as { id: string; title: string };
+          // Linkear la reserva con esta visita para auditoría
+          await supabaseAdmin
+            .from('inventory_reservations')
+            .update({ visit_id: opts.visitId })
+            .eq('id', viaProject.id);
+        }
+      }
+    }
     if (confirmedResv) {
       type RawItem = { serial_number: string; status: string };
       type RawLine = { item_id: string; inventory_items?: RawItem | RawItem[] | null };

@@ -970,6 +970,23 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
                 Al pasar a <strong>Alistamiento</strong>, el sistema reserva automáticamente los equipos disponibles en bodega usando estos modelos del catálogo. Si dejas alguno vacío, ese tipo no se reserva.
               </p>
             </FormSection>
+
+            <FormSection title="Origen del diseño (acta de previa)">
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>
+                  Visita previa que sirvió de base
+                </label>
+                <LinkedResourcePicker
+                  kind="visita_previa"
+                  casaHint={form.casa_numero ?? form.client_name ?? null}
+                  value={form.visita_previa_id ?? ''}
+                  onChange={(v) => set('visita_previa_id', v)}
+                />
+                <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  Selecciona el acta de visita previa (completada en /visitas) que originó este dimensionamiento. Queda registrada para trazabilidad.
+                </p>
+              </div>
+            </FormSection>
           </>
         )}
 

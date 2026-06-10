@@ -10,7 +10,7 @@ const supa = () => createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias';
+type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias' | 'panorama';
 
 interface Category {
   id: string;
@@ -35,7 +35,7 @@ interface InvItem {
   model: string | null;
   capacity_value: number | null;
   capacity_unit: string | null;
-  status: 'in_stock' | 'reserved' | 'installed' | 'in_repair' | 'rma' | 'decommissioned';
+  status: 'in_stock' | 'reserved' | 'installed' | 'in_repair' | 'decommissioned';
   current_location: string | null;
   current_house_id: string | null;
   acquired_at: string | null;
@@ -81,7 +81,6 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   reserved:       { label: 'Reservado',   color: '#3b82f6' },
   installed:      { label: 'Instalado',   color: '#07c5a8' },
   in_repair:      { label: 'En garantía', color: '#f59e0b' },
-  rma:            { label: 'RMA',         color: '#8b5cf6' },
   decommissioned: { label: 'Decomisado',  color: '#64748b' },
 };
 
@@ -122,10 +121,7 @@ function ItemDestination({ item }: { item: InvItem }) {
     );
   }
   if (item.status === 'in_repair') {
-    return <span style={{ color: '#f59e0b' }}>En taller / garantía</span>;
-  }
-  if (item.status === 'rma') {
-    return <span style={{ color: '#8b5cf6' }}>RMA con proveedor</span>;
+    return <span style={{ color: '#f59e0b' }}>En garantía / taller</span>;
   }
   // in_stock o cualquier otro
   return <span>{item.current_location ?? 'Bodega'}</span>;
@@ -153,6 +149,7 @@ const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu }> 
   reservas:    { label: 'Reservas',    color: '#ec4899', Icon: ClipboardList },
   movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History },
   categorias:  { label: 'Categorías',  color: '#10b981', Icon: Tags },
+  panorama:    { label: 'Panorama',    color: '#07c5a8', Icon: Boxes },
 };
 
 const LOCATION_TYPE_META: Record<string, { label: string; color: string; Icon: typeof Cpu }> = {
@@ -160,7 +157,7 @@ const LOCATION_TYPE_META: Record<string, { label: string; color: string; Icon: t
   workshop:     { label: 'Taller',        color: '#f59e0b', Icon: Wrench },
   vehicle:      { label: 'Vehículo',      color: '#8b5cf6', Icon: Truck },
   site:         { label: 'Sitio cliente', color: '#10b981', Icon: MapPin },
-  supplier_rma: { label: 'RMA proveedor', color: '#ec4899', Icon: ArrowRight },
+  supplier_rma: { label: 'Garantía con proveedor', color: '#ec4899', Icon: ArrowRight },
   in_transit:   { label: 'En tránsito',   color: '#94a3b8', Icon: Truck },
   other:        { label: 'Otro',          color: '#64748b', Icon: Package },
 };
@@ -272,6 +269,7 @@ export default function InventarioPage() {
       {tab === 'reservas' && <ReservasTab userEmail={userEmail} />}
       {tab === 'movimientos' && <MovimientosTab />}
       {tab === 'categorias' && <CategoriasTab />}
+      {tab === 'panorama' && <PanoramaTab />}
     </div>
   );
 }
@@ -1319,6 +1317,227 @@ function CategoryModal({ mode, initial, onClose, onSaved }: {
   );
 }
 
+/* ─── Tab Panorama: visión agregada del inventario ─── */
+function PanoramaTab() {
+  type FamilyStats = {
+    family: string;
+    total: number;
+    byStatus: Record<string, number>;
+    totalCostCop: number;
+    avgCostCop: number | null;
+  };
+  type HouseStat = { house_id: string; casa: string; count: number; brands: Set<string> };
+  type RecentItem = { id: string; serial_number: string; brand: string | null; model: string | null; acquired_at: string | null; acquired_cost_cop: number | null; supplier: string | null; inventory_categories?: { name: string; family: string } | null };
+
+  const [loading, setLoading] = useState(true);
+  const [familyStats, setFamilyStats] = useState<FamilyStats[]>([]);
+  const [topHouses, setTopHouses] = useState<HouseStat[]>([]);
+  const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  const [consumiblesValue, setConsumiblesValue] = useState<number>(0);
+  const [grandTotal, setGrandTotal] = useState<number>(0);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const [itemsR, consR] = await Promise.all([
+          fetch('/api/inventory/items?limit=2000').then((r) => r.json()),
+          fetch('/api/inventory/consumables').then((r) => r.json()).catch(() => ({ consumables: [] })),
+        ]);
+        const items = (itemsR.items ?? []) as Array<InvItem & { acquired_cost_cop: number | null; client_houses?: { casa: string } | null }>;
+
+        // Agrupar por familia
+        const byFamily = new Map<string, FamilyStats>();
+        for (const it of items) {
+          const family = it.inventory_categories?.family ?? 'sin_familia';
+          const cur = byFamily.get(family) ?? { family, total: 0, byStatus: {}, totalCostCop: 0, avgCostCop: null };
+          cur.total++;
+          cur.byStatus[it.status] = (cur.byStatus[it.status] ?? 0) + 1;
+          if (it.acquired_cost_cop != null) cur.totalCostCop += Number(it.acquired_cost_cop);
+          byFamily.set(family, cur);
+        }
+        for (const fs of byFamily.values()) {
+          const withCost = items.filter((it) => (it.inventory_categories?.family ?? 'sin_familia') === fs.family && it.acquired_cost_cop != null);
+          fs.avgCostCop = withCost.length > 0 ? fs.totalCostCop / withCost.length : null;
+        }
+        const families = Array.from(byFamily.values()).sort((a, b) => b.total - a.total);
+        setFamilyStats(families);
+
+        // Top casas por cantidad de equipos instalados
+        const byHouse = new Map<string, HouseStat>();
+        for (const it of items) {
+          if (it.status !== 'installed' || !it.current_house_id) continue;
+          const cur = byHouse.get(it.current_house_id) ?? { house_id: it.current_house_id, casa: it.client_houses?.casa ?? '—', count: 0, brands: new Set<string>() };
+          cur.count++;
+          if (it.brand) cur.brands.add(it.brand);
+          byHouse.set(it.current_house_id, cur);
+        }
+        setTopHouses(Array.from(byHouse.values()).sort((a, b) => b.count - a.count).slice(0, 15));
+
+        // Items recientemente adquiridos
+        const sorted = [...items]
+          .filter((it) => it.acquired_at)
+          .sort((a, b) => (b.acquired_at ?? '').localeCompare(a.acquired_at ?? ''))
+          .slice(0, 10);
+        setRecentItems(sorted as RecentItem[]);
+
+        // Costo total acumulado en consumibles
+        const cons = (consR.consumables ?? []) as Array<{ stock_quantity: number; cost_per_unit_cop: number | null }>;
+        const consCost = cons.reduce((acc, c) => acc + (Number(c.stock_quantity) * Number(c.cost_per_unit_cop ?? 0)), 0);
+        setConsumiblesValue(consCost);
+
+        const itemsCost = items.reduce((acc, it) => acc + Number(it.acquired_cost_cop ?? 0), 0);
+        setGrandTotal(itemsCost + consCost);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const fmtMoney = (n: number) => new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(n);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando panorama…</div>
+      ) : (
+        <>
+          {/* KPI macro */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
+            <PanoramaKpi label="Familias activas" value={String(familyStats.length)} sub="modelos distintos en inventario" color="#07c5a8" Icon={Tags} />
+            <PanoramaKpi label="Total equipos" value={String(familyStats.reduce((a, b) => a + b.total, 0))} sub="serializados activos" color="#3b82f6" Icon={Cpu} />
+            <PanoramaKpi label="Capital en bodega" value={fmtMoney(grandTotal)} sub={`COP · equipos + consumibles`} color="#10b981" Icon={Boxes} />
+            <PanoramaKpi label="Casas atendidas" value={String(topHouses.length)} sub="con equipos instalados" color="#f59e0b" Icon={MapPin} />
+          </div>
+
+          {/* Tarjetas por familia */}
+          <div className="glass-panel" style={{ padding: 16 }}>
+            <h3 style={{ margin: 0, fontSize: '0.95rem', marginBottom: 12 }}>Por tipo de equipo</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+              {familyStats.map((fs) => {
+                const Icon = FAMILY_ICONS[fs.family] ?? Package;
+                const familyLabel = FAMILY_LABELS[fs.family] ?? fs.family;
+                return (
+                  <div key={fs.family} style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: 14, borderLeft: '4px solid var(--accent)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <Icon size={18} style={{ color: 'var(--accent)' }} />
+                      <h4 style={{ margin: 0, fontSize: '0.92rem' }}>{familyLabel}</h4>
+                      <span style={{ marginLeft: 'auto', fontFamily: 'ui-monospace, monospace', fontSize: '1.2rem', fontWeight: 700, color: 'var(--text)' }}>{fs.total}</span>
+                    </div>
+                    {/* Stack de estados */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                      {Object.entries(fs.byStatus).map(([status, count]) => {
+                        const m = STATUS_META[status];
+                        if (!m) return null;
+                        return (
+                          <span key={status} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.7rem', fontWeight: 600, padding: '3px 8px', borderRadius: 10, background: m.color + '20', color: m.color }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: m.color }} />
+                            {m.label}: {count}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {/* Costos */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '0.78rem', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Costo acumulado</div>
+                        <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>${fmtMoney(fs.totalCostCop)}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Promedio / unidad</div>
+                        <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{fs.avgCostCop != null ? '$' + fmtMoney(fs.avgCostCop) : '—'}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Top casas por equipos instalados */}
+          <div className="glass-panel" style={{ padding: 16 }}>
+            <h3 style={{ margin: 0, fontSize: '0.95rem', marginBottom: 12 }}>Casas con más equipos instalados</h3>
+            {topHouses.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Aún no hay equipos instalados.</p>
+            ) : (
+              <table style={{ width: '100%', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr>
+                    <th>Casa</th>
+                    <th style={{ textAlign: 'left' }}>Marcas</th>
+                    <th style={{ textAlign: 'right' }}>Equipos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topHouses.map((h) => (
+                    <tr key={h.house_id}>
+                      <td style={{ fontWeight: 600 }}>{h.casa}</td>
+                      <td style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>{Array.from(h.brands).join(' · ') || '—'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{h.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Adquisiciones recientes */}
+          <div className="glass-panel" style={{ padding: 16 }}>
+            <h3 style={{ margin: 0, fontSize: '0.95rem', marginBottom: 12 }}>Últimas adquisiciones</h3>
+            {recentItems.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin recepciones registradas (revisa el campo "Fecha de adquisición" al crear equipos).</p>
+            ) : (
+              <table style={{ width: '100%', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr>
+                    <th>Serial</th>
+                    <th>Modelo</th>
+                    <th>Proveedor</th>
+                    <th style={{ textAlign: 'right' }}>Costo</th>
+                    <th style={{ textAlign: 'right' }}>Fecha</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentItems.map((it) => (
+                    <tr key={it.id}>
+                      <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.76rem', fontWeight: 600 }}>{it.serial_number}</td>
+                      <td style={{ fontSize: '0.78rem' }}>{[it.brand, it.model].filter(Boolean).join(' ') || it.inventory_categories?.name || '—'}</td>
+                      <td style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>{it.supplier ?? '—'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace' }}>{it.acquired_cost_cop != null ? '$' + fmtMoney(Number(it.acquired_cost_cop)) : '—'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: '0.76rem' }}>{it.acquired_at ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Valor consumibles */}
+          <div className="glass-panel" style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Valor consumibles en bodega</div>
+              <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '1.3rem', fontWeight: 700, marginTop: 4 }}>${fmtMoney(consumiblesValue)}</div>
+            </div>
+            <Cable size={32} style={{ color: '#8b5cf6' }} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function PanoramaKpi({ label, value, sub, color, Icon }: { label: string; value: string; sub: string; color: string; Icon: typeof Cpu }) {
+  return (
+    <div className="glass-panel" style={{ padding: '14px 16px', borderLeft: `4px solid ${color}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
+        <Icon size={13} style={{ color }} /> {label}
+      </div>
+      <div style={{ fontSize: '1.4rem', fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: 'var(--text)', lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{sub}</div>
+    </div>
+  );
+}
+
 /* ─── Modales de logística inversa ─── */
 
 const SWAP_MOTIVOS = [
@@ -1331,8 +1550,7 @@ const SWAP_MOTIVOS = [
 
 const SWAP_DESTINATIONS = [
   { value: 'in_stock',        label: 'Devolver a bodega (volver a stock)' },
-  { value: 'in_repair',       label: 'Mandar a taller (revisión interna)' },
-  { value: 'rma',             label: 'Enviar a RMA con el proveedor' },
+  { value: 'in_repair',       label: 'Mandar a garantía / taller' },
   { value: 'decommissioned',  label: 'Decomisar (fin de vida útil)' },
 ] as const;
 
@@ -1527,8 +1745,7 @@ function ReturnItemModal({ item, userEmail, onClose, onSaved }: { item: InvItem;
         <label className="input-label">Destino *</label>
         <select value={destStatus} onChange={(e) => setDestStatus(e.target.value)}>
           <option value="in_stock">Devolver a bodega</option>
-          <option value="in_repair">A taller (revisión)</option>
-          <option value="rma">A RMA con proveedor</option>
+          <option value="in_repair">A garantía / taller</option>
         </select>
       </div>
 
@@ -1669,7 +1886,6 @@ function ChangeStatusModal({ item, userEmail, onClose, onSaved }: { item: InvIte
       status,
       current_location: status === 'installed' ? 'house'
         : status === 'in_stock' ? 'warehouse'
-        : status === 'rma' ? 'supplier_rma'
         : status === 'in_repair' ? 'workshop'
         : location || null,
       current_house_id: needsHouse ? houseId : null,
@@ -1719,7 +1935,7 @@ function ChangeStatusModal({ item, userEmail, onClose, onSaved }: { item: InvIte
         </div>
       )}
 
-      {!needsHouse && status !== 'in_stock' && status !== 'rma' && status !== 'in_repair' && (
+      {!needsHouse && status !== 'in_stock' && status !== 'in_repair' && (
         <div style={{ marginTop: 12 }}>
           <Field label="Ubicación física (opcional)">
             <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ej: bodega, taller, en tránsito" />

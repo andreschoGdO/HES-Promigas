@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload, Pencil } from 'lucide-react';
+import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload, Pencil, CalendarRange } from 'lucide-react';
 import {
   type CrmModule, type StageMeta, type TransitionDef,
   OPERATIONS_STAGES,
@@ -625,12 +625,17 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
   const [showHistory, setShowHistory] = useState(false);
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  type PlannerTaskLite = { id: string; title: string; status: string; urgency: string; start_date: string | null; due_date: string | null; assigned_to: string | null; team: string | null; tags: string[] | null };
+  const [linkedTasks, setLinkedTasks] = useState<PlannerTaskLite[]>([]);
 
   const reload = () => {
     fetch(`/api/crm/projects/${initial.id}`).then((r) => r.json()).then((j) => {
       if (j.project) setProject(j.project);
       setEvents(j.events ?? []);
     });
+    fetch(`/api/planner/tasks?project_id=${initial.id}`).then((r) => r.json()).then((j) => {
+      setLinkedTasks(j.tasks ?? []);
+    }).catch(() => {});
   };
   useEffect(reload, [initial.id]);
 
@@ -730,6 +735,46 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
           <KV label="Notas" value={project.notes} />
           <KV label="Asignado a" value={project.assigned_to} />
         </DetailSection>
+
+        {/* Tareas del Planner vinculadas */}
+        <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--bg-elevated)', borderRadius: 8, borderLeft: '4px solid #8b5cf6' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <CalendarRange size={14} style={{ color: '#8b5cf6' }} />
+            <strong style={{ fontSize: '0.85rem' }}>Actividades del Planner</strong>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>({linkedTasks.length})</span>
+            <Link href={`/planner?project_id=${project.id}`} style={{ marginLeft: 'auto', fontSize: '0.74rem', color: 'var(--accent)' }}>
+              Abrir en Planner →
+            </Link>
+          </div>
+          {linkedTasks.length === 0 ? (
+            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Sin tareas vinculadas. Se crean automáticamente al pasar a Instalación o abrir un ticket de garantía.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {linkedTasks.map((t) => {
+                const statusColors: Record<string, string> = {
+                  todo: '#94a3b8', in_progress: '#3b82f6', done: '#10b981', blocked: '#ef4444',
+                };
+                const urgencyColors: Record<string, string> = {
+                  low: '#3b82f6', medium: '#f59e0b', high: '#ef4444', critical: '#dc2626',
+                };
+                return (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', padding: '6px 8px', background: 'var(--bg-surface)', borderRadius: 6 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: urgencyColors[t.urgency] ?? '#64748b' }} />
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      {t.start_date ? `${t.start_date}${t.due_date && t.due_date !== t.start_date ? ' → ' + t.due_date : ''}` : (t.due_date ?? 'sin fecha')}
+                    </span>
+                    <span style={{ padding: '2px 8px', borderRadius: 10, background: (statusColors[t.status] ?? '#64748b') + '20', color: statusColors[t.status] ?? '#64748b', fontSize: '0.68rem', fontWeight: 700 }}>
+                      {t.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Audit log */}
         <div style={{ marginTop: 10 }}>

@@ -54,6 +54,7 @@ export async function GET(request: Request) {
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
   const q = url.searchParams.get('q');
+  const projectId = url.searchParams.get('project_id');
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 1000), 5000);
 
   let query = supabaseAdmin
@@ -66,6 +67,7 @@ export async function GET(request: Request) {
   if (status && ALLOWED_STATUSES.includes(status)) query = query.eq('status', status);
   if (assignee) query = query.eq('assigned_to', assignee);
   if (team) query = query.eq('team', team);
+  if (projectId) query = query.eq('project_id', projectId);
   if (from) query = query.gte('due_date', from);
   if (to) query = query.lte('due_date', to);
   if (q) {

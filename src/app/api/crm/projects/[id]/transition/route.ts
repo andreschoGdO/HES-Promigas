@@ -370,6 +370,15 @@ export async function POST(request: Request, context: Ctx) {
       const r = await ensureFacturacionRecord(updated[0], body.actor_email ?? null);
       if (r) sideEffects.facturacion = r;
     }
+    // Auto-crear tareas en el Planner para visibilidad de fechas
+    if (def.action === 'operations_to_instalacion') {
+      const t = await createPlannerTaskInstalacion(updated[0], body.actor_email ?? null);
+      if (t) sideEffects.planner_task = t;
+    }
+    if (def.action === 'operations_to_logistica_inversa') {
+      const t = await createPlannerTaskTicket(updated[0], body.actor_email ?? null, coerced.notes as string | undefined);
+      if (t) sideEffects.planner_task = t;
+    }
     // Devolver a Dimensionado desde Alistamiento → cancelar reserva activa
     // y liberar items para que la próxima auto-reserva funcione.
     if (def.action === 'operations_back_to_dimensionado') {
@@ -770,6 +779,86 @@ async function autoReserveInventoryForProject(
     reserved: reservedItems.map((it) => ({ family: it.family, serial: it.serial_number })),
     shortages,
   };
+}
+
+/**
+ * Auto-crea una tarea en planner_tasks para una instalación.
+ * start_date = installation_date, due_date = installation_date + 2 días
+ * (ventana típica de obra: instalación + configuración + puesta en marcha).
+ * Idempotente: si ya existe una task del proyecto con tag 'instalacion-auto', no duplica.
+ */
+type CrmProjectFull = {
+  id: string; code: string | null; title: string; casa_numero: string | null;
+  conjunto: string | null; client_name: string | null;
+  contractor_name: string | null; contractor_email: string | null;
+  installation_date: string | null;
+};
+async function createPlannerTaskInstalacion(project: CrmProjectFull, actorEmail: string | null): Promise<null | { id: string; title: string }> {
+  if (!project.installation_date) return null;
+
+  // Idempotente: no duplicar
+  const { data: existing } = await supabaseAdmin
+    .from('planner_tasks')
+    .select('id')
+    .eq('project_id', project.id)
+    .contains('tags', ['instalacion-auto'])
+    .maybeSingle();
+  if (existing) return null;
+
+  const dueDate = new Date(project.installation_date);
+  dueDate.setDate(dueDate.getDate() + 2);
+  const dueDateStr = dueDate.toISOString().slice(0, 10);
+
+  const casaLabel = project.conjunto && project.casa_numero
+    ? `${project.conjunto} · Casa ${project.casa_numero}`
+    : (project.casa_numero ? `Casa ${project.casa_numero}` : (project.client_name ?? project.title));
+
+  const { data: task, error } = await supabaseAdmin
+    .from('planner_tasks')
+    .insert({
+      title: `Instalación: ${casaLabel}`,
+      description: `Instalación física del sistema solar. Proyecto ${project.code ?? project.title}.\nContratista: ${project.contractor_name ?? '—'}.`,
+      assigned_to: project.contractor_email ?? project.contractor_name ?? actorEmail,
+      urgency: 'medium',
+      status: 'todo',
+      start_date: project.installation_date,
+      due_date: dueDateStr,
+      tags: ['instalacion-auto', 'construccion'],
+      team: 'Construcción',
+      project_id: project.id,
+      created_by: actorEmail,
+    })
+    .select('id, title')
+    .single();
+  if (error) return null;
+  return task;
+}
+
+/**
+ * Auto-crea una tarea para un ticket de logística inversa (garantía / cambio).
+ * Sin start/due — el usuario las ajusta después.
+ */
+async function createPlannerTaskTicket(project: CrmProjectFull, actorEmail: string | null, motivo: string | undefined): Promise<null | { id: string; title: string }> {
+  const casaLabel = project.conjunto && project.casa_numero
+    ? `${project.conjunto} · Casa ${project.casa_numero}`
+    : (project.client_name ?? project.title);
+  const { data: task, error } = await supabaseAdmin
+    .from('planner_tasks')
+    .insert({
+      title: `Ticket garantía / cambio: ${casaLabel}`,
+      description: motivo ?? `Ticket abierto en proyecto ${project.code ?? project.title}.`,
+      assigned_to: actorEmail,
+      urgency: 'high',
+      status: 'todo',
+      tags: ['logistica-inversa-auto', 'garantia'],
+      team: 'Operaciones',
+      project_id: project.id,
+      created_by: actorEmail,
+    })
+    .select('id, title')
+    .single();
+  if (error) return null;
+  return task;
 }
 
 /**

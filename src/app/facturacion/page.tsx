@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { Receipt, Download, Search, Pencil, X, Check, Loader2, MapPin, Tag, Layers, HardHat, Boxes, DollarSign, Wrench, Calculator, Lock, Unlock, History, Upload, Snowflake, AlertTriangle, FileText } from 'lucide-react';
+import { Receipt, Download, Search, Pencil, X, Check, Loader2, MapPin, Tag, Layers, HardHat, Boxes, DollarSign, Wrench, Calculator, Lock, Unlock, History, Upload, Snowflake, AlertTriangle, FileText, FileSignature } from 'lucide-react';
 
 interface Row {
   project_id: string;
@@ -23,6 +23,15 @@ interface Row {
   operador_telefonia: string | null;
   cuadrilla: string | null;
   tecnico_instalador: string | null;
+  // Contrato comercial
+  contract_type: string | null;
+  contract_status: string | null;
+  contract_start_date: string | null;
+  contract_duration_months: number | null;
+  contract_url: string | null;
+  tariff_cop_per_kwh: number | null;
+  monthly_fee_cop: number | null;
+  system_warranty_months: number | null;
   solucion: string | null;
   plan: string | null;
   paneles: number | null;
@@ -178,6 +187,19 @@ const GROUPS: Group[] = [
     cols: [
       { key: 'mano_de_obra',         label: 'Mano de Obra',           type: 'money', editable: true, minWidth: 130 },
       { key: 'desmantelamiento_mo',  label: 'Desmantelamiento x MO',  type: 'money', editable: true, minWidth: 160 },
+    ],
+  },
+  {
+    id: 'contrato', label: 'Contrato comercial', Icon: FileSignature, color: '#0ea5e9',
+    cols: [
+      { key: 'contract_type',            label: 'Tipo contrato',     type: 'text',  editable: true, minWidth: 130 },
+      { key: 'contract_status',          label: 'Estado contrato',   type: 'text',  editable: true, minWidth: 140 },
+      { key: 'contract_start_date',      label: 'Fecha inicio',      type: 'text',  editable: true, minWidth: 120 },
+      { key: 'contract_duration_months', label: 'Duración (meses)',  type: 'num',   editable: true, minWidth: 110 },
+      { key: 'tariff_cop_per_kwh',       label: 'Tarifa COP/kWh',    type: 'money', editable: true, minWidth: 120 },
+      { key: 'monthly_fee_cop',          label: 'Cuota fija/mes',    type: 'money', editable: true, minWidth: 130 },
+      { key: 'system_warranty_months',   label: 'Garantía (meses)',  type: 'num',   editable: true, minWidth: 120 },
+      { key: 'contract_url',             label: 'URL contrato',      type: 'text',  editable: true, minWidth: 160 },
     ],
   },
   {

@@ -354,6 +354,16 @@ export async function GET() {
       operador_red: (fact.operador_red as string | null) ?? null,
       has_record: factByProject.has(p.id),
 
+      // Contrato comercial (Fase 3)
+      contract_type:            (fact.contract_type            as string | null) ?? null,
+      contract_status:          (fact.contract_status          as string | null) ?? null,
+      contract_start_date:      (fact.contract_start_date      as string | null) ?? null,
+      contract_duration_months: (fact.contract_duration_months as number | null) ?? null,
+      contract_url:             (fact.contract_url             as string | null) ?? null,
+      tariff_cop_per_kwh:       (fact.tariff_cop_per_kwh       as number | null) ?? null,
+      monthly_fee_cop:          (fact.monthly_fee_cop          as number | null) ?? null,
+      system_warranty_months:   (fact.system_warranty_months   as number | null) ?? 120,
+
       // Freeze state
       frozen_at: (fact.frozen_at as string | null) ?? null,
       frozen_by: (fact.frozen_by as string | null) ?? null,
@@ -384,8 +394,14 @@ const EDITABLE_NUM = [
   'costo_inversor', 'costo_bateria', 'costo_control_box', 'costo_top_cover',
   'costo_panel_solar', 'costo_medidor_solar', 'costo_medidor_generacion', 'costo_modem',
   'mano_de_obra', 'desmantelamiento_mo', 'capex',
+  // Contrato comercial (Fase 3)
+  'contract_duration_months', 'tariff_cop_per_kwh', 'monthly_fee_cop', 'system_warranty_months',
 ] as const;
-const EDITABLE_STR = ['solucion', 'plan', 'operador_red', 'notes'] as const;
+const EDITABLE_STR = [
+  'solucion', 'plan', 'operador_red', 'notes',
+  // Contrato comercial (Fase 3)
+  'contract_type', 'contract_status', 'contract_start_date', 'contract_url',
+] as const;
 
 /**
  * PATCH /api/facturacion

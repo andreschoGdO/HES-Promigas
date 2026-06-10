@@ -10,7 +10,7 @@ const supa = () => createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias' | 'panorama' | 'inversa' | 'bodegas';
+type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias' | 'panorama' | 'inversa' | 'transferencias';
 
 interface Category {
   id: string;
@@ -150,10 +150,10 @@ const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu }> 
   ubicaciones: { label: 'Ubicaciones', color: '#0ea5e9', Icon: MapPin },
   reservas:    { label: 'Reservas',    color: '#ec4899', Icon: ClipboardList },
   movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History },
-  categorias:  { label: 'Categorías',          color: '#10b981', Icon: Tags },
-  bodegas:     { label: 'Bodegas',              color: '#0ea5e9', Icon: Building2 },
-  panorama:    { label: 'Panorama',             color: '#07c5a8', Icon: Boxes },
-  inversa:     { label: 'Logística inversa',    color: '#ef4444', Icon: Repeat },
+  categorias:     { label: 'Categorías',          color: '#10b981', Icon: Tags },
+  transferencias: { label: 'Transferencias',       color: '#0ea5e9', Icon: Truck },
+  panorama:       { label: 'Panorama',             color: '#07c5a8', Icon: Boxes },
+  inversa:        { label: 'Logística inversa',    color: '#ef4444', Icon: Repeat },
 };
 
 const LOCATION_TYPE_META: Record<string, { label: string; color: string; Icon: typeof Cpu }> = {
@@ -269,11 +269,11 @@ export default function InventarioPage() {
 
       {tab === 'equipos' && <EquiposTab userEmail={userEmail} />}
       {tab === 'consumibles' && <ConsumiblesTab userEmail={userEmail} />}
-      {tab === 'ubicaciones' && <UbicacionesTab />}
+      {tab === 'ubicaciones' && <BodegasTab userEmail={userEmail} />}
       {tab === 'reservas' && <ReservasTab userEmail={userEmail} />}
       {tab === 'movimientos' && <MovimientosTab />}
       {tab === 'categorias' && <CategoriasTab />}
-      {tab === 'bodegas' && <BodegasTab userEmail={userEmail} />}
+      {tab === 'transferencias' && <TransferenciasTab userEmail={userEmail} />}
       {tab === 'panorama' && <PanoramaTab />}
       {tab === 'inversa' && <LogisticaInversaTab />}
     </div>
@@ -1614,6 +1614,392 @@ function PanoramaKpi({ label, value, sub, color, Icon }: { label: string; value:
   );
 }
 
+/* ─── Tab Transferencias: documentos formales draft → in_transit → received ─── */
+
+type Transfer = {
+  id: string;
+  code: string;
+  status: 'draft' | 'in_transit' | 'received' | 'cancelled';
+  shipped_at: string | null;
+  received_at: string | null;
+  cancelled_at: string | null;
+  shipped_by: string | null;
+  received_by: string | null;
+  carrier: string | null;
+  tracking_number: string | null;
+  notes: string | null;
+  created_at: string;
+  from_warehouse: { id: string; code: string; name: string } | null;
+  to_warehouse: { id: string; code: string; name: string } | null;
+  inventory_transfer_items?: Array<{ id: string; picked: boolean; received: boolean; inventory_items: { id: string; serial_number: string; brand: string | null; model: string | null; inventory_categories?: { name: string; family: string } | null } | null }>;
+  inventory_transfer_consumables?: Array<{ id: string; quantity: number; received_quantity: number | null; inventory_consumables: { id: string; name: string; sku: string | null; unit: string; stock_quantity: number } | null }>;
+};
+
+const TRANSFER_STATUS_META: Record<string, { label: string; color: string }> = {
+  draft:      { label: 'Borrador',    color: '#94a3b8' },
+  in_transit: { label: 'En tránsito', color: '#f59e0b' },
+  received:   { label: 'Recibida',    color: '#10b981' },
+  cancelled:  { label: 'Cancelada',   color: '#ef4444' },
+};
+
+function TransferenciasTab({ userEmail }: { userEmail: string }) {
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [showCreate, setShowCreate] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const params = filterStatus !== 'all' ? `?status=${filterStatus}` : '';
+      const r = await fetch(`/api/inventory/transfers${params}`);
+      const j = await r.json();
+      setTransfers(j.transfers ?? []);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterStatus]);
+
+  const doAction = async (id: string, action: 'ship' | 'receive' | 'cancel') => {
+    const confirmMsg = action === 'ship' ? 'Marcar como ENVIADA? Los consumibles se descontarán de la bodega origen.'
+      : action === 'receive' ? 'Confirmar RECEPCIÓN en destino? Los items y stock pasan a la bodega destino.'
+      : 'Cancelar la transferencia? Si estaba en tránsito, el stock vuelve a origen.';
+    if (!confirm(confirmMsg)) return;
+    const r = await fetch(`/api/inventory/transfers/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, actor_email: userEmail }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(j.error ?? 'Error');
+      return;
+    }
+    load();
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm('¿Eliminar esta transferencia? Solo se borran en draft o canceladas.')) return;
+    const r = await fetch(`/api/inventory/transfers/${id}`, { method: 'DELETE' });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(j.error ?? 'Error');
+      return;
+    }
+    load();
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Transferencias entre bodegas</h2>
+        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+          Documentos formales con tracking. Borrador → Enviada → Recibida.
+        </span>
+        <button onClick={() => setShowCreate(true)} className="primary-btn" style={{ marginLeft: 'auto', background: '#0ea5e9' }}>
+          <Plus size={14} /> Nueva transferencia
+        </button>
+      </div>
+
+      <div style={{ marginBottom: 14, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <button className={`chip ${filterStatus === 'all' ? 'active' : ''}`} onClick={() => setFilterStatus('all')}>Todas</button>
+        {(Object.keys(TRANSFER_STATUS_META) as Array<keyof typeof TRANSFER_STATUS_META>).map((k) => (
+          <button key={k} className={`chip ${filterStatus === k ? 'active' : ''}`} onClick={() => setFilterStatus(k)} style={{ borderLeft: `3px solid ${TRANSFER_STATUS_META[k].color}` }}>
+            {TRANSFER_STATUS_META[k].label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
+      ) : transfers.length === 0 ? (
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+          Sin transferencias para este filtro. Crea una para mover equipos masivamente entre bodegas con tracking formal.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {transfers.map((t) => {
+            const meta = TRANSFER_STATUS_META[t.status];
+            const itemCount = t.inventory_transfer_items?.length ?? 0;
+            const consCount = t.inventory_transfer_consumables?.length ?? 0;
+            return (
+              <div key={t.id} className="glass-panel" style={{ padding: 14, borderLeft: `4px solid ${meta.color}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <h3 style={{ margin: 0, fontSize: '0.98rem', fontFamily: 'ui-monospace, monospace' }}>{t.code}</h3>
+                      <span style={{ padding: '2px 10px', borderRadius: 10, background: meta.color + '20', color: meta.color, fontSize: '0.7rem', fontWeight: 700 }}>{meta.label}</span>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text)' }}>
+                      <strong>{t.from_warehouse?.name ?? '?'}</strong>
+                      <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>→</span>
+                      <strong>{t.to_warehouse?.name ?? '?'}</strong>
+                    </div>
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                      {itemCount > 0 && <>{itemCount} equipo{itemCount === 1 ? '' : 's'}</>}
+                      {itemCount > 0 && consCount > 0 && ' · '}
+                      {consCount > 0 && <>{consCount} consumible{consCount === 1 ? '' : 's'}</>}
+                      {t.carrier && <> · {t.carrier}</>}
+                      {t.tracking_number && <> · {t.tracking_number}</>}
+                      <> · creada {new Date(t.created_at).toLocaleDateString('es-CO')}</>
+                      {t.shipped_at && <> · enviada {new Date(t.shipped_at).toLocaleDateString('es-CO')}</>}
+                      {t.received_at && <> · recibida {new Date(t.received_at).toLocaleDateString('es-CO')}</>}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {t.status === 'draft' && (
+                      <>
+                        <button onClick={() => doAction(t.id, 'ship')} className="primary-btn" disabled={itemCount === 0 && consCount === 0} style={{ fontSize: '0.78rem', padding: '6px 12px', background: '#f59e0b' }}>
+                          Enviar →
+                        </button>
+                        <button onClick={() => doAction(t.id, 'cancel')} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px', color: '#ef4444' }}>
+                          Cancelar
+                        </button>
+                      </>
+                    )}
+                    {t.status === 'in_transit' && (
+                      <>
+                        <button onClick={() => doAction(t.id, 'receive')} className="primary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px', background: '#10b981' }}>
+                          Confirmar recepción →
+                        </button>
+                        <button onClick={() => doAction(t.id, 'cancel')} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px', color: '#ef4444' }}>
+                          Cancelar (restituir stock)
+                        </button>
+                      </>
+                    )}
+                    {(t.status === 'draft' || t.status === 'cancelled') && (
+                      <button onClick={() => remove(t.id)} title="Eliminar" style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Líneas */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {t.inventory_transfer_items?.map((line) => {
+                    const it = line.inventory_items;
+                    if (!it) return null;
+                    return (
+                      <div key={line.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: '0.74rem', borderLeft: '3px solid #3b82f6' }}>
+                        <Cpu size={11} style={{ color: '#3b82f6' }} />
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{it.serial_number}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>·</span>
+                        <span>{it.inventory_categories?.name ?? [it.brand, it.model].filter(Boolean).join(' ')}</span>
+                        {line.received && <CheckCircle2 size={11} style={{ color: '#10b981' }} />}
+                      </div>
+                    );
+                  })}
+                  {t.inventory_transfer_consumables?.map((line) => {
+                    const c = line.inventory_consumables;
+                    if (!c) return null;
+                    return (
+                      <div key={line.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: '0.74rem', borderLeft: '3px solid #8b5cf6' }}>
+                        <Cable size={11} style={{ color: '#8b5cf6' }} />
+                        <span>{c.name}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>·</span>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{line.quantity} {c.unit}</span>
+                        {line.received_quantity != null && Number(line.received_quantity) !== Number(line.quantity) && (
+                          <span style={{ color: '#f59e0b' }}>(rec: {line.received_quantity})</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {t.notes && (
+                  <div style={{ marginTop: 8, fontSize: '0.74rem', color: 'var(--text-muted)' }}>{t.notes}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showCreate && <NewTransferModal userEmail={userEmail} onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); load(); }} />}
+    </>
+  );
+}
+
+function NewTransferModal({ userEmail, onClose, onSaved }: { userEmail: string; onClose: () => void; onSaved: () => void }) {
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [fromId, setFromId] = useState('');
+  const [toId, setToId] = useState('');
+  const [items, setItems] = useState<InvItem[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [consumibles, setConsumibles] = useState<ConsumableOpt[]>([]);
+  const [consQty, setConsQty] = useState<Record<string, string>>({});
+  const [carrier, setCarrier] = useState('');
+  const [tracking, setTracking] = useState('');
+  const [notes, setNotes] = useState('');
+  const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/inventory/warehouses?active=true').then((r) => r.json()).then((j) => setWarehouses(j.warehouses ?? []));
+    fetch('/api/inventory/consumables').then((r) => r.json()).then((j) => setConsumibles(j.consumables ?? []));
+  }, []);
+
+  useEffect(() => {
+    // Cargar items in_stock de la bodega origen
+    if (!fromId) { setItems([]); return; }
+    fetch(`/api/inventory/items?status=in_stock&limit=500`)
+      .then((r) => r.json())
+      .then((j) => {
+        const filtered = ((j.items ?? []) as InvItem[]).filter((it) => it.warehouse_id === fromId);
+        setItems(filtered);
+      });
+  }, [fromId]);
+
+  const filteredItems = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return items;
+    return items.filter((it) =>
+      it.serial_number.toLowerCase().includes(q) ||
+      (it.brand ?? '').toLowerCase().includes(q) ||
+      (it.model ?? '').toLowerCase().includes(q) ||
+      (it.inventory_categories?.name ?? '').toLowerCase().includes(q),
+    );
+  }, [items, search]);
+
+  const submit = async () => {
+    setErr(null);
+    if (!fromId || !toId) { setErr('Selecciona origen y destino'); return; }
+    if (fromId === toId) { setErr('Origen y destino no pueden ser la misma bodega'); return; }
+    const consLines = Object.entries(consQty)
+      .map(([id, q]) => ({ id, quantity: Number(q) }))
+      .filter((c) => Number.isFinite(c.quantity) && c.quantity > 0);
+    if (selectedItemIds.size === 0 && consLines.length === 0) {
+      setErr('Selecciona al menos un equipo o consumible'); return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch('/api/inventory/transfers', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from_warehouse_id: fromId,
+          to_warehouse_id: toId,
+          item_ids: Array.from(selectedItemIds),
+          consumables: consLines,
+          carrier: carrier.trim() || null,
+          tracking_number: tracking.trim() || null,
+          notes: notes.trim() || null,
+          created_by: userEmail,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Nueva transferencia" onClose={onClose}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Bodega origen *</label>
+          <select value={fromId} onChange={(e) => { setFromId(e.target.value); setSelectedItemIds(new Set()); }}>
+            <option value="">— Selecciona —</option>
+            {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Bodega destino *</label>
+          <select value={toId} onChange={(e) => setToId(e.target.value)}>
+            <option value="">— Selecciona —</option>
+            {warehouses.filter((w) => w.id !== fromId).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Transportadora</label>
+          <input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Servientrega, propio, etc." />
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Nº guía / tracking</label>
+          <input value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder="GU-2026-001" />
+        </div>
+      </div>
+
+      {fromId && (
+        <>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Equipos disponibles en la bodega origen ({filteredItems.length})
+          </div>
+          <div style={{ position: 'relative', marginBottom: 8 }}>
+            <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input type="text" placeholder="Buscar serial, marca, modelo…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: '100%', paddingLeft: 32 }} />
+          </div>
+          <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12 }}>
+            {filteredItems.length === 0 ? (
+              <div style={{ padding: 12, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                {items.length === 0 ? 'Sin items in_stock en esta bodega' : 'Ningún item coincide'}
+              </div>
+            ) : filteredItems.map((it) => (
+              <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: selectedItemIds.has(it.id) ? 'rgba(14,165,233,0.06)' : 'transparent' }}>
+                <input type="checkbox" checked={selectedItemIds.has(it.id)} onChange={() => {
+                  setSelectedItemIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(it.id)) next.delete(it.id); else next.add(it.id);
+                    return next;
+                  });
+                }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.76rem', fontWeight: 600 }}>{it.serial_number}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{it.inventory_categories?.name ?? '—'} · {[it.brand, it.model].filter(Boolean).join(' ')}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+
+          {consumibles.length > 0 && (
+            <>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                Consumibles a transferir
+              </div>
+              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12 }}>
+                {consumibles.map((c) => {
+                  const qty = consQty[c.id] ?? '';
+                  const qtyNum = Number(qty);
+                  const overStock = Number.isFinite(qtyNum) && qtyNum > c.stock_quantity;
+                  return (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 500 }}>{c.name}</div>
+                        <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)' }}>Stock: <strong>{c.stock_quantity} {c.unit}</strong></div>
+                      </div>
+                      <input type="number" min={0} placeholder="0" value={qty} onChange={(e) => setConsQty((p) => ({ ...p, [c.id]: e.target.value }))} style={{ width: 70, padding: '4px 6px', borderRadius: 4, border: `1px solid ${overStock ? '#ef4444' : 'var(--border)'}`, background: 'var(--bg)', color: 'var(--text)', fontSize: '0.78rem', textAlign: 'right' }} />
+                      <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', width: 24 }}>{c.unit}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Notas</label>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} style={{ width: '100%' }} />
+      </div>
+
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem', whiteSpace: 'pre-line' }}>{err}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={() => void submit()} className="primary-btn" disabled={saving} style={{ background: '#0ea5e9' }}>
+          {saving ? 'Creando…' : 'Crear borrador'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* ─── Tab Logística inversa: tabla de operaciones reversas ─── */
 
 const REVERSE_MOVE_TYPES = ['uninstall', 'decommission', 'rma_send', 'unreserve'] as const;
@@ -2603,7 +2989,9 @@ function ItemHistoryModal({ item, onClose }: { item: InvItem; onClose: () => voi
   );
 }
 
-/* ═════════════ UBICACIONES ═════════════ */
+/* ═════════════ UBICACIONES (LEGACY) ═════════════ */
+// Tab "Ubicaciones" ahora renderiza BodegasTab (warehouses, FK en items).
+// Este código queda como dead code mientras migramos completamente.
 interface InvLocation {
   id: string;
   code: string;

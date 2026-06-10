@@ -967,6 +967,7 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
     contractor_email: project.contractor_email ?? '',
     installation_date: project.installation_date ?? '',
     lectura_inicial_kwh: project.lectura_inicial_kwh != null ? String(project.lectura_inicial_kwh) : '',
+    house_id: project.house_id ?? '',
     notes: project.notes ?? '',
   }), [project]);
 
@@ -1017,6 +1018,8 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
     // Instalación (lectura inicial + acta de instalación)
     lectura_inicial_kwh: 'instalacion',
     visita_instalacion_id: 'instalacion',
+    // Vincular casa (puede hacerse en cualquier etapa pero es obligatorio para Operativo)
+    house_id: 'dimensionado',
   };
 
   const submit = async () => {
@@ -1090,6 +1093,20 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
           <FormField label="Estrato" type="number" value={form.estrato} onChange={(v) => set('estrato', v)} disabled={!canEdit('dimensionado')} />
           <FormFieldSelect label="Carga carro eléctrico" value={form.carga_carro_electrico} onChange={(v) => set('carga_carro_electrico', v)}
             options={['No tenemos carro eléctrico', 'Sí - Wallbox 7 kW', 'Sí - Wallbox 11 kW', 'Sí - Wallbox 22 kW', 'Sí - otro']} fullWidth disabled={!canEdit('dimensionado')} />
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>
+              Casa vinculada (de client_houses)
+            </label>
+            <HousePicker
+              value={form.house_id}
+              onChange={(v) => set('house_id', v)}
+              casaHint={form.casa_numero || form.conjunto || null}
+              disabled={!canEdit('dimensionado')}
+            />
+            <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+              Vincula el proyecto con su casa física (la que aparece en Metrum). Es obligatorio para pasar a Operativo. El sistema intenta auto-vincular por número de casa al transicionar.
+            </p>
+          </div>
         </StageSection>
 
         <StageSection title="Dimensionado" stage="dimensionado" canEdit={canEdit('dimensionado')}>
@@ -1593,6 +1610,117 @@ function FormFieldSelect({ label, value, onChange, options, fullWidth, disabled 
 }
 
 /** Select específico para categorías del inventario: la key es el id, el label es el nombre. */
+/** Picker buscable de client_houses para vincular un proyecto. */
+function HousePicker({ value, onChange, casaHint, disabled }: {
+  value: string; onChange: (v: string) => void;
+  casaHint?: string | null; disabled?: boolean;
+}) {
+  type House = { id: string; casa: string; cliente_id: string; location: string | null; city: string | null };
+  const [houses, setHouses] = useState<House[]>([]);
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/houses')
+      .then((r) => r.json())
+      .then((j) => setHouses(j.houses ?? []))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const sorted = useMemo(() => {
+    if (!casaHint) return houses;
+    const hint = casaHint.toLowerCase();
+    const matches = houses.filter((h) => h.casa.toLowerCase().includes(hint));
+    const rest = houses.filter((h) => !h.casa.toLowerCase().includes(hint));
+    return [...matches, ...rest];
+  }, [houses, casaHint]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return sorted;
+    const s = search.toLowerCase();
+    return sorted.filter((h) =>
+      h.casa.toLowerCase().includes(s) ||
+      (h.location ?? '').toLowerCase().includes(s) ||
+      (h.city ?? '').toLowerCase().includes(s)
+    );
+  }, [sorted, search]);
+
+  const selected = houses.find((h) => h.id === value);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => { if (!disabled) setOpen((v) => !v); }}
+        disabled={disabled}
+        style={{
+          width: '100%', textAlign: 'left',
+          padding: '8px 10px',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.5 : 1,
+          fontSize: '0.82rem',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}
+      >
+        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {selected ? `${selected.casa}${selected.city ? ' · ' + selected.city : ''}` : <span style={{ color: 'var(--text-muted)' }}>— Sin casa vinculada —</span>}
+        </span>
+        <span style={{ color: 'var(--text-muted)', flexShrink: 0, marginLeft: 8 }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 60, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: 320, overflow: 'auto' }}>
+          <input
+            type="text"
+            placeholder="Buscar casa, ubicación, ciudad…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoFocus
+            style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: '0.82rem' }}
+          />
+          {value && (
+            <button
+              type="button"
+              onClick={() => { onChange(''); setOpen(false); setSearch(''); }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', borderBottom: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: '0.78rem', color: 'var(--text-muted)' }}
+            >
+              Quitar vínculo
+            </button>
+          )}
+          {loading ? (
+            <div style={{ padding: 12, fontSize: '0.8rem', color: 'var(--text-muted)' }}>Cargando…</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 12, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              {houses.length === 0 ? 'No hay casas en client_houses. Créalas con /api/houses/build una vez los devices estén en Metrum.' : 'Sin resultados para esa búsqueda.'}
+            </div>
+          ) : (
+            filtered.slice(0, 100).map((h) => (
+              <button
+                key={h.id}
+                type="button"
+                onClick={() => { onChange(h.id); setOpen(false); setSearch(''); }}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '8px 10px', border: 'none', borderBottom: '1px solid var(--border)',
+                  background: h.id === value ? 'rgba(7, 197, 168, 0.08)' : 'transparent', cursor: 'pointer',
+                }}
+              >
+                <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>{h.casa}</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  {[h.city, h.location].filter(Boolean).join(' · ') || h.cliente_id.slice(0, 8)}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CategoryPicker({ label, value, onChange, options, fullWidth, disabled }: {
   label: string; value: string; onChange: (v: string) => void;
   options: Array<{ id: string; name: string }>; fullWidth?: boolean; disabled?: boolean;

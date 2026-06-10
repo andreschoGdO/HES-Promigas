@@ -268,14 +268,36 @@ export async function POST(request: Request, context: Ctx) {
       if (!projOp) {
         return NextResponse.json({ error: 'Proyecto no encontrado al verificar instalación' }, { status: 404 });
       }
-      // Validaciones bloqueantes
-      if (!projOp.house_id) {
+      // Validaciones bloqueantes — auto-resolver house_id si no está pero el
+      // proyecto tiene casa_numero que matchea con una client_houses.
+      let resolvedHouseId = projOp.house_id;
+      if (!resolvedHouseId) {
+        const { data: pCasaInfo } = await supabaseAdmin
+          .from('crm_projects').select('casa_numero, conjunto').eq('id', id).single();
+        const casaQuery = pCasaInfo?.casa_numero?.trim();
+        if (casaQuery) {
+          // Buscar coincidencia exacta o por sufijo "Casa N"
+          const { data: candidates } = await supabaseAdmin
+            .from('client_houses').select('id, casa').or(`casa.eq.${casaQuery},casa.ilike.%${casaQuery}`);
+          const list = candidates ?? [];
+          // Preferir match exacto sobre ilike
+          const exact = list.find((h) => h.casa === casaQuery);
+          const match = exact ?? list[0];
+          if (match) {
+            await supabaseAdmin.from('crm_projects').update({ house_id: match.id }).eq('id', id);
+            resolvedHouseId = match.id;
+          }
+        }
+      }
+      if (!resolvedHouseId) {
         await addProjectTag(id, 'sin casa');
         return NextResponse.json({
-          error: 'El proyecto no tiene casa asignada (house_id). Vincula la casa en /inicio antes de pasar a Operativo.',
+          error: 'El proyecto no tiene casa asignada. Abre el proyecto → clic en "Editar" → sección "Casa vinculada" y selecciona la casa. Si la casa no aparece, créala desde Metrum o usa /api/houses/build.',
         }, { status: 409 });
       }
       await removeProjectTag(id, 'sin casa');
+      // refresh projOp with resolved house_id
+      projOp.house_id = resolvedHouseId;
       if (!projOp.reservation_id) {
         return NextResponse.json({
           error: 'El proyecto no tiene reserva activa. Debió haberse creado en Alistamiento — vuelve a esa etapa.',

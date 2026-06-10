@@ -14,19 +14,27 @@ export async function GET(request: Request) {
   const q = url.searchParams.get('q');
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 500), 2000);
 
-  let query = supabaseAdmin
-    .from('inventory_items')
-    .select('*, inventory_categories(code, name, family), client_houses(casa), inventory_reservation_items(inventory_reservations(id, title, status))')
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  // Intentar con warehouses join (requiere migration 27). Si falla, fallback.
+  const SELECT_WITH_WH = '*, inventory_categories(code, name, family), client_houses(casa), inventory_reservation_items(inventory_reservations(id, title, status)), warehouses(id, code, name)';
+  const SELECT_LEGACY  = '*, inventory_categories(code, name, family), client_houses(casa), inventory_reservation_items(inventory_reservations(id, title, status))';
 
-  if (status) query = query.eq('status', status);
-  if (category) query = query.eq('category_id', category);
-  if (house) query = query.eq('current_house_id', house);
-  if (serial) query = query.eq('serial_number', serial);
-  if (q) query = query.or(`serial_number.ilike.%${q}%,brand.ilike.%${q}%,model.ilike.%${q}%,supplier.ilike.%${q}%`);
+  const buildQuery = (selectStr: string) => {
+    let q2 = supabaseAdmin
+      .from('inventory_items').select(selectStr)
+      .order('created_at', { ascending: false }).limit(limit);
+    if (status) q2 = q2.eq('status', status);
+    if (category) q2 = q2.eq('category_id', category);
+    if (house) q2 = q2.eq('current_house_id', house);
+    if (serial) q2 = q2.eq('serial_number', serial);
+    if (q) q2 = q2.or(`serial_number.ilike.%${q}%,brand.ilike.%${q}%,model.ilike.%${q}%,supplier.ilike.%${q}%`);
+    return q2;
+  };
 
-  const { data, error } = await query;
+  let { data, error } = await buildQuery(SELECT_WITH_WH);
+  if (error && /warehouses|schema cache/i.test(error.message)) {
+    const fb = await buildQuery(SELECT_LEGACY);
+    data = fb.data; error = fb.error;
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ items: data });
 }

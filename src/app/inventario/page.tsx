@@ -10,7 +10,7 @@ const supa = () => createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias' | 'panorama' | 'inversa';
+type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias' | 'panorama' | 'inversa' | 'bodegas';
 
 interface Category {
   id: string;
@@ -47,6 +47,8 @@ interface InvItem {
   client_houses?: { casa: string } | null;
   // Reservas vinculadas (filtramos en frontend a la activa: draft o confirmed).
   inventory_reservation_items?: Array<{ inventory_reservations?: { id: string; title: string; status: string } | null }>;
+  warehouse_id?: string | null;
+  warehouses?: { id: string; code: string; name: string } | null;
 }
 
 interface Consumable {
@@ -149,6 +151,7 @@ const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu }> 
   reservas:    { label: 'Reservas',    color: '#ec4899', Icon: ClipboardList },
   movimientos: { label: 'Movimientos', color: '#f59e0b', Icon: History },
   categorias:  { label: 'Categorías',          color: '#10b981', Icon: Tags },
+  bodegas:     { label: 'Bodegas',              color: '#0ea5e9', Icon: Building2 },
   panorama:    { label: 'Panorama',             color: '#07c5a8', Icon: Boxes },
   inversa:     { label: 'Logística inversa',    color: '#ef4444', Icon: Repeat },
 };
@@ -270,6 +273,7 @@ export default function InventarioPage() {
       {tab === 'reservas' && <ReservasTab userEmail={userEmail} />}
       {tab === 'movimientos' && <MovimientosTab />}
       {tab === 'categorias' && <CategoriasTab />}
+      {tab === 'bodegas' && <BodegasTab userEmail={userEmail} />}
       {tab === 'panorama' && <PanoramaTab />}
       {tab === 'inversa' && <LogisticaInversaTab />}
     </div>
@@ -315,6 +319,15 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
   const [swapItem, setSwapItem] = useState<InvItem | null>(null);
   const [returnItem, setReturnItem] = useState<InvItem | null>(null);
   const [decommItem, setDecommItem] = useState<InvItem | null>(null);
+  // Multi-select para transferencia masiva entre bodegas
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showTransfer, setShowTransfer] = useState(false);
+  const toggleSelect = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const clearSelection = () => setSelectedIds(new Set());
 
   const load = async () => {
     setLoading(true);
@@ -364,6 +377,21 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
         )}
       </div>
 
+      {/* Barra de acciones bulk — visible solo con ≥1 seleccionado */}
+      {selectedIds.size > 0 && (
+        <div style={{ marginBottom: 14, padding: 12, borderRadius: 10, background: 'rgba(14,165,233,0.10)', border: '1px solid rgba(14,165,233,0.3)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#0ea5e9' }}>
+            {selectedIds.size} equipo{selectedIds.size === 1 ? '' : 's'} seleccionado{selectedIds.size === 1 ? '' : 's'}
+          </span>
+          <button onClick={() => setShowTransfer(true)} className="primary-btn" style={{ background: '#0ea5e9' }}>
+            <Truck size={14} /> Transferir entre bodegas
+          </button>
+          <button onClick={clearSelection} className="secondary-btn">
+            Limpiar selección
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
       ) : items.length === 0 ? (
@@ -378,10 +406,25 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
             <table style={{ width: '100%', fontSize: '0.82rem' }}>
               <thead>
                 <tr>
+                  <th style={{ width: 32, textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      title="Seleccionar todos los items en stock visibles"
+                      checked={items.length > 0 && items.filter((it) => it.status === 'in_stock').every((it) => selectedIds.has(it.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedIds(new Set(items.filter((it) => it.status === 'in_stock').map((it) => it.id)));
+                        } else {
+                          clearSelection();
+                        }
+                      }}
+                    />
+                  </th>
                   <th>Serial</th>
                   <th>Categoría</th>
                   <th>Marca / Modelo</th>
                   <th>Estado</th>
+                  <th>Bodega</th>
                   <th>Destino / ubicación</th>
                   <th>Garantía</th>
                   <th style={{ textAlign: 'right' }}>Acciones</th>
@@ -390,13 +433,36 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
               <tbody>
                 {items.map((it) => {
                   const meta = STATUS_META[it.status];
+                  const canSelect = it.status === 'in_stock';
                   return (
-                    <tr key={it.id}>
+                    <tr key={it.id} style={{ background: selectedIds.has(it.id) ? 'rgba(14,165,233,0.06)' : undefined }}>
+                      <td style={{ textAlign: 'center' }}>
+                        {canSelect ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(it.id)}
+                            onChange={() => toggleSelect(it.id)}
+                            title="Seleccionar para transferir"
+                          />
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.62rem' }}>—</span>
+                        )}
+                      </td>
                       <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem', fontWeight: 600 }}>{it.serial_number}</td>
                       <td style={{ fontSize: '0.78rem' }}>{it.inventory_categories?.name ?? '—'}</td>
                       <td style={{ fontSize: '0.78rem' }}>{[it.brand, it.model].filter(Boolean).join(' · ') || '—'}</td>
                       <td>
                         <span style={{ padding: '2px 10px', borderRadius: 10, background: meta.color + '20', color: meta.color, fontSize: '0.7rem', fontWeight: 700 }}>{meta.label}</span>
+                      </td>
+                      <td style={{ fontSize: '0.76rem' }}>
+                        {it.warehouses ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Building2 size={11} style={{ color: '#0ea5e9' }} />
+                            <span>{it.warehouses.name}</span>
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)' }}>—</span>
+                        )}
                       </td>
                       <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
                         <ItemDestination item={it} />
@@ -452,6 +518,14 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
       {swapItem && <SwapItemModal item={swapItem} userEmail={userEmail} onClose={() => setSwapItem(null)} onSaved={() => { setSwapItem(null); load(); }} />}
       {returnItem && <ReturnItemModal item={returnItem} userEmail={userEmail} onClose={() => setReturnItem(null)} onSaved={() => { setReturnItem(null); load(); }} />}
       {decommItem && <DecommissionItemModal item={decommItem} userEmail={userEmail} onClose={() => setDecommItem(null)} onSaved={() => { setDecommItem(null); load(); }} />}
+      {showTransfer && (
+        <BulkTransferModal
+          items={items.filter((it) => selectedIds.has(it.id))}
+          userEmail={userEmail}
+          onClose={() => setShowTransfer(false)}
+          onSaved={() => { setShowTransfer(false); clearSelection(); load(); }}
+        />
+      )}
     </>
   );
 }
@@ -1721,6 +1795,332 @@ function LogisticaInversaTab() {
         </div>
       )}
     </>
+  );
+}
+
+/* ─── Tab Bodegas: CRUD de almacenes ─── */
+
+type Warehouse = {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  city: string | null;
+  address: string | null;
+  manager_email: string | null;
+  notes: string | null;
+  is_active: boolean;
+  counts: { in_stock: number; reserved: number; installed: number; in_repair: number; decommissioned: number; total: number };
+  consumables_total: number;
+};
+
+const WAREHOUSE_TYPES = [
+  { value: 'central',   label: 'Bodega central' },
+  { value: 'cuadrilla', label: 'Bodega de cuadrilla' },
+  { value: 'vehiculo',  label: 'Vehículo / camioneta' },
+  { value: 'taller',    label: 'Taller / mantenimiento' },
+  { value: 'transito',  label: 'Tránsito (en ruta)' },
+  { value: 'proveedor', label: 'Proveedor externo' },
+  { value: 'otro',      label: 'Otro' },
+];
+
+function BodegasTab({ userEmail: _userEmail }: { userEmail: string }) {
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<Warehouse | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch('/api/inventory/warehouses');
+      const j = await r.json();
+      setWarehouses(j.warehouses ?? []);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { load(); }, []);
+
+  const remove = async (id: string, name: string) => {
+    if (!confirm(`¿Eliminar bodega "${name}"? Solo se puede borrar si no tiene items ni consumibles vinculados.`)) return;
+    const r = await fetch(`/api/inventory/warehouses?id=${id}`, { method: 'DELETE' });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(j.error ?? 'No se pudo eliminar');
+      return;
+    }
+    load();
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Bodegas</h2>
+        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+          Almacenes físicos donde viven equipos y consumibles. Cuadrillas, vehículos, taller, etc.
+        </span>
+        <button onClick={() => setShowAdd(true)} className="primary-btn" style={{ marginLeft: 'auto' }}>
+          <Plus size={14} /> Nueva bodega
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="glass-panel" style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
+      ) : warehouses.length === 0 ? (
+        <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
+          Aún no hay bodegas. Crea al menos una para asignar items y consumibles.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+          {warehouses.map((w) => {
+            const typeLabel = WAREHOUSE_TYPES.find((t) => t.value === w.type)?.label ?? w.type;
+            return (
+              <div key={w.id} className="glass-panel" style={{ padding: 16, borderLeft: '4px solid #0ea5e9', position: 'relative', opacity: w.is_active ? 1 : 0.55 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <Building2 size={18} style={{ color: '#0ea5e9' }} />
+                  <h3 style={{ margin: 0, fontSize: '0.95rem' }}>{w.name}</h3>
+                  {!w.is_active && (
+                    <span style={{ padding: '2px 6px', borderRadius: 6, background: 'rgba(100,116,139,0.2)', color: '#64748b', fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase' }}>Inactiva</span>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'ui-monospace, monospace', marginBottom: 4 }}>{w.code}</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginBottom: 8 }}>
+                  {typeLabel}{w.city && ` · ${w.city}`}
+                </div>
+                {w.manager_email && (
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 8 }}>Encargado: {w.manager_email}</div>
+                )}
+
+                {/* Conteos */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {Object.entries(w.counts).filter(([k]) => k !== 'total').map(([status, count]) => {
+                    if (count === 0) return null;
+                    const m = STATUS_META[status];
+                    if (!m) return null;
+                    return (
+                      <span key={status} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.66rem', fontWeight: 600, padding: '2px 7px', borderRadius: 10, background: m.color + '20', color: m.color }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: m.color }} />
+                        {m.label}: {count}
+                      </span>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '0.78rem', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                  <div>
+                    <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Equipos</div>
+                    <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{w.counts.total}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Consumibles</div>
+                    <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{w.consumables_total}</div>
+                  </div>
+                </div>
+
+                {/* Acciones */}
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 10 }}>
+                  <button onClick={() => setEditing(w)} title="Editar" style={{ padding: 6, background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', borderRadius: 4 }}>
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => remove(w.id, w.name)} title="Eliminar" style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {showAdd && <WarehouseModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load(); }} />}
+      {editing && <WarehouseModal warehouse={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load(); }} />}
+    </>
+  );
+}
+
+function WarehouseModal({ warehouse, onClose, onSaved }: { warehouse?: Warehouse; onClose: () => void; onSaved: () => void }) {
+  const editing = !!warehouse;
+  const [form, setForm] = useState({
+    code: warehouse?.code ?? '',
+    name: warehouse?.name ?? '',
+    type: warehouse?.type ?? 'central',
+    city: warehouse?.city ?? '',
+    address: warehouse?.address ?? '',
+    manager_email: warehouse?.manager_email ?? '',
+    notes: warehouse?.notes ?? '',
+    is_active: warehouse?.is_active ?? true,
+  });
+  const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    setErr(null);
+    if (!form.name.trim()) { setErr('Nombre requerido'); return; }
+    if (!editing && !form.code.trim()) { setErr('Código requerido'); return; }
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        name: form.name.trim(),
+        type: form.type,
+        city: form.city.trim() || null,
+        address: form.address.trim() || null,
+        manager_email: form.manager_email.trim() || null,
+        notes: form.notes.trim() || null,
+        is_active: form.is_active,
+      };
+      if (editing) {
+        payload.id = warehouse!.id;
+        const r = await fetch('/api/inventory/warehouses', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? 'Error');
+      } else {
+        payload.code = form.code.trim();
+        const r = await fetch('/api/inventory/warehouses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error ?? 'Error');
+      }
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title={editing ? `Editar bodega — ${warehouse!.name}` : 'Nueva bodega'} onClose={onClose}>
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Código {!editing && <span style={{ color: '#ef4444' }}>*</span>}</label>
+          <input value={form.code} onChange={(e) => set('code', e.target.value)} placeholder="CALI_CUADRILLA_1" disabled={editing} />
+          {!editing && <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '4px 0 0' }}>Mayúsculas, A-Z 0-9 _ — clave única.</p>}
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Nombre <span style={{ color: '#ef4444' }}>*</span></label>
+          <input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Cuadrilla Cali #1" />
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Tipo</label>
+          <select value={form.type} onChange={(e) => set('type', e.target.value)}>
+            {WAREHOUSE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Ciudad</label>
+          <input value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="Cali" />
+        </div>
+        <div className="input-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+          <label className="input-label">Dirección</label>
+          <input value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="Calle 16b 124 80" />
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Encargado (email)</label>
+          <input value={form.manager_email} onChange={(e) => set('manager_email', e.target.value)} placeholder="responsable@bia.app" />
+        </div>
+        <div className="input-group" style={{ margin: 0 }}>
+          <label className="input-label">Activa</label>
+          <select value={form.is_active ? '1' : '0'} onChange={(e) => set('is_active', e.target.value === '1')}>
+            <option value="1">Sí — operativa</option>
+            <option value="0">No — archivada</option>
+          </select>
+        </div>
+        <div className="input-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+          <label className="input-label">Notas</label>
+          <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={2} style={{ width: '100%' }} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={submit} className="primary-btn" disabled={saving}>{saving ? 'Guardando…' : (editing ? 'Guardar cambios' : 'Crear bodega')}</button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ─── Modal: Bulk Transfer (transferir N items entre bodegas) ─── */
+function BulkTransferModal({ items, userEmail, onClose, onSaved }: { items: InvItem[]; userEmail: string; onClose: () => void; onSaved: () => void }) {
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [toId, setToId] = useState('');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/inventory/warehouses?active=true').then((r) => r.json()).then((j) => setWarehouses(j.warehouses ?? []));
+  }, []);
+
+  const submit = async () => {
+    setErr(null);
+    if (!toId) { setErr('Selecciona la bodega destino'); return; }
+    setSaving(true);
+    try {
+      const r = await fetch('/api/inventory/items/bulk-transfer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to_warehouse_id: toId,
+          item_ids: items.map((it) => it.id),
+          reason: reason.trim() || null,
+          actor_email: userEmail,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      const msg = [
+        `Transferidos: ${j.items_moved ?? 0} equipos`,
+        ...(Array.isArray(j.items_skipped) && j.items_skipped.length > 0 ? [`Omitidos:\n${j.items_skipped.join('\n')}`] : []),
+      ].join('\n\n');
+      alert(msg);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Transferir equipos entre bodegas" onClose={onClose}>
+      <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.3)', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: '0.82rem' }}>
+        <strong>{items.length} equipo(s) seleccionado(s)</strong>
+        <div style={{ maxHeight: 100, overflowY: 'auto', marginTop: 6, fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+          {items.map((it) => (
+            <div key={it.id} style={{ fontFamily: 'ui-monospace, monospace' }}>
+              {it.serial_number} · {[it.brand, it.model].filter(Boolean).join(' ')}
+              {it.warehouses && <span style={{ color: 'var(--text-muted)' }}> · desde {it.warehouses.name}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Bodega destino *</label>
+        <select value={toId} onChange={(e) => setToId(e.target.value)}>
+          <option value="">— Selecciona —</option>
+          {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name} ({w.code})</option>)}
+        </select>
+        {warehouses.length === 0 && (
+          <p style={{ fontSize: '0.72rem', color: '#ef4444', margin: '4px 0 0' }}>
+            No hay bodegas activas. Crea una en el tab "Bodegas" primero.
+          </p>
+        )}
+      </div>
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Motivo / orden de transporte</label>
+        <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ej: Despacho semanal Cuadrilla 2, OT-2026-045" />
+      </div>
+
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={() => void submit()} className="primary-btn" disabled={saving || !toId} style={{ background: '#0ea5e9' }}>
+          {saving ? 'Transfiriendo…' : `Transferir ${items.length} equipo(s)`}
+        </button>
+      </div>
+    </ModalShell>
   );
 }
 

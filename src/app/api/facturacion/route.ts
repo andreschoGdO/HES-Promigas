@@ -364,6 +364,15 @@ export async function GET() {
       monthly_fee_cop:          (fact.monthly_fee_cop          as number | null) ?? null,
       system_warranty_months:   (fact.system_warranty_months   as number | null) ?? 120,
 
+      // Manuales adicionales (Fase 31)
+      revenue_billed_cop:           (fact.revenue_billed_cop           as number | null) ?? null,
+      balance_due_cop:              (fact.balance_due_cop              as number | null) ?? null,
+      first_billing_date:           (fact.first_billing_date           as string | null) ?? null,
+      salesperson:                  (fact.salesperson                  as string | null) ?? null,
+      contract_notes:               (fact.contract_notes               as string | null) ?? null,
+      acta_instalacion_url:         (fact.acta_instalacion_url         as string | null) ?? null,
+      certificado_legalizacion_url: (fact.certificado_legalizacion_url as string | null) ?? null,
+
       // Freeze state
       frozen_at: (fact.frozen_at as string | null) ?? null,
       frozen_by: (fact.frozen_by as string | null) ?? null,
@@ -396,11 +405,16 @@ const EDITABLE_NUM = [
   'mano_de_obra', 'desmantelamiento_mo', 'capex',
   // Contrato comercial (Fase 3)
   'contract_duration_months', 'tariff_cop_per_kwh', 'monthly_fee_cop', 'system_warranty_months',
+  // Manuales adicionales (Fase 31)
+  'revenue_billed_cop', 'balance_due_cop',
 ] as const;
 const EDITABLE_STR = [
   'solucion', 'plan', 'operador_red', 'notes',
   // Contrato comercial (Fase 3)
   'contract_type', 'contract_status', 'contract_start_date', 'contract_url',
+  // Manuales adicionales (Fase 31)
+  'first_billing_date', 'salesperson', 'contract_notes',
+  'acta_instalacion_url', 'certificado_legalizacion_url',
 ] as const;
 
 /**

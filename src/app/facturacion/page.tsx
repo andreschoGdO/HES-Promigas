@@ -32,6 +32,14 @@ interface Row {
   tariff_cop_per_kwh: number | null;
   monthly_fee_cop: number | null;
   system_warranty_months: number | null;
+  // Manuales adicionales
+  revenue_billed_cop: number | null;
+  balance_due_cop: number | null;
+  first_billing_date: string | null;
+  salesperson: string | null;
+  contract_notes: string | null;
+  acta_instalacion_url: string | null;
+  certificado_legalizacion_url: string | null;
   solucion: string | null;
   plan: string | null;
   paneles: number | null;
@@ -207,6 +215,23 @@ const GROUPS: Group[] = [
     cols: [
       { key: 'capex',        label: 'Capex', type: 'money', editable: true, minWidth: 130 },
       { key: 'operador_red', label: 'OR',    type: 'text',  editable: true, minWidth: 100 },
+    ],
+  },
+  {
+    id: 'cobros', label: 'Cobros (manual)', Icon: DollarSign, color: '#10b981',
+    cols: [
+      { key: 'revenue_billed_cop',  label: 'INGRESO FACTURADO',   type: 'money', editable: true, minWidth: 140 },
+      { key: 'balance_due_cop',     label: 'SALDO PENDIENTE',     type: 'money', editable: true, minWidth: 130 },
+      { key: 'first_billing_date',  label: 'F. PRIMER COBRO',     type: 'text',  editable: true, minWidth: 120 },
+    ],
+  },
+  {
+    id: 'documentacion', label: 'Comercial y documentos', Icon: FileText, color: '#8b5cf6',
+    cols: [
+      { key: 'salesperson',                  label: 'VENDEDOR',           type: 'text', editable: true, minWidth: 140 },
+      { key: 'contract_notes',               label: 'NOTAS CONTRATO',     type: 'text', editable: true, minWidth: 200 },
+      { key: 'acta_instalacion_url',         label: 'URL ACTA INSTAL.',   type: 'text', editable: true, minWidth: 160 },
+      { key: 'certificado_legalizacion_url', label: 'URL CERT. LEGAL.',   type: 'text', editable: true, minWidth: 160 },
     ],
   },
 ];

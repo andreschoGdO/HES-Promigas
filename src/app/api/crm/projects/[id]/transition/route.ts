@@ -181,6 +181,23 @@ export async function POST(request: Request, context: Ctx) {
     // Auto-stamps
     if (def.action === 'operations_to_operativo') updates.operativo_at = new Date().toISOString();
 
+    // ─── Preflight: validar prerequisitos ANTES de aplicar la transición ───
+    // Si alguno falla, la etapa NO cambia y el frontend recibe un mensaje claro.
+    if (def.action === 'operations_dimensionado_to_alistamiento') {
+      const preflight = await checkStockForAlistamiento(id);
+      if (!preflight.ok) {
+        // Auto-tag 'sin stock' para que el card lo refleje visualmente
+        await addProjectTag(id, 'sin stock');
+        return NextResponse.json({
+          error: preflight.message,
+          shortages: preflight.shortages,
+        }, { status: 409 });
+      } else {
+        // Si antes tenía el tag y ahora sí hay stock, lo limpiamos.
+        await removeProjectTag(id, 'sin stock');
+      }
+    }
+
     // UPDATE condicional con guard contra race: solo aplica si el estado no ha cambiado
     // desde nuestra lectura. Si otra request paralela ya ejecutó la transición, count=0.
     const stageCol = 'operations_stage';
@@ -231,6 +248,87 @@ export async function POST(request: Request, context: Ctx) {
 /* ──────────────────────────────────────────────────────────────────
  * Side effects: cablean el flujo de Construcción con Inventario y Facturación.
  * ────────────────────────────────────────────────────────────────── */
+
+const FAMILY_LABEL: Record<string, string> = {
+  inverter: 'Inversor', battery: 'Batería', panel: 'Panel',
+};
+
+/** Añade un tag al proyecto (idempotente, sin duplicados). */
+async function addProjectTag(projectId: string, tag: string): Promise<void> {
+  const { data: p } = await supabaseAdmin
+    .from('crm_projects')
+    .select('tags')
+    .eq('id', projectId)
+    .single();
+  const current = ((p?.tags ?? []) as string[]);
+  if (current.includes(tag)) return;
+  await supabaseAdmin
+    .from('crm_projects')
+    .update({ tags: [...current, tag] })
+    .eq('id', projectId);
+}
+
+/** Quita un tag del proyecto si existe. */
+async function removeProjectTag(projectId: string, tag: string): Promise<void> {
+  const { data: p } = await supabaseAdmin
+    .from('crm_projects')
+    .select('tags')
+    .eq('id', projectId)
+    .single();
+  const current = ((p?.tags ?? []) as string[]);
+  if (!current.includes(tag)) return;
+  await supabaseAdmin
+    .from('crm_projects')
+    .update({ tags: current.filter((t) => t !== tag) })
+    .eq('id', projectId);
+}
+
+/**
+ * Preflight para Dimensionado → Alistamiento: verifica que haya stock
+ * suficiente de TODAS las categorías del diseño. Si falta cualquiera, bloquea.
+ *
+ * Reglas:
+ *   - Si una categoría del diseño no está asignada (null), se ignora (no es bloqueante).
+ *   - Si la categoría está asignada pero el stock disponible < cantidad necesaria, bloquea.
+ *   - Si el proyecto ya tiene reservation_id, también pasa (no se requiere preflight).
+ */
+async function checkStockForAlistamiento(projectId: string): Promise<{ ok: true } | { ok: false; message: string; shortages: Array<{ family: string; family_label: string; needed: number; available: number }> }> {
+  const { data: p } = await supabaseAdmin
+    .from('crm_projects')
+    .select('reservation_id, diseno_inversor_categoria_id, diseno_bateria_categoria_id, diseno_panel_categoria_id, diseno_paneles, diseno_baterias_cantidad')
+    .eq('id', projectId)
+    .single();
+  if (!p) return { ok: true };
+  if (p.reservation_id) return { ok: true };
+
+  const requirements: Array<{ family: string; categoryId: string | null; qty: number }> = [
+    { family: 'inverter', categoryId: p.diseno_inversor_categoria_id, qty: p.diseno_inversor_categoria_id ? 1 : 0 },
+    { family: 'battery',  categoryId: p.diseno_bateria_categoria_id,  qty: p.diseno_bateria_categoria_id ? (Number(p.diseno_baterias_cantidad ?? 0) || 0) : 0 },
+    { family: 'panel',    categoryId: p.diseno_panel_categoria_id,    qty: p.diseno_panel_categoria_id ? (Number(p.diseno_paneles ?? 0) || 0) : 0 },
+  ].filter((r) => r.categoryId && r.qty > 0);
+
+  const shortages: Array<{ family: string; family_label: string; needed: number; available: number }> = [];
+  for (const req of requirements) {
+    const { count } = await supabaseAdmin
+      .from('inventory_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('category_id', req.categoryId!)
+      .eq('status', 'in_stock');
+    const available = count ?? 0;
+    if (available < req.qty) {
+      shortages.push({ family: req.family, family_label: FAMILY_LABEL[req.family] ?? req.family, needed: req.qty, available });
+    }
+  }
+
+  if (shortages.length === 0) return { ok: true };
+  const summary = shortages.map((s) => `${s.family_label}: necesitas ${s.needed}, hay ${s.available} en bodega`).join(' · ');
+  return {
+    ok: false,
+    message: `No hay stock suficiente para reservar — ${summary}. Recibe más equipos en Inventario antes de alistar.`,
+    shortages,
+  };
+}
+
 
 type ProjRow = {
   id: string; code: string | null; title: string; house_id: string | null;

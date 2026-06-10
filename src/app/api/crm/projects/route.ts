@@ -184,7 +184,7 @@ const PATCHABLE_COLUMNS = new Set<string>([
   'contractor_name', 'contractor_email', 'installation_date', 'lectura_inicial_kwh',
   'operativo_at', 'legalizado_at',
   // Metadata editable
-  'title', 'assigned_to', 'notes',
+  'title', 'assigned_to', 'notes', 'tags',
 ]);
 
 export async function PATCH(request: Request) {

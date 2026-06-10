@@ -64,6 +64,7 @@ interface CrmProject {
   updated_at: string;
   notes: string | null;
   assigned_to: string | null;
+  tags: string[] | null;
 }
 
 export function CrmModulePage({ module, title, description, color, userEmail }: {
@@ -272,6 +273,114 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConf
   );
 }
 
+/* ─────────── Estilos de tags por convención ─────────── */
+// Tags conocidos llevan color semántico; el resto cae a un gris neutro.
+const KNOWN_TAGS: Record<string, { bg: string; fg: string; dot: string }> = {
+  'sin stock':            { bg: '#fef2f2', fg: '#991b1b', dot: '#ef4444' },
+  'sin revisar':          { bg: '#fef3c7', fg: '#92400e', dot: '#f59e0b' },
+  'urgente':              { bg: '#fee2e2', fg: '#7f1d1d', dot: '#dc2626' },
+  'esperando contratista':{ bg: '#fce7f3', fg: '#9d174d', dot: '#ec4899' },
+  'esperando cliente':    { bg: '#dbeafe', fg: '#1e40af', dot: '#3b82f6' },
+  'bloqueado':            { bg: '#fef2f2', fg: '#991b1b', dot: '#ef4444' },
+  'reservado':            { bg: '#dcfce7', fg: '#166534', dot: '#10b981' },
+  'aprobado':             { bg: '#dcfce7', fg: '#166534', dot: '#10b981' },
+};
+function userTagStyle(tag: string): { bg: string; fg: string; dot: string } {
+  return KNOWN_TAGS[tag.toLowerCase()] ?? { bg: '#f1f5f9', fg: '#334155', dot: '#64748b' };
+}
+
+// Sugerencias de tags por etapa — el usuario puede tipear cualquier otro.
+const TAG_SUGGESTIONS: Record<string, string[]> = {
+  dimensionado: ['sin revisar', 'sin stock', 'urgente', 'esperando cliente'],
+  alistamiento: ['esperando contratista', 'sin stock', 'urgente'],
+  instalacion:  ['instalación en pausa', 'esperando puesta en marcha', 'urgente'],
+  operativo:    ['legalización pendiente', 'facturar', 'urgente'],
+  completado:   [],
+};
+
+/** Editor inline de tags: muestra los actuales como chips removibles + dropdown para agregar. */
+function TagEditor({ tags, stage, onChange }: {
+  tags: string[];
+  stage: string;
+  onChange: (next: string[]) => Promise<void> | void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [custom, setCustom] = useState('');
+  const suggestions = (TAG_SUGGESTIONS[stage] ?? []).filter((s) => !tags.includes(s));
+
+  const add = (t: string) => {
+    const clean = t.trim().toLowerCase();
+    if (!clean) return;
+    if (tags.map((x) => x.toLowerCase()).includes(clean)) return;
+    onChange([...tags, clean]);
+    setCustom('');
+    setOpen(false);
+  };
+  const remove = (t: string) => onChange(tags.filter((x) => x !== t));
+
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', position: 'relative' }}>
+      {tags.map((t) => {
+        const { bg, fg, dot } = userTagStyle(t);
+        return (
+          <span key={t} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            fontSize: '0.66rem', fontWeight: 700,
+            padding: '3px 6px 3px 8px', borderRadius: 12,
+            background: bg, color: fg,
+            textTransform: 'uppercase', letterSpacing: '0.03em',
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot }} />
+            {t}
+            <button onClick={(e) => { e.stopPropagation(); remove(t); }} title="Quitar tag" style={{ background: 'transparent', border: 'none', color: fg, cursor: 'pointer', padding: 0, marginLeft: 2, lineHeight: 1, fontSize: '0.9rem' }}>×</button>
+          </span>
+        );
+      })}
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        style={{
+          fontSize: '0.66rem', fontWeight: 600,
+          padding: '3px 8px', borderRadius: 12,
+          background: 'transparent', color: 'var(--text-muted)',
+          border: '1px dashed var(--border)', cursor: 'pointer',
+        }}
+      >
+        + tag
+      </button>
+      {open && (
+        <div onClick={(e) => e.stopPropagation()} style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 10,
+          background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8,
+          padding: 8, minWidth: 220, boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+        }}>
+          {suggestions.length > 0 && (
+            <>
+              <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4, letterSpacing: '0.05em' }}>Sugerencias</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 8 }}>
+                {suggestions.map((s) => (
+                  <button key={s} onClick={() => add(s)} style={{ textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: '0.78rem', padding: '4px 6px', borderRadius: 4, color: 'var(--text)' }}>{s}</button>
+                ))}
+              </div>
+            </>
+          )}
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input
+              type="text"
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') add(custom); }}
+              placeholder="Tag personalizado…"
+              style={{ flex: 1, fontSize: '0.78rem', padding: '4px 8px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+              autoFocus
+            />
+            <button onClick={() => add(custom)} disabled={!custom.trim()} style={{ fontSize: '0.78rem', padding: '4px 10px', borderRadius: 4, border: '1px solid var(--accent)', background: 'var(--accent)', color: 'white', cursor: 'pointer' }}>+</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─────────── Card de proyecto, look Pipefy ─────────── */
 function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
   project: CrmProject;
@@ -285,7 +394,10 @@ function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
   // se ve solo al abrir el detalle).
   const availableTransitions = transitionsFrom(module, stage).filter((t) => t.direction !== 'backward');
 
-  // Tags
+  // Sub-estado / banderas (user-defined o auto-añadidos por el sistema)
+  const userTags = project.tags ?? [];
+
+  // Tags derivados (campos del proyecto)
   const tags: Array<{ label: string; bg: string; fg: string }> = [];
   if (project.client_city) tags.push({ label: project.client_city, bg: '#e2e8f0', fg: '#475569' });
   if (project.diseno_kwp) tags.push({ label: `${project.diseno_kwp} kWp`, bg: '#ede9fe', fg: '#6d28d9' });
@@ -337,6 +449,28 @@ function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <Avatar name={project.client_name} />
           <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.client_name}</div>
+        </div>
+      )}
+
+      {/* Sub-estados (user tags / banderas) — visualmente distintos a los tags derivados */}
+      {userTags.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+          {userTags.map((t) => {
+            const { bg, fg, dot } = userTagStyle(t);
+            return (
+              <span key={t} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                fontSize: '0.66rem', fontWeight: 700,
+                padding: '3px 8px', borderRadius: 12,
+                background: bg, color: fg,
+                whiteSpace: 'nowrap',
+                textTransform: 'uppercase', letterSpacing: '0.03em',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, display: 'inline-block' }} />
+                {t}
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -504,8 +638,20 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
           <div>
             <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{project.code}</div>
             <h2 style={{ margin: '4px 0 4px', fontSize: '1.15rem' }}>{project.title}</h2>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: '0.74rem' }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', fontSize: '0.74rem' }}>
               <ModuleBadge stage={project.operations_stage} active={project.current_module === 'operations'} />
+              <TagEditor
+                tags={project.tags ?? []}
+                stage={project.operations_stage}
+                onChange={async (next) => {
+                  await fetch('/api/crm/projects', {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: project.id, tags: next, actor_email: userEmail, note: 'Tags actualizados' }),
+                  });
+                  reload();
+                  onChanged();
+                }}
+              />
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1007,7 +1153,18 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
     });
     setSaving(false);
     const j = await r.json();
-    if (!r.ok) { setErr(j.error ?? 'Error'); return; }
+    if (!r.ok) {
+      // Error con shortages: armar mensaje legible con bullets
+      if (Array.isArray(j.shortages) && j.shortages.length > 0) {
+        const bullets = (j.shortages as Array<{ family_label: string; needed: number; available: number }>)
+          .map((s) => `  • ${s.family_label}: necesitas ${s.needed}, hay ${s.available} en bodega`)
+          .join('\n');
+        setErr(`${j.error ?? 'No se puede avanzar'}\n${bullets}`);
+      } else {
+        setErr(j.error ?? 'Error');
+      }
+      return;
+    }
 
     // Side effects: mostrar al usuario qué pasó automáticamente
     const sideMessages: string[] = [];
@@ -1043,7 +1200,7 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
         </div>
 
-        {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+        {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem', whiteSpace: 'pre-line' }}>{err}</div>}
 
         {fieldsLoading ? (
           <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>Cargando campos…</p>

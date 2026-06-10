@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload } from 'lucide-react';
+import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload, Pencil } from 'lucide-react';
 import {
   type CrmModule, type StageMeta, type TransitionDef,
   OPERATIONS_STAGES,
@@ -26,6 +26,8 @@ interface CrmProject {
   tipo_vivienda: string | null;
   conjunto: string | null;
   casa_numero: string | null;
+  carga_carro_electrico: string | null;
+  autosuficiencia_objetivo_pct: number | null;
   invoice_kwh_mensual: number | null;
   invoice_valor_cop: number | null;
   propuesta_kwp: number | null;
@@ -482,13 +484,15 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
   const [project, setProject] = useState<CrmProject>(initial);
   const [events, setEvents] = useState<Array<{ id: string; event_type: string; from_module: string | null; to_module: string | null; from_stage: string | null; to_stage: string | null; actor_email: string | null; notes: string | null; created_at: string }>>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [editing, setEditing] = useState(false);
 
-  useEffect(() => {
+  const reload = () => {
     fetch(`/api/crm/projects/${initial.id}`).then((r) => r.json()).then((j) => {
       if (j.project) setProject(j.project);
       setEvents(j.events ?? []);
     });
-  }, [initial.id]);
+  };
+  useEffect(reload, [initial.id]);
 
   const stage = project.operations_stage;
   const trans = transitionsFrom(module, stage);
@@ -504,7 +508,12 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
               <ModuleBadge stage={project.operations_stage} active={project.current_module === 'operations'} />
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => setEditing(true)} className="secondary-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: '0.82rem' }}>
+              <Pencil size={12} /> Editar
+            </button>
+            <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
+          </div>
         </div>
 
         <DetailSection title="Cliente">
@@ -619,6 +628,185 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
             </div>
           );
         })()}
+      </div>
+
+      {editing && (
+        <EditProjectModal
+          project={project}
+          userEmail={userEmail}
+          onClose={() => setEditing(false)}
+          onSaved={() => { setEditing(false); reload(); onChanged(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─────────────── EDIT PROJECT MODAL ─────────────── */
+/**
+ * Permite editar TODOS los campos que el usuario ya capturó en cualquier
+ * etapa anterior (o quiera capturar adelantadamente). No cambia de etapa —
+ * para eso está la acción de transición.
+ *
+ * Los campos están agrupados por área temática (cliente, dimensionado,
+ * instalación). Solo los campos modificados se mandan en el PATCH.
+ */
+function EditProjectModal({ project, userEmail, onClose, onSaved }: {
+  project: CrmProject; userEmail: string; onClose: () => void; onSaved: () => void;
+}) {
+  const initial: Record<string, string> = useMemo(() => ({
+    title: project.title ?? '',
+    client_name: project.client_name ?? '',
+    client_email: project.client_email ?? '',
+    client_phone: project.client_phone ?? '',
+    client_address: project.client_address ?? '',
+    client_city: project.client_city ?? '',
+    estrato: project.estrato != null ? String(project.estrato) : '',
+    tipo_vivienda: project.tipo_vivienda ?? '',
+    conjunto: project.conjunto ?? '',
+    casa_numero: project.casa_numero ?? '',
+    carga_carro_electrico: project.carga_carro_electrico ?? '',
+    autosuficiencia_objetivo_pct: project.autosuficiencia_objetivo_pct != null ? String(project.autosuficiencia_objetivo_pct) : '',
+    invoice_kwh_mensual: project.invoice_kwh_mensual != null ? String(project.invoice_kwh_mensual) : '',
+    diseno_kwp: project.diseno_kwp != null ? String(project.diseno_kwp) : '',
+    diseno_paneles: project.diseno_paneles != null ? String(project.diseno_paneles) : '',
+    diseno_baterias_cantidad: project.diseno_baterias_cantidad != null ? String(project.diseno_baterias_cantidad) : '',
+    diseno_inversor_categoria_id: project.diseno_inversor_categoria_id ?? '',
+    diseno_bateria_categoria_id: project.diseno_bateria_categoria_id ?? '',
+    diseno_panel_categoria_id: project.diseno_panel_categoria_id ?? '',
+    diseno_aprobado_por: project.diseno_aprobado_por ?? '',
+    diseno_notes: project.diseno_notes ?? '',
+    visita_previa_id: project.visita_previa_id ?? '',
+    visita_instalacion_id: project.visita_instalacion_id ?? '',
+    contractor_name: project.contractor_name ?? '',
+    contractor_email: project.contractor_email ?? '',
+    installation_date: project.installation_date ?? '',
+    lectura_inicial_kwh: project.lectura_inicial_kwh != null ? String(project.lectura_inicial_kwh) : '',
+    notes: project.notes ?? '',
+  }), [project]);
+
+  const [form, setForm] = useState<Record<string, string>>(initial);
+  const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  type CatOpt = { id: string; name: string; family: string };
+  const [cats, setCats] = useState<CatOpt[]>([]);
+  useEffect(() => {
+    void (async () => {
+      try {
+        const r = await fetch('/api/inventory/categories');
+        if (!r.ok) return;
+        const j = await r.json();
+        setCats(((j.categories ?? []) as Array<{ id: string; name: string; family: string; is_serialized: boolean }>)
+          .filter((c) => c.is_serialized)
+          .map((c) => ({ id: c.id, name: c.name, family: c.family })));
+      } catch { /* ignore */ }
+    })();
+  }, []);
+  const catsByFamily = (fam: string) => cats.filter((c) => c.family === fam);
+
+  const submit = async () => {
+    setErr(null);
+    setSaving(true);
+    try {
+      // Construir delta: solo campos cambiados
+      const delta: Record<string, unknown> = {};
+      for (const k of Object.keys(form)) {
+        const before = initial[k] ?? '';
+        const after = form[k] ?? '';
+        if (before !== after) delta[k] = after;
+      }
+      if (Object.keys(delta).length === 0) {
+        onClose();
+        return;
+      }
+      const r = await fetch('/api/crm/projects', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: project.id, ...delta, actor_email: userEmail, note: 'Campos editados desde el detalle' }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div className="glass-panel" style={{ width: '100%', maxWidth: 760, maxHeight: '92vh', overflowY: 'auto', padding: 24 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+          <div>
+            <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--text-muted)' }}>{project.code}</div>
+            <h2 style={{ margin: '4px 0 0', fontSize: '1.05rem' }}>Editar campos del proyecto</h2>
+            <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+              Cambia cualquier campo capturado, sin importar la etapa. La transición se hace aparte con el botón de avanzar.
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
+        </div>
+
+        {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+
+        <FormSection title="Identificación">
+          <FormField label="Título" required value={form.title} onChange={(v) => set('title', v)} fullWidth />
+        </FormSection>
+
+        <FormSection title="Cliente">
+          <FormField label="Nombre" value={form.client_name} onChange={(v) => set('client_name', v)} />
+          <FormField label="Email"  value={form.client_email} onChange={(v) => set('client_email', v)} />
+          <FormField label="Teléfono" value={form.client_phone} onChange={(v) => set('client_phone', v)} />
+          <FormField label="Dirección" value={form.client_address} onChange={(v) => set('client_address', v)} />
+          <FormField label="Ciudad" value={form.client_city} onChange={(v) => set('client_city', v)} />
+          <FormField label="Conjunto" value={form.conjunto} onChange={(v) => set('conjunto', v)} />
+          <FormField label="Casa #" value={form.casa_numero} onChange={(v) => set('casa_numero', v)} />
+          <FormField label="Estrato" type="number" value={form.estrato} onChange={(v) => set('estrato', v)} />
+          <FormFieldSelect label="Carga carro eléctrico" value={form.carga_carro_electrico} onChange={(v) => set('carga_carro_electrico', v)}
+            options={['No tenemos carro eléctrico', 'Sí - Wallbox 7 kW', 'Sí - Wallbox 11 kW', 'Sí - Wallbox 22 kW', 'Sí - otro']} fullWidth />
+        </FormSection>
+
+        <FormSection title="Dimensionado">
+          <FormField label="Promedio consumo (kWh/mes)" type="number" value={form.invoice_kwh_mensual} onChange={(v) => set('invoice_kwh_mensual', v)} />
+          <FormField label="Autosuficiencia objetivo (%)" type="number" value={form.autosuficiencia_objetivo_pct} onChange={(v) => set('autosuficiencia_objetivo_pct', v)} />
+          <FormField label="kWp diseño" type="number" value={form.diseno_kwp} onChange={(v) => set('diseno_kwp', v)} />
+          <FormField label="Paneles (cantidad)" type="number" value={form.diseno_paneles} onChange={(v) => set('diseno_paneles', v)} />
+          <FormField label="Baterías (cantidad)" type="number" value={form.diseno_baterias_cantidad} onChange={(v) => set('diseno_baterias_cantidad', v)} />
+          <FormField label="Responsable diseño" value={form.diseno_aprobado_por} onChange={(v) => set('diseno_aprobado_por', v)} />
+          <FormField label="Notas del diseño" value={form.diseno_notes} onChange={(v) => set('diseno_notes', v)} fullWidth />
+        </FormSection>
+
+        <FormSection title="Equipos del diseño (catálogo)">
+          <CategoryPicker label="Modelo de inversor" value={form.diseno_inversor_categoria_id} onChange={(v) => set('diseno_inversor_categoria_id', v)} options={catsByFamily('inverter')} />
+          <CategoryPicker label="Modelo de batería"  value={form.diseno_bateria_categoria_id}  onChange={(v) => set('diseno_bateria_categoria_id', v)}  options={catsByFamily('battery')} />
+          <CategoryPicker label="Modelo de panel"    value={form.diseno_panel_categoria_id}    onChange={(v) => set('diseno_panel_categoria_id', v)}    options={catsByFamily('panel')} fullWidth />
+        </FormSection>
+
+        <FormSection title="Operaciones / Instalación">
+          <FormField label="Contratista" value={form.contractor_name} onChange={(v) => set('contractor_name', v)} />
+          <FormField label="Email contratista" value={form.contractor_email} onChange={(v) => set('contractor_email', v)} />
+          <FormField label="Fecha instalación" type="date" value={form.installation_date} onChange={(v) => set('installation_date', v)} />
+          <FormField label="Lectura inicial (kWh)" type="number" value={form.lectura_inicial_kwh} onChange={(v) => set('lectura_inicial_kwh', v)} />
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>Acta de visita previa</label>
+            <LinkedResourcePicker kind="visita_previa" casaHint={form.casa_numero || form.client_name || null} value={form.visita_previa_id} onChange={(v) => set('visita_previa_id', v)} />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>Acta de visita de instalación</label>
+            <LinkedResourcePicker kind="visita_instalacion" casaHint={form.casa_numero || form.client_name || null} value={form.visita_instalacion_id} onChange={(v) => set('visita_instalacion_id', v)} />
+          </div>
+        </FormSection>
+
+        <FormSection title="Otros">
+          <FormField label="Notas del proyecto" value={form.notes} onChange={(v) => set('notes', v)} fullWidth />
+        </FormSection>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+          <button onClick={submit} className="primary-btn" disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</button>
+        </div>
       </div>
     </div>
   );

@@ -181,31 +181,60 @@ export async function POST(request: Request, context: Ctx) {
     // Auto-stamps
     if (def.action === 'operations_to_operativo') updates.operativo_at = new Date().toISOString();
 
-    // ─── Preflight: validar prerequisitos ANTES de aplicar la transición ───
-    // Si alguno falla, la etapa NO cambia y el frontend recibe un mensaje claro.
+    // ─── Para Alistamiento: la reserva DEBE crearse antes de cambiar la etapa.
+    // Si falla por cualquier motivo (categorías, stock, error inesperado), la
+    // etapa NO cambia y se tagueea el proyecto para que el problema sea visible.
+    let preReservation: Awaited<ReturnType<typeof autoReserveInventoryForProject>> = null;
     if (def.action === 'operations_dimensionado_to_alistamiento') {
       // 1. Categorías del diseño deben estar seleccionadas — si no, no hay qué reservar.
       const missingCats = await checkDesignCategoriesPresent(id);
       if (missingCats.length > 0) {
+        await addProjectTag(id, 'sin modelos');
         return NextResponse.json({
           error: `Falta seleccionar el modelo de catálogo para: ${missingCats.join(', ')}. Abre el proyecto, clic en "Editar" y elige los modelos en la sección "Equipos del diseño (catálogo)" antes de alistar.`,
           missing_categories: missingCats,
         }, { status: 409 });
       }
+      await removeProjectTag(id, 'sin modelos');
 
       // 2. Stock disponible para esas categorías
       const preflight = await checkStockForAlistamiento(id);
       if (!preflight.ok) {
-        // Auto-tag 'sin stock' para que el card lo refleje visualmente
         await addProjectTag(id, 'sin stock');
         return NextResponse.json({
           error: preflight.message,
           shortages: preflight.shortages,
         }, { status: 409 });
-      } else {
-        // Si antes tenía el tag y ahora sí hay stock, lo limpiamos.
-        await removeProjectTag(id, 'sin stock');
       }
+      await removeProjectTag(id, 'sin stock');
+
+      // 3. Crear la reserva ANTES de cambiar la etapa
+      const { data: projForReserve } = await supabaseAdmin
+        .from('crm_projects')
+        .select('id, code, title, house_id, diseno_inversor_categoria_id, diseno_bateria_categoria_id, diseno_panel_categoria_id, diseno_paneles, diseno_baterias_cantidad, reservation_id')
+        .eq('id', id)
+        .single();
+      if (!projForReserve) {
+        return NextResponse.json({ error: 'Proyecto no encontrado al crear reserva' }, { status: 404 });
+      }
+      try {
+        preReservation = await autoReserveInventoryForProject(projForReserve as ProjRow, body.actor_email ?? null);
+      } catch (e) {
+        await addProjectTag(id, 'reserva falló');
+        return NextResponse.json({
+          error: 'Falló la creación de reserva: ' + (e instanceof Error ? e.message : 'error desconocido'),
+        }, { status: 500 });
+      }
+      // Si retornó null o sin items reservados, NO avanzar.
+      if (!preReservation || preReservation.reserved.length === 0) {
+        await addProjectTag(id, 'sin reserva');
+        return NextResponse.json({
+          error: 'No se pudo crear la reserva automática. Revisa que haya items disponibles en bodega para las categorías del diseño.',
+        }, { status: 409 });
+      }
+      // Reserva OK — limpiar el tag de fallo si quedó de un intento previo.
+      await removeProjectTag(id, 'sin reserva');
+      await removeProjectTag(id, 'reserva falló');
     }
 
     // UPDATE condicional con guard contra race: solo aplica si el estado no ha cambiado
@@ -240,10 +269,7 @@ export async function POST(request: Request, context: Ctx) {
 
     // ─── Side effects automáticos al cambiar de etapa ───
     const sideEffects: Record<string, unknown> = {};
-    if (def.action === 'operations_dimensionado_to_alistamiento') {
-      const r = await autoReserveInventoryForProject(updated[0], body.actor_email ?? null);
-      if (r) sideEffects.reservation = r;
-    }
+    if (preReservation) sideEffects.reservation = preReservation;
     if (def.action === 'operations_to_operativo') {
       const r = await ensureFacturacionRecord(updated[0], body.actor_email ?? null);
       if (r) sideEffects.facturacion = r;

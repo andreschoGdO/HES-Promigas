@@ -277,6 +277,9 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConf
 // Tags conocidos llevan color semántico; el resto cae a un gris neutro.
 const KNOWN_TAGS: Record<string, { bg: string; fg: string; dot: string }> = {
   'sin stock':            { bg: '#fef2f2', fg: '#991b1b', dot: '#ef4444' },
+  'sin modelos':          { bg: '#fef2f2', fg: '#991b1b', dot: '#dc2626' },
+  'sin reserva':          { bg: '#fef2f2', fg: '#991b1b', dot: '#dc2626' },
+  'reserva falló':        { bg: '#fef2f2', fg: '#991b1b', dot: '#dc2626' },
   'sin revisar':          { bg: '#fef3c7', fg: '#92400e', dot: '#f59e0b' },
   'urgente':              { bg: '#fee2e2', fg: '#7f1d1d', dot: '#dc2626' },
   'esperando contratista':{ bg: '#fce7f3', fg: '#9d174d', dot: '#ec4899' },
@@ -291,7 +294,7 @@ function userTagStyle(tag: string): { bg: string; fg: string; dot: string } {
 
 // Sugerencias de tags por etapa — el usuario puede tipear cualquier otro.
 const TAG_SUGGESTIONS: Record<string, string[]> = {
-  dimensionado: ['sin revisar', 'sin stock', 'urgente', 'esperando cliente'],
+  dimensionado: ['sin revisar', 'sin modelos', 'sin stock', 'urgente', 'esperando cliente'],
   alistamiento: ['esperando contratista', 'sin stock', 'urgente'],
   instalacion:  ['instalación en pausa', 'esperando puesta en marcha', 'urgente'],
   operativo:    ['legalización pendiente', 'facturar', 'urgente'],
@@ -1182,10 +1185,6 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
         const lines = r.shortages.map((s) => `${s.family}: necesario ${s.needed}, disponibles ${s.available}`);
         sideMessages.push(`Faltante de stock — ${lines.join(' · ')}`);
       }
-    } else if (def.action === 'operations_dimensionado_to_alistamiento') {
-      // La transición a Alistamiento pasó pero no se creó reserva. Algo raro pasó
-      // (categorías sin definir, ya tenía reservation_id previa, etc.). Avisar.
-      sideMessages.push('⚠️ No se creó reserva automática. Revisa que los modelos de equipo estén configurados en el diseño del proyecto.');
     }
     if (se.facturacion?.created) {
       sideMessages.push('Registro de Facturación inicializado para este proyecto');

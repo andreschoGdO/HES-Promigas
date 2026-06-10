@@ -95,58 +95,65 @@ export async function linkVisitToInventory(opts: {
         .eq('id', confirmedResv.id);
     }
 
+    // parseSerials: acepta un campo (string crudo del formulario) y devuelve
+    // los seriales individuales. Soporta separación por saltos de línea,
+    // comas, punto-y-comas o espacios. Quita duplicados.
+    const parseSerials = (raw: unknown): string[] => {
+      if (!raw || typeof raw !== 'string') return [];
+      const parts = raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+      return Array.from(new Set(parts));
+    };
+
     for (const { key, label } of INSTALL_SERIAL_KEYS) {
-      const raw = form[key];
-      if (!raw || typeof raw !== 'string') continue;
-      const serial = raw.trim();
-      if (!serial) continue;
+      const serials = parseSerials(form[key]);
+      for (const serial of serials) {
+        const { data: item } = await supabaseAdmin
+          .from('inventory_items')
+          .select('id, status, current_house_id')
+          .eq('serial_number', serial)
+          .maybeSingle();
 
-      const { data: item } = await supabaseAdmin
-        .from('inventory_items')
-        .select('id, status, current_house_id')
-        .eq('serial_number', serial)
-        .maybeSingle();
+        if (!item) {
+          skipped.push(`${label}: ${serial} (no está en inventario)`);
+          continue;
+        }
+        // Si ya estaba instalado en esta misma casa, no duplicar movimiento.
+        if (item.status === 'installed' && item.current_house_id === opts.houseId) {
+          skipped.push(`${label}: ${serial} (ya estaba instalado aquí)`);
+          continue;
+        }
 
-      if (!item) {
-        skipped.push(`${label}: ${serial} (no está en inventario)`);
-        continue;
+        // UPDATE condicional sobre el status leído: si otra request concurrente ya cambió el estado,
+        // este update afectará 0 filas y NO insertamos un movimiento duplicado.
+        const { data: updated } = await supabaseAdmin
+          .from('inventory_items')
+          .update({
+            status: 'installed',
+            current_location: 'house',
+            current_house_id: opts.houseId,
+          })
+          .eq('id', item.id)
+          .eq('status', item.status)
+          .select('id');
+
+        if (!updated || updated.length === 0) {
+          skipped.push(`${label}: ${serial} (modificado por otra operación, omitido)`);
+          continue;
+        }
+
+        await supabaseAdmin.from('inventory_movements').insert({
+          item_id: item.id,
+          type: 'install',
+          from_status: item.status,
+          to_status: 'installed',
+          to_location: 'house',
+          to_house_id: opts.houseId,
+          related_visit_id: opts.visitId,
+          responsible_email: opts.technicianEmail,
+          notes: `Instalado en visita ${opts.visitId.slice(0, 8)} (${label})`,
+        });
+        linked.push(`${label}: ${serial}`);
       }
-      // Si ya estaba instalado en esta misma casa, no duplicar movimiento.
-      if (item.status === 'installed' && item.current_house_id === opts.houseId) {
-        skipped.push(`${label}: ${serial} (ya estaba instalado aquí)`);
-        continue;
-      }
-
-      // UPDATE condicional sobre el status leído: si otra request concurrente ya cambió el estado,
-      // este update afectará 0 filas y NO insertamos un movimiento duplicado.
-      const { data: updated } = await supabaseAdmin
-        .from('inventory_items')
-        .update({
-          status: 'installed',
-          current_location: 'house',
-          current_house_id: opts.houseId,
-        })
-        .eq('id', item.id)
-        .eq('status', item.status)
-        .select('id');
-
-      if (!updated || updated.length === 0) {
-        skipped.push(`${label}: ${serial} (modificado por otra operación, omitido)`);
-        continue;
-      }
-
-      await supabaseAdmin.from('inventory_movements').insert({
-        item_id: item.id,
-        type: 'install',
-        from_status: item.status,
-        to_status: 'installed',
-        to_location: 'house',
-        to_house_id: opts.houseId,
-        related_visit_id: opts.visitId,
-        responsible_email: opts.technicianEmail,
-        notes: `Instalado en visita ${opts.visitId.slice(0, 8)} (${label})`,
-      });
-      linked.push(`${label}: ${serial}`);
     }
     return { linked, skipped };
   }

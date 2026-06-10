@@ -161,7 +161,7 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         fields: [
           { key: 'inv_marca', label: 'Marca del inversor', type: 'select', options: ['LIVOLTEK', 'DEYE', 'Huawei', 'Sungrow', 'Otra'], required: true },
           { key: 'inv_modelo', label: 'Modelo', type: 'text', required: true },
-          { key: 'inv_serial', label: 'Número de serie', type: 'text', required: true },
+          { key: 'inv_serial', label: 'Número(s) de serie', type: 'textarea', required: true, help: 'Uno por línea si hay varios inversores en paralelo.' },
           { key: 'inv_potencia_kw', label: 'Potencia nominal', type: 'number', inputMode: 'decimal', unit: 'kW', required: true },
           { key: 'inv_ubicacion', label: 'Ubicación física', type: 'text' },
         ],
@@ -183,17 +183,17 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'batt_presente', label: 'Lleva batería', type: 'radio', options: ['Sí', 'No'] },
           { key: 'batt_marca', label: 'Marca batería', type: 'text' },
           { key: 'batt_modelo', label: 'Modelo', type: 'text' },
-          { key: 'batt_capacidad_kwh', label: 'Capacidad', type: 'number', inputMode: 'decimal', unit: 'kWh' },
-          { key: 'batt_serial', label: 'Serial', type: 'text' },
+          { key: 'batt_capacidad_kwh', label: 'Capacidad por batería', type: 'number', inputMode: 'decimal', unit: 'kWh' },
+          { key: 'batt_serial', label: 'Serial(es) de batería', type: 'textarea', help: 'Uno por línea si hay varias baterías.' },
         ],
       },
       {
         title: 'V. Gateway Pulsar y medidores',
         fields: [
-          { key: 'gateway_serial', label: 'Serial del Pulsar', type: 'text', required: true },
+          { key: 'gateway_serial', label: 'Serial(es) del Pulsar', type: 'textarea', required: true, help: 'Uno por línea si hay redundancia.' },
           { key: 'gateway_simcard', label: 'Número SIM card 4G', type: 'text' },
-          { key: 'meter_solar_serial', label: 'Serial medidor solar', type: 'text', required: true },
-          { key: 'meter_red_serial', label: 'Serial medidor de red', type: 'text', required: true },
+          { key: 'meter_solar_serial', label: 'Serial(es) medidor solar', type: 'textarea', required: true, help: 'Uno por línea.' },
+          { key: 'meter_red_serial', label: 'Serial(es) medidor de red', type: 'textarea', required: true, help: 'Uno por línea.' },
         ],
       },
       {

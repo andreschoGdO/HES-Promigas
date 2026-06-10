@@ -226,10 +226,16 @@ export async function POST(request: Request, context: Ctx) {
         }, { status: 500 });
       }
       // Si retornó null o sin items reservados, NO avanzar.
-      if (!preReservation || preReservation.reserved.length === 0) {
+      if (!preReservation) {
         await addProjectTag(id, 'sin reserva');
         return NextResponse.json({
-          error: 'No se pudo crear la reserva automática. Revisa que haya items disponibles en bodega para las categorías del diseño.',
+          error: 'No se pudo crear la reserva automática. Revisa que haya items in_stock con las categorías exactas del diseño (no solo de la misma marca).',
+        }, { status: 409 });
+      }
+      if (preReservation.reserved.length === 0) {
+        await addProjectTag(id, 'sin reserva');
+        return NextResponse.json({
+          error: 'No hay items in_stock para las categorías del diseño. Verifica que las categorías que seleccionaste en el proyecto coincidan con las categorías de los equipos en /inventario → Equipos.',
         }, { status: 409 });
       }
       // Reserva OK — limpiar el tag de fallo si quedó de un intento previo.
@@ -273,6 +279,12 @@ export async function POST(request: Request, context: Ctx) {
     if (def.action === 'operations_to_operativo') {
       const r = await ensureFacturacionRecord(updated[0], body.actor_email ?? null);
       if (r) sideEffects.facturacion = r;
+    }
+    // Devolver a Dimensionado desde Alistamiento → cancelar reserva activa
+    // y liberar items para que la próxima auto-reserva funcione.
+    if (def.action === 'operations_back_to_dimensionado') {
+      const r = await cancelActiveReservation(updated[0], body.actor_email ?? null);
+      if (r) sideEffects.reservation_cancelled = r;
     }
 
     return NextResponse.json({ project: updated[0], action: def.action, side_effects: sideEffects });
@@ -320,6 +332,84 @@ async function addProjectTag(projectId: string, tag: string): Promise<void> {
     .from('crm_projects')
     .update({ tags: [...current, tag] })
     .eq('id', projectId);
+}
+
+/**
+ * Cancela la reserva activa del proyecto (si la hay) y libera items
+ * reserved → in_stock. Usado al devolver de Alistamiento → Dimensionado.
+ */
+async function cancelActiveReservation(project: ProjRow, actorEmail: string | null): Promise<null | { reservation_id: string; released: number }> {
+  if (!project.reservation_id) return null;
+  const { data: resv } = await supabaseAdmin
+    .from('inventory_reservations')
+    .select('id, status, title')
+    .eq('id', project.reservation_id)
+    .maybeSingle();
+  if (!resv || (resv.status !== 'draft' && resv.status !== 'confirmed')) {
+    // Ya estaba fulfilled o cancelled — solo limpiar la referencia.
+    await supabaseAdmin.from('crm_projects').update({ reservation_id: null }).eq('id', project.id);
+    return null;
+  }
+
+  // Liberar items reservados de esta reserva
+  const { data: lines } = await supabaseAdmin
+    .from('inventory_reservation_items')
+    .select('item_id')
+    .eq('reservation_id', resv.id);
+  const itemIds = (lines ?? []).map((l) => l.item_id);
+  let released = 0;
+  if (itemIds.length > 0 && resv.status === 'confirmed') {
+    const { data: updated } = await supabaseAdmin
+      .from('inventory_items')
+      .update({ status: 'in_stock' })
+      .in('id', itemIds)
+      .eq('status', 'reserved')
+      .select('id');
+    released = updated?.length ?? 0;
+    if (released > 0) {
+      await supabaseAdmin.from('inventory_movements').insert(
+        (updated ?? []).map((u) => ({
+          item_id: u.id, type: 'unreserve',
+          from_status: 'reserved', to_status: 'in_stock',
+          responsible_email: actorEmail,
+          notes: `Reserva ${resv.title} cancelada al devolver proyecto a Dimensionado`,
+        })),
+      );
+    }
+  }
+
+  // Restituir stock de consumibles si los hay
+  try {
+    const { data: consLines } = await supabaseAdmin
+      .from('inventory_reservation_consumables')
+      .select('consumable_id, quantity, inventory_consumables(stock_quantity)')
+      .eq('reservation_id', resv.id);
+    type CL = { consumable_id: string; quantity: number; inventory_consumables: { stock_quantity: number } | { stock_quantity: number }[] | null };
+    if (resv.status === 'confirmed') {
+      for (const line of (consLines ?? []) as CL[]) {
+        const cons = Array.isArray(line.inventory_consumables) ? line.inventory_consumables[0] : line.inventory_consumables;
+        if (!cons) continue;
+        await supabaseAdmin
+          .from('inventory_consumables')
+          .update({ stock_quantity: Number(cons.stock_quantity) + Number(line.quantity) })
+          .eq('id', line.consumable_id);
+        await supabaseAdmin.from('inventory_movements').insert({
+          consumable_id: line.consumable_id, type: 'unreserve', quantity: line.quantity,
+          responsible_email: actorEmail,
+          notes: `Reserva ${resv.title} cancelada al devolver proyecto a Dimensionado`,
+        });
+      }
+    }
+  } catch { /* tabla puede no existir si migration 23 no se ha aplicado */ }
+
+  // Marcar la reserva como cancelled + limpiar reservation_id del proyecto
+  await supabaseAdmin
+    .from('inventory_reservations')
+    .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+    .eq('id', resv.id);
+  await supabaseAdmin.from('crm_projects').update({ reservation_id: null }).eq('id', project.id);
+
+  return { reservation_id: resv.id, released };
 }
 
 /** Quita un tag del proyecto si existe. */
@@ -411,9 +501,36 @@ async function autoReserveInventoryForProject(
   reservation_id: string;
   reserved: Array<{ family: string; serial: string }>;
   shortages: Array<{ family: string; needed: number; available: number }>;
+  reused?: boolean;
 }> {
-  // Si ya tiene una reserva, no duplicar
-  if (project.reservation_id) return null;
+  // Si ya tiene reservation_id, revisar si la reserva sigue activa.
+  // - Si está en draft/confirmed → la re-usamos (no duplicar).
+  // - Si está fulfilled/cancelled/no-existe → limpiamos y creamos una nueva.
+  if (project.reservation_id) {
+    const { data: existing } = await supabaseAdmin
+      .from('inventory_reservations')
+      .select('id, status, title, inventory_reservation_items(inventory_items(serial_number, inventory_categories(family)))')
+      .eq('id', project.reservation_id)
+      .maybeSingle();
+    if (existing && (existing.status === 'draft' || existing.status === 'confirmed')) {
+      type LineItem = { serial_number?: string | null; inventory_categories?: { family?: string } | { family?: string }[] | null };
+      type Line = { inventory_items?: LineItem | LineItem[] | null };
+      const lines = ((existing as unknown as { inventory_reservation_items?: Line[] }).inventory_reservation_items) ?? [];
+      const reserved = lines
+        .map((l) => {
+          const itRaw = l.inventory_items;
+          const it = Array.isArray(itRaw) ? itRaw[0] : itRaw;
+          if (!it || !it.serial_number) return null;
+          const catRaw = it.inventory_categories;
+          const cat = Array.isArray(catRaw) ? catRaw[0] : catRaw;
+          return { family: cat?.family ?? 'unknown', serial: it.serial_number };
+        })
+        .filter((x): x is { family: string; serial: string } => Boolean(x));
+      return { reservation_id: existing.id, reserved, shortages: [], reused: true };
+    }
+    // Reserva vieja inválida → limpiar reservation_id antes de crear una nueva.
+    await supabaseAdmin.from('crm_projects').update({ reservation_id: null }).eq('id', project.id);
+  }
 
   const requirements: Array<{ family: string; categoryId: string | null; qty: number }> = [
     { family: 'inverter', categoryId: project.diseno_inversor_categoria_id, qty: 1 },

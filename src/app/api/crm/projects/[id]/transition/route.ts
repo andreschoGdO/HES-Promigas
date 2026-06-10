@@ -211,10 +211,181 @@ export async function POST(request: Request, context: Ctx) {
       data: { action: def.action, fields: coerced },
     });
 
-    return NextResponse.json({ project: updated[0], action: def.action });
+    // ─── Side effects automáticos al cambiar de etapa ───
+    const sideEffects: Record<string, unknown> = {};
+    if (def.action === 'operations_dimensionado_to_alistamiento') {
+      const r = await autoReserveInventoryForProject(updated[0], body.actor_email ?? null);
+      if (r) sideEffects.reservation = r;
+    }
+    if (def.action === 'operations_to_operativo') {
+      const r = await ensureFacturacionRecord(updated[0], body.actor_email ?? null);
+      if (r) sideEffects.facturacion = r;
+    }
+
+    return NextResponse.json({ project: updated[0], action: def.action, side_effects: sideEffects });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
   }
+}
+
+/* ──────────────────────────────────────────────────────────────────
+ * Side effects: cablean el flujo de Construcción con Inventario y Facturación.
+ * ────────────────────────────────────────────────────────────────── */
+
+type ProjRow = {
+  id: string; code: string | null; title: string; house_id: string | null;
+  diseno_inversor_categoria_id: string | null;
+  diseno_bateria_categoria_id: string | null;
+  diseno_panel_categoria_id: string | null;
+  diseno_paneles: number | null;
+  diseno_baterias_cantidad: number | null;
+  reservation_id: string | null;
+};
+
+/**
+ * Al pasar de Dimensionado → Alistamiento: crear reserva automática con los
+ * items disponibles en bodega de las categorías del diseño. Resultado se
+ * devuelve para que el frontend pueda mostrarle al usuario qué se reservó
+ * y qué faltó.
+ *
+ * Cantidades: 1 inversor, N paneles (diseno_paneles), M baterías
+ * (diseno_baterias_cantidad). Si una categoría está vacía o no hay stock
+ * suficiente, se omite silenciosamente y se reporta en la respuesta.
+ */
+async function autoReserveInventoryForProject(
+  project: ProjRow,
+  actorEmail: string | null,
+): Promise<null | {
+  reservation_id: string;
+  reserved: Array<{ family: string; serial: string }>;
+  shortages: Array<{ family: string; needed: number; available: number }>;
+}> {
+  // Si ya tiene una reserva, no duplicar
+  if (project.reservation_id) return null;
+
+  const requirements: Array<{ family: string; categoryId: string | null; qty: number }> = [
+    { family: 'inverter', categoryId: project.diseno_inversor_categoria_id, qty: 1 },
+    { family: 'battery',  categoryId: project.diseno_bateria_categoria_id,  qty: Math.max(1, Number(project.diseno_baterias_cantidad ?? 0)) || 0 },
+    { family: 'panel',    categoryId: project.diseno_panel_categoria_id,    qty: Math.max(1, Number(project.diseno_paneles ?? 0)) || 0 },
+  ].filter((r) => r.categoryId && r.qty > 0);
+
+  if (requirements.length === 0) return null;
+
+  // Buscar items disponibles por categoría
+  const reservedItems: Array<{ id: string; serial_number: string; family: string }> = [];
+  const shortages: Array<{ family: string; needed: number; available: number }> = [];
+
+  for (const req of requirements) {
+    const { data: stockItems } = await supabaseAdmin
+      .from('inventory_items')
+      .select('id, serial_number')
+      .eq('category_id', req.categoryId!)
+      .eq('status', 'in_stock')
+      .order('acquired_at', { ascending: true, nullsFirst: false })
+      .limit(req.qty);
+    const available = (stockItems ?? []).length;
+    if (available < req.qty) {
+      shortages.push({ family: req.family, needed: req.qty, available });
+    }
+    for (const it of stockItems ?? []) {
+      reservedItems.push({ id: it.id, serial_number: it.serial_number, family: req.family });
+    }
+  }
+
+  if (reservedItems.length === 0) {
+    // Nada que reservar — pero sí reportar shortages
+    return { reservation_id: '', reserved: [], shortages };
+  }
+
+  // Crear la reserva en draft
+  const { data: resv, error: resvErr } = await supabaseAdmin
+    .from('inventory_reservations')
+    .insert({
+      title: `${project.code ?? 'PROY'} · ${project.title}`.slice(0, 200),
+      status: 'draft',
+      requested_by: actorEmail,
+      notes: 'Auto-reservado al pasar a Alistamiento',
+    })
+    .select('id')
+    .single();
+  if (resvErr || !resv) return null;
+
+  // Líneas de la reserva
+  await supabaseAdmin
+    .from('inventory_reservation_items')
+    .insert(reservedItems.map((it) => ({ reservation_id: resv.id, item_id: it.id })));
+
+  // Confirmar: items pasan a reserved + movimientos
+  await supabaseAdmin
+    .from('inventory_items')
+    .update({ status: 'reserved' })
+    .in('id', reservedItems.map((it) => it.id))
+    .eq('status', 'in_stock');
+
+  await supabaseAdmin.from('inventory_movements').insert(
+    reservedItems.map((it) => ({
+      item_id: it.id,
+      type: 'reserve',
+      from_status: 'in_stock',
+      to_status: 'reserved',
+      responsible_email: actorEmail,
+      notes: `Auto-reserva para ${project.code ?? project.title}`,
+    })),
+  );
+
+  await supabaseAdmin
+    .from('inventory_reservations')
+    .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
+    .eq('id', resv.id);
+
+  // Vincular reservation_id al proyecto
+  await supabaseAdmin
+    .from('crm_projects')
+    .update({ reservation_id: resv.id })
+    .eq('id', project.id);
+
+  return {
+    reservation_id: resv.id,
+    reserved: reservedItems.map((it) => ({ family: it.family, serial: it.serial_number })),
+    shortages,
+  };
+}
+
+/**
+ * Al pasar a Operativo: garantizar que existe un registro en
+ * `facturacion_records` para que el flujo de cierre tenga su entrada en
+ * Facturación lista. No congela ni sobrescribe valores existentes.
+ */
+async function ensureFacturacionRecord(project: ProjRow, actorEmail: string | null): Promise<null | { facturacion_record_id: string; created: boolean }> {
+  const { data: existing } = await supabaseAdmin
+    .from('facturacion_records')
+    .select('id')
+    .eq('project_id', project.id)
+    .maybeSingle();
+  if (existing) return { facturacion_record_id: existing.id, created: false };
+
+  const { data: created, error } = await supabaseAdmin
+    .from('facturacion_records')
+    .insert({
+      project_id: project.id,
+      created_by: actorEmail,
+      updated_by: actorEmail,
+      notes: 'Creado automáticamente al marcar Operativo',
+    })
+    .select('id')
+    .single();
+  if (error || !created) return null;
+
+  await supabaseAdmin.from('facturacion_events').insert({
+    project_id: project.id,
+    event_type: 'cost_change',
+    field: '__init__',
+    source: 'user',
+    actor_email: actorEmail,
+    notes: 'Registro de facturación inicializado al pasar a Operativo. Costos derivados disponibles desde inventario; congelar al cerrar el periodo.',
+  });
+
+  return { facturacion_record_id: created.id, created: true };
 }
 
 /** GET — devuelve transiciones legales para este proyecto */

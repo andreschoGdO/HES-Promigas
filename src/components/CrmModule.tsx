@@ -733,6 +733,27 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
     setSaving(false);
     const j = await r.json();
     if (!r.ok) { setErr(j.error ?? 'Error'); return; }
+
+    // Side effects: mostrar al usuario qué pasó automáticamente
+    const sideMessages: string[] = [];
+    const se = j.side_effects ?? {};
+    if (se.reservation) {
+      const r = se.reservation as { reserved: Array<{ family: string; serial: string }>; shortages: Array<{ family: string; needed: number; available: number }> };
+      if (r.reserved.length > 0) {
+        sideMessages.push(`Reservados ${r.reserved.length} equipos en bodega: ${r.reserved.map((x) => x.serial).join(', ')}`);
+      }
+      if (r.shortages.length > 0) {
+        const lines = r.shortages.map((s) => `${s.family}: necesario ${s.needed}, disponibles ${s.available}`);
+        sideMessages.push(`Faltante de stock — ${lines.join(' · ')}`);
+      }
+    }
+    if (se.facturacion?.created) {
+      sideMessages.push('Registro de Facturación inicializado para este proyecto');
+    }
+    if (sideMessages.length > 0) {
+      alert(sideMessages.join('\n\n'));
+    }
+
     onDone();
   };
 
@@ -824,6 +845,24 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Cargar catálogo de categorías serializadas para los selectores de diseño
+  type CatOpt = { id: string; name: string; family: string };
+  const [cats, setCats] = useState<CatOpt[]>([]);
+  useEffect(() => {
+    if (!isOps) return;
+    void (async () => {
+      try {
+        const r = await fetch('/api/inventory/categories');
+        if (!r.ok) return;
+        const j = await r.json();
+        setCats(((j.categories ?? []) as Array<{ id: string; name: string; family: string; is_serialized: boolean }>)
+          .filter((c) => c.is_serialized)
+          .map((c) => ({ id: c.id, name: c.name, family: c.family })));
+      } catch { /* opcional */ }
+    })();
+  }, [isOps]);
+  const catsByFamily = (fam: string) => cats.filter((c) => c.family === fam);
 
   // En operaciones la card de Dimensionado requiere la ficha completa.
   // Para evitar duplicar el endpoint interno, usamos el endpoint externo
@@ -922,6 +961,15 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
               <FormField label="Responsable" required value={form.diseno_aprobado_por ?? ''} onChange={(v) => set('diseno_aprobado_por', v)} placeholder="Santiago Andrés Osorio Huertas" />
               <FormField label="Notas del diseño" value={form.diseno_notes ?? ''} onChange={(v) => set('diseno_notes', v)} placeholder="Paneles JA Solar 595W · Inversor Livoltek 10K · Baterías Livoltek" fullWidth />
             </FormSection>
+
+            <FormSection title="Equipos del diseño (catálogo)">
+              <CategoryPicker label="Modelo de inversor" value={form.diseno_inversor_categoria_id ?? ''} onChange={(v) => set('diseno_inversor_categoria_id', v)} options={catsByFamily('inverter')} />
+              <CategoryPicker label="Modelo de batería"  value={form.diseno_bateria_categoria_id ?? ''} onChange={(v) => set('diseno_bateria_categoria_id', v)} options={catsByFamily('battery')} />
+              <CategoryPicker label="Modelo de panel"    value={form.diseno_panel_categoria_id ?? ''}   onChange={(v) => set('diseno_panel_categoria_id', v)}   options={catsByFamily('panel')} fullWidth />
+              <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                Al pasar a <strong>Alistamiento</strong>, el sistema reserva automáticamente los equipos disponibles en bodega usando estos modelos del catálogo. Si dejas alguno vacío, ese tipo no se reserva.
+              </p>
+            </FormSection>
           </>
         )}
 
@@ -958,6 +1006,22 @@ function FormFieldSelect({ label, value, onChange, options, fullWidth }: { label
       <select value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">— Selecciona —</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+/** Select específico para categorías del inventario: la key es el id, el label es el nombre. */
+function CategoryPicker({ label, value, onChange, options, fullWidth }: {
+  label: string; value: string; onChange: (v: string) => void;
+  options: Array<{ id: string; name: string }>; fullWidth?: boolean;
+}) {
+  return (
+    <div style={{ gridColumn: fullWidth ? '1 / -1' : 'auto' }}>
+      <label className="input-label" style={{ fontSize: '0.74rem' }}>{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{options.length === 0 ? '(no hay modelos en /inventario)' : '— Selecciona —'}</option>
+        {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
     </div>
   );

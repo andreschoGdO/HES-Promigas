@@ -109,15 +109,11 @@ export const TRANSITIONS: TransitionDef[] = [
       f('visita_instalacion_id', 'ID visita instalación', 'text', false, { help: 'UUID del acta de instalación en /visitas.' }),
     ],
   },
-  {
-    action: 'operations_to_completado',
-    label: 'Cerrar proyecto',
-    buttonLabel: 'Cerrar proyecto →',
-    fromModule: 'operations', fromStage: 'operativo', toModule: 'closed', toStage: 'completado',
-    requiredFields: [],
-    noteTemplate: 'Proyecto cerrado.',
-  },
   // ─── NUEVAS ETAPAS POST-OPERATIVO ───
+  // Nota: la transición Operativo → Cerrado se eliminó por diseño. Los
+  // proyectos exitosos permanecen en Operativo indefinidamente (el sistema
+  // sigue generando). Solo entran a 'closed' por desistimiento, fin de
+  // contrato o cancelación explícita (botón Cancelar en el detalle).
   // Garantía / Logística inversa: el sistema sigue operativo pero hay un ticket abierto.
   {
     action: 'operations_to_logistica_inversa',

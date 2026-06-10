@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { Package, Plus, Upload, ScanLine, Search, Trash2, Pencil, History, AlertTriangle, Boxes, Tags, Cpu, Battery, Sun, Cable, MapPin, ClipboardList, CheckCircle2, XCircle, Truck, Building2, Wrench, ArrowRight } from 'lucide-react';
+import { Package, Plus, Upload, ScanLine, Search, Trash2, Pencil, History, AlertTriangle, Boxes, Tags, Cpu, Battery, Sun, Cable, MapPin, ClipboardList, CheckCircle2, XCircle, Truck, Building2, Wrench, ArrowRight, Repeat, Undo2, PowerOff } from 'lucide-react';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
 
 const supa = () => createBrowserClient(
@@ -35,7 +35,7 @@ interface InvItem {
   model: string | null;
   capacity_value: number | null;
   capacity_unit: string | null;
-  status: 'in_stock' | 'reserved' | 'installed' | 'in_repair' | 'rma';
+  status: 'in_stock' | 'reserved' | 'installed' | 'in_repair' | 'rma' | 'decommissioned';
   current_location: string | null;
   current_house_id: string | null;
   acquired_at: string | null;
@@ -77,11 +77,12 @@ interface Movement {
 }
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
-  in_stock:   { label: 'En stock',    color: '#10b981' },
-  reserved:   { label: 'Reservado',   color: '#3b82f6' },
-  installed:  { label: 'Instalado',   color: '#07c5a8' },
-  in_repair:  { label: 'En garantía', color: '#f59e0b' },
-  rma:        { label: 'RMA',         color: '#8b5cf6' },
+  in_stock:       { label: 'En stock',    color: '#10b981' },
+  reserved:       { label: 'Reservado',   color: '#3b82f6' },
+  installed:      { label: 'Instalado',   color: '#07c5a8' },
+  in_repair:      { label: 'En garantía', color: '#f59e0b' },
+  rma:            { label: 'RMA',         color: '#8b5cf6' },
+  decommissioned: { label: 'Decomisado',  color: '#64748b' },
 };
 
 /**
@@ -311,6 +312,9 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
   const [showBulk, setShowBulk] = useState(false);
   const [statusItem, setStatusItem] = useState<InvItem | null>(null);
   const [historyItem, setHistoryItem] = useState<InvItem | null>(null);
+  const [swapItem, setSwapItem] = useState<InvItem | null>(null);
+  const [returnItem, setReturnItem] = useState<InvItem | null>(null);
+  const [decommItem, setDecommItem] = useState<InvItem | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -401,6 +405,24 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
                         {it.warranty_expires_at ?? '—'}
                       </td>
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {it.status === 'installed' && (
+                          <>
+                            <button onClick={() => setSwapItem(it)} title="Reemplazar (swap)"
+                              style={{ padding: 6, background: 'transparent', border: 'none', color: '#0ea5e9', cursor: 'pointer', borderRadius: 4 }}>
+                              <Repeat size={16} />
+                            </button>
+                            <button onClick={() => setReturnItem(it)} title="Devolver a bodega"
+                              style={{ padding: 6, background: 'transparent', border: 'none', color: '#f59e0b', cursor: 'pointer', borderRadius: 4 }}>
+                              <Undo2 size={16} />
+                            </button>
+                          </>
+                        )}
+                        {it.status !== 'decommissioned' && (
+                          <button onClick={() => setDecommItem(it)} title="Decomisar (fin de vida)"
+                            style={{ padding: 6, background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', borderRadius: 4 }}>
+                            <PowerOff size={16} />
+                          </button>
+                        )}
                         <button onClick={() => setStatusItem(it)} title="Cambiar estado / ubicación"
                           style={{ padding: 6, background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', borderRadius: 4 }}>
                           <Pencil size={16} />
@@ -427,6 +449,9 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
       {showBulk && <BulkUploadModal onClose={() => setShowBulk(false)} onSaved={() => { setShowBulk(false); load(); }} userEmail={userEmail} />}
       {statusItem && <ChangeStatusModal item={statusItem} userEmail={userEmail} onClose={() => setStatusItem(null)} onSaved={() => { setStatusItem(null); load(); }} />}
       {historyItem && <ItemHistoryModal item={historyItem} onClose={() => setHistoryItem(null)} />}
+      {swapItem && <SwapItemModal item={swapItem} userEmail={userEmail} onClose={() => setSwapItem(null)} onSaved={() => { setSwapItem(null); load(); }} />}
+      {returnItem && <ReturnItemModal item={returnItem} userEmail={userEmail} onClose={() => setReturnItem(null)} onSaved={() => { setReturnItem(null); load(); }} />}
+      {decommItem && <DecommissionItemModal item={decommItem} userEmail={userEmail} onClose={() => setDecommItem(null)} onSaved={() => { setDecommItem(null); load(); }} />}
     </>
   );
 }
@@ -1288,6 +1313,291 @@ function CategoryModal({ mode, initial, onClose, onSaved }: {
           {saving
             ? (mode === 'edit' ? 'Guardando…' : 'Creando…')
             : (mode === 'edit' ? 'Guardar cambios' : 'Crear categoría')}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ─── Modales de logística inversa ─── */
+
+const SWAP_MOTIVOS = [
+  { value: 'upgrade',     label: 'Upgrade tecnológico (cambio de marca/modelo)' },
+  { value: 'warranty',    label: 'Reemplazo por garantía' },
+  { value: 'damage',      label: 'Daño irreparable' },
+  { value: 'replacement', label: 'Reposición preventiva' },
+  { value: 'other',       label: 'Otro' },
+] as const;
+
+const SWAP_DESTINATIONS = [
+  { value: 'in_stock',        label: 'Devolver a bodega (volver a stock)' },
+  { value: 'in_repair',       label: 'Mandar a taller (revisión interna)' },
+  { value: 'rma',             label: 'Enviar a RMA con el proveedor' },
+  { value: 'decommissioned',  label: 'Decomisar (fin de vida útil)' },
+] as const;
+
+function SwapItemModal({ item, userEmail, onClose, onSaved }: { item: InvItem; userEmail: string; onClose: () => void; onSaved: () => void }) {
+  const [candidates, setCandidates] = useState<InvItem[]>([]);
+  const [search, setSearch] = useState('');
+  const [newItemId, setNewItemId] = useState('');
+  const [motivo, setMotivo] = useState<string>('upgrade');
+  const [destStatus, setDestStatus] = useState<string>('in_stock');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Cargar items en stock. Priorizar la misma familia.
+    fetch('/api/inventory/items?status=in_stock&limit=500')
+      .then((r) => r.json())
+      .then((j) => setCandidates(j.items ?? []));
+  }, []);
+
+  const sameFamily = item.inventory_categories?.family;
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const matchesQuery = (it: InvItem) =>
+      !q ||
+      it.serial_number.toLowerCase().includes(q) ||
+      (it.brand ?? '').toLowerCase().includes(q) ||
+      (it.model ?? '').toLowerCase().includes(q) ||
+      (it.inventory_categories?.name ?? '').toLowerCase().includes(q);
+    const same = candidates.filter((it) => it.inventory_categories?.family === sameFamily && matchesQuery(it));
+    const other = candidates.filter((it) => it.inventory_categories?.family !== sameFamily && matchesQuery(it));
+    return { same, other };
+  }, [candidates, search, sameFamily]);
+
+  const submit = async () => {
+    setErr(null);
+    if (!newItemId) { setErr('Selecciona el equipo de reemplazo'); return; }
+    setSaving(true);
+    try {
+      const r = await fetch('/api/inventory/items/swap', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          old_item_id: item.id,
+          new_item_id: newItemId,
+          motivo,
+          destination_status: destStatus,
+          notes: notes.trim() || null,
+          actor_email: userEmail,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Reemplazar equipo (swap)" onClose={onClose}>
+      <div style={{ background: 'rgba(14, 165, 233, 0.08)', border: '1px solid rgba(14, 165, 233, 0.3)', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: '0.85rem' }}>
+        <strong>Equipo a retirar:</strong>
+        <div style={{ marginTop: 4, fontFamily: 'ui-monospace, monospace', fontSize: '0.82rem' }}>{item.serial_number}</div>
+        <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+          {item.inventory_categories?.name ?? '—'} · {[item.brand, item.model].filter(Boolean).join(' ')}
+          {item.client_houses?.casa && <> · en <strong>{item.client_houses.casa}</strong></>}
+        </div>
+      </div>
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Motivo del swap *</label>
+        <select value={motivo} onChange={(e) => setMotivo(e.target.value)}>
+          {SWAP_MOTIVOS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+        </select>
+      </div>
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">¿A dónde va el equipo retirado? *</label>
+        <select value={destStatus} onChange={(e) => setDestStatus(e.target.value)}>
+          {SWAP_DESTINATIONS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+        </select>
+      </div>
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Equipo de reemplazo *</label>
+        <div style={{ position: 'relative', marginBottom: 8 }}>
+          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input type="text" placeholder="Buscar serial, marca, modelo, categoría…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: '100%', paddingLeft: 32 }} />
+        </div>
+        <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+          {filtered.same.length > 0 && (
+            <>
+              <div style={{ padding: '6px 10px', fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', background: 'var(--bg-elevated)', letterSpacing: '0.05em' }}>
+                Misma familia ({sameFamily ?? '—'})
+              </div>
+              {filtered.same.map((it) => (
+                <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: newItemId === it.id ? 'rgba(14,165,233,0.08)' : 'transparent' }}>
+                  <input type="radio" name="newItem" checked={newItemId === it.id} onChange={() => setNewItemId(it.id)} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem', fontWeight: 600 }}>{it.serial_number}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{it.inventory_categories?.name ?? '—'} · {[it.brand, it.model].filter(Boolean).join(' ')}</div>
+                  </div>
+                </label>
+              ))}
+            </>
+          )}
+          {filtered.other.length > 0 && (
+            <>
+              <div style={{ padding: '6px 10px', fontSize: '0.7rem', textTransform: 'uppercase', color: 'var(--text-muted)', background: 'var(--bg-elevated)', letterSpacing: '0.05em' }}>
+                Otras familias (cambio de tecnología)
+              </div>
+              {filtered.other.map((it) => (
+                <label key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: newItemId === it.id ? 'rgba(14,165,233,0.08)' : 'transparent' }}>
+                  <input type="radio" name="newItem" checked={newItemId === it.id} onChange={() => setNewItemId(it.id)} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem', fontWeight: 600 }}>{it.serial_number}</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{it.inventory_categories?.name ?? '—'} · {[it.brand, it.model].filter(Boolean).join(' ')}</div>
+                  </div>
+                </label>
+              ))}
+            </>
+          )}
+          {filtered.same.length === 0 && filtered.other.length === 0 && (
+            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+              No hay equipos en stock con esos filtros.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Notas</label>
+        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Detalle, número de OT, etc." rows={2} style={{ width: '100%' }} />
+      </div>
+
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={() => void submit()} className="primary-btn" disabled={saving || !newItemId} style={{ background: '#0ea5e9' }}>
+          {saving ? 'Procesando…' : 'Ejecutar swap'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function ReturnItemModal({ item, userEmail, onClose, onSaved }: { item: InvItem; userEmail: string; onClose: () => void; onSaved: () => void }) {
+  const [destStatus, setDestStatus] = useState<string>('in_stock');
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    setErr(null);
+    if (!reason.trim()) { setErr('Motivo del retiro requerido'); return; }
+    setSaving(true);
+    try {
+      const r = await fetch('/api/inventory/items/return', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: item.id,
+          destination_status: destStatus,
+          reason: reason.trim(),
+          actor_email: userEmail,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Retirar equipo (sin reemplazo)" onClose={onClose}>
+      <div style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.3)', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: '0.85rem' }}>
+        <strong>Equipo a retirar:</strong>
+        <div style={{ marginTop: 4, fontFamily: 'ui-monospace, monospace', fontSize: '0.82rem' }}>{item.serial_number}</div>
+        <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+          {item.inventory_categories?.name ?? '—'} · {[item.brand, item.model].filter(Boolean).join(' ')}
+          {item.client_houses?.casa && <> · en <strong>{item.client_houses.casa}</strong></>}
+        </div>
+      </div>
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Destino *</label>
+        <select value={destStatus} onChange={(e) => setDestStatus(e.target.value)}>
+          <option value="in_stock">Devolver a bodega</option>
+          <option value="in_repair">A taller (revisión)</option>
+          <option value="rma">A RMA con proveedor</option>
+        </select>
+      </div>
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Motivo *</label>
+        <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Cancelación del proyecto, equipo defectuoso, error de instalación, etc." rows={3} style={{ width: '100%' }} />
+      </div>
+
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={() => void submit()} className="primary-btn" disabled={saving} style={{ background: '#f59e0b' }}>
+          {saving ? 'Procesando…' : 'Retirar de campo'}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function DecommissionItemModal({ item, userEmail, onClose, onSaved }: { item: InvItem; userEmail: string; onClose: () => void; onSaved: () => void }) {
+  const [reason, setReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    setErr(null);
+    if (!reason.trim()) { setErr('Motivo de la decomisión requerido'); return; }
+    if (!confirm(`¿Decomisar definitivamente ${item.serial_number}? Esta acción es permanente.`)) return;
+    setSaving(true);
+    try {
+      const r = await fetch('/api/inventory/items/decommission', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: item.id, reason: reason.trim(), actor_email: userEmail }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? 'Error');
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell title="Decomisar equipo (fin de vida útil)" onClose={onClose}>
+      <div style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: '0.85rem' }}>
+        <strong>⚠ Acción permanente</strong>
+        <div style={{ marginTop: 4, fontFamily: 'ui-monospace, monospace', fontSize: '0.82rem' }}>{item.serial_number}</div>
+        <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+          {item.inventory_categories?.name ?? '—'} · {[item.brand, item.model].filter(Boolean).join(' ')}
+        </div>
+        <p style={{ marginTop: 8, fontSize: '0.76rem', color: 'var(--text-secondary)' }}>
+          El equipo quedará marcado como decomisado y no será reutilizable. Histórico se conserva para auditoría.
+        </p>
+      </div>
+
+      <div className="input-group" style={{ marginBottom: 10 }}>
+        <label className="input-label">Motivo *</label>
+        <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Fin de vida útil, daño irreparable, pérdida, robo, etc." rows={3} style={{ width: '100%' }} />
+      </div>
+
+      {err && <div className="alert-error" style={{ marginBottom: 10, fontSize: '0.82rem' }}>{err}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button onClick={onClose} className="secondary-btn" disabled={saving}>Cancelar</button>
+        <button onClick={() => void submit()} className="primary-btn" disabled={saving} style={{ background: '#ef4444' }}>
+          {saving ? 'Procesando…' : 'Decomisar definitivamente'}
         </button>
       </div>
     </ModalShell>

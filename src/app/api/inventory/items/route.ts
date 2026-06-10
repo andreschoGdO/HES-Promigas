@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   let query = supabaseAdmin
     .from('inventory_items')
-    .select('*, inventory_categories(code, name, family), client_houses(casa)')
+    .select('*, inventory_categories(code, name, family), client_houses(casa), inventory_reservation_items(inventory_reservations(id, title, status))')
     .order('created_at', { ascending: false })
     .limit(limit);
 

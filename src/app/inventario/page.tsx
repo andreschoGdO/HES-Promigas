@@ -45,6 +45,8 @@ interface InvItem {
   created_at: string;
   inventory_categories?: { code: string; name: string; family: string } | null;
   client_houses?: { casa: string } | null;
+  // Reservas vinculadas (filtramos en frontend a la activa: draft o confirmed).
+  inventory_reservation_items?: Array<{ inventory_reservations?: { id: string; title: string; status: string } | null }>;
 }
 
 interface Consumable {
@@ -81,6 +83,52 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   in_repair:  { label: 'En garantía', color: '#f59e0b' },
   rma:        { label: 'RMA',         color: '#8b5cf6' },
 };
+
+/**
+ * Muestra el destino actual del item dependiendo de su estado:
+ *   - reserved  → "Reservado para: <título de la reserva activa>"
+ *   - installed → "Instalado en: Casa X" (con su barrio si aplica)
+ *   - in_repair → "En garantía — taller / proveedor"
+ *   - rma       → "RMA proveedor"
+ *   - in_stock  → "Bodega" (o current_location)
+ */
+function ItemDestination({ item }: { item: InvItem }) {
+  // Buscar reserva activa (draft o confirmed) entre las vinculadas
+  const activeResv = item.inventory_reservation_items
+    ?.map((l) => l.inventory_reservations)
+    .find((r) => r && (r.status === 'draft' || r.status === 'confirmed')) ?? null;
+
+  if (item.status === 'reserved' && activeResv) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }} />
+        <span style={{ color: 'var(--text)' }}>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginRight: 4 }}>RESV →</span>
+          {activeResv.title}
+        </span>
+      </span>
+    );
+  }
+  if (item.status === 'installed' && item.client_houses?.casa) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#07c5a8' }} />
+        <span style={{ color: 'var(--text)' }}>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginRight: 4 }}>EN →</span>
+          {item.client_houses.casa}
+        </span>
+      </span>
+    );
+  }
+  if (item.status === 'in_repair') {
+    return <span style={{ color: '#f59e0b' }}>En taller / garantía</span>;
+  }
+  if (item.status === 'rma') {
+    return <span style={{ color: '#8b5cf6' }}>RMA con proveedor</span>;
+  }
+  // in_stock o cualquier otro
+  return <span>{item.current_location ?? 'Bodega'}</span>;
+}
 
 const FAMILY_ICONS: Record<string, typeof Cpu> = {
   inverter: Cpu, battery: Battery, panel: Sun, gateway: Cpu, meter: Cpu, cable: Cable, breaker: Cable, tool: Package, other: Package,
@@ -330,7 +378,7 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
                   <th>Categoría</th>
                   <th>Marca / Modelo</th>
                   <th>Estado</th>
-                  <th>Ubicación</th>
+                  <th>Destino / ubicación</th>
                   <th>Garantía</th>
                   <th style={{ textAlign: 'right' }}>Acciones</th>
                 </tr>
@@ -347,7 +395,7 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
                         <span style={{ padding: '2px 10px', borderRadius: 10, background: meta.color + '20', color: meta.color, fontSize: '0.7rem', fontWeight: 700 }}>{meta.label}</span>
                       </td>
                       <td style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                        {it.client_houses?.casa ?? it.current_location ?? '—'}
+                        <ItemDestination item={it} />
                       </td>
                       <td style={{ fontSize: '0.78rem', fontFamily: 'ui-monospace, monospace' }}>
                         {it.warranty_expires_at ?? '—'}

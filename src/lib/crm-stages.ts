@@ -7,7 +7,16 @@
  * permanecen en la BD por compatibilidad pero ya no se usan en la UI.
  */
 
-export type OperationsStage = 'pending' | 'dimensionado' | 'alistamiento' | 'instalacion' | 'operativo' | 'completado';
+export type OperationsStage =
+  | 'pending'
+  | 'dimensionado'
+  | 'alistamiento'
+  | 'instalacion'
+  | 'operativo'
+  | 'logistica_inversa'
+  | 'desistido'
+  | 'sin_renovacion'
+  | 'completado';
 export type CrmModule = 'operations' | 'closed';
 
 export interface StageMeta {
@@ -19,10 +28,13 @@ export interface StageMeta {
 }
 
 export const OPERATIONS_STAGES: StageMeta[] = [
-  { key: 'dimensionado',  label: '1. Dimensionado', shortLabel: 'Dimensionado', color: '#94a3b8', description: 'Card con cliente, conjunto, dirección, dimensionamiento (paneles, inversor, batería) y responsable.' },
-  { key: 'alistamiento',  label: '2. Alistamiento', shortLabel: 'Alistamiento', color: '#3b82f6', description: 'Reservar equipos en inventario con los SKUs del diseño y verificar disponibilidad física antes de despachar.' },
-  { key: 'instalacion',   label: '3. Instalación',  shortLabel: 'Instalación',  color: '#8b5cf6', description: 'Contratista seleccionado, instalación en curso. Visita de instalación enlazada en /visitas.' },
-  { key: 'operativo',     label: '4. Operativo',    shortLabel: 'Operativo',    color: '#10b981', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum. Cierra el flujo de Operaciones.' },
+  { key: 'dimensionado',     label: '1. Dimensionado',     shortLabel: 'Dimensionado',     color: '#94a3b8', description: 'Card con cliente, conjunto, dirección, dimensionamiento (paneles, inversor, batería) y responsable.' },
+  { key: 'alistamiento',     label: '2. Alistamiento',     shortLabel: 'Alistamiento',     color: '#3b82f6', description: 'Reservar equipos en inventario con los SKUs del diseño y verificar disponibilidad física antes de despachar.' },
+  { key: 'instalacion',      label: '3. Instalación',      shortLabel: 'Instalación',      color: '#8b5cf6', description: 'Contratista seleccionado, instalación en curso. Visita de instalación enlazada en /visitas.' },
+  { key: 'operativo',        label: '4. Operativo',        shortLabel: 'Operativo',        color: '#10b981', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum.' },
+  { key: 'logistica_inversa',label: '5. Logística inversa', shortLabel: 'Garantía / cambio', color: '#ec4899', description: 'Reparación, garantía, cambio de equipos. El sistema sigue operativo pero hay tickets de servicio abiertos.' },
+  { key: 'desistido',        label: '6. Desistido',        shortLabel: 'Desistido',        color: '#f97316', description: 'Cliente desistió del proyecto antes o durante. Equipos se recuperan a bodega.' },
+  { key: 'sin_renovacion',   label: '7. Sin renovación',   shortLabel: 'No renovado',      color: '#64748b', description: 'Fin del contrato — cliente no renueva. Equipos se retiran y se devuelven a bodega para reuso.' },
 ];
 
 export const MODULE_META: Record<CrmModule, { label: string; color: string; href: string }> = {
@@ -104,6 +116,58 @@ export const TRANSITIONS: TransitionDef[] = [
     fromModule: 'operations', fromStage: 'operativo', toModule: 'closed', toStage: 'completado',
     requiredFields: [],
     noteTemplate: 'Proyecto cerrado.',
+  },
+  // ─── NUEVAS ETAPAS POST-OPERATIVO ───
+  // Garantía / Logística inversa: el sistema sigue operativo pero hay un ticket abierto.
+  {
+    action: 'operations_to_logistica_inversa',
+    label: 'Abrir ticket de garantía / cambio',
+    buttonLabel: 'Garantía / cambio →',
+    fromModule: 'operations', fromStage: 'operativo', toModule: 'operations', toStage: 'logistica_inversa',
+    requiredFields: [
+      f('notes', 'Motivo del cambio / garantía', 'textarea'),
+    ],
+    noteTemplate: 'Abierto ticket de logística inversa.',
+  },
+  {
+    action: 'logistica_inversa_to_operativo',
+    label: 'Cerrar ticket y volver a Operativo',
+    buttonLabel: 'Sistema reparado →',
+    fromModule: 'operations', fromStage: 'logistica_inversa', toModule: 'operations', toStage: 'operativo',
+    requiredFields: [],
+    noteTemplate: 'Ticket cerrado. Sistema vuelve a operativo.',
+  },
+  // Desistido: cliente desistió. Se cierra y se cancela el proyecto.
+  {
+    action: 'operations_to_desistido',
+    label: 'Marcar como desistido',
+    buttonLabel: 'Cliente desistió →',
+    fromModule: 'operations', fromStage: 'operativo', toModule: 'closed', toStage: 'desistido',
+    requiredFields: [
+      f('cancellation_reason', 'Motivo del desistimiento', 'textarea'),
+    ],
+    noteTemplate: 'Cliente desistió. Iniciar logística inversa de recuperación de equipos.',
+  },
+  {
+    action: 'dimensionado_to_desistido',
+    label: 'Desistido antes de instalar',
+    buttonLabel: 'Cliente desistió →',
+    fromModule: 'operations', fromStage: 'dimensionado', toModule: 'closed', toStage: 'desistido',
+    requiredFields: [
+      f('cancellation_reason', 'Motivo', 'textarea'),
+    ],
+    noteTemplate: 'Desistimiento previo a instalación.',
+  },
+  // Sin renovación: contrato termina, equipos retornan a bodega.
+  {
+    action: 'operations_to_sin_renovacion',
+    label: 'No renueva contrato',
+    buttonLabel: 'Fin de contrato →',
+    fromModule: 'operations', fromStage: 'operativo', toModule: 'closed', toStage: 'sin_renovacion',
+    requiredFields: [
+      f('cancellation_reason', 'Motivo del cierre', 'textarea'),
+    ],
+    noteTemplate: 'Cliente no renueva contrato. Iniciar retiro de equipos.',
   },
   // ─── BACKWARD: devolver a la etapa anterior, sin perder ningún campo guardado ───
   {

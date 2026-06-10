@@ -1404,9 +1404,18 @@ function PanoramaTab() {
   };
   type HouseStat = { house_id: string; casa: string; count: number; brands: Set<string> };
   type RecentItem = { id: string; serial_number: string; brand: string | null; model: string | null; acquired_at: string | null; acquired_cost_cop: number | null; supplier: string | null; inventory_categories?: { name: string; family: string } | null };
+  type BrandStat = {
+    brand: string;
+    total: number;
+    byStatus: Record<string, number>;
+    byFamily: Record<string, number>;
+    installed: number;
+    totalCostCop: number;
+  };
 
   const [loading, setLoading] = useState(true);
   const [familyStats, setFamilyStats] = useState<FamilyStats[]>([]);
+  const [brandStats, setBrandStats] = useState<BrandStat[]>([]);
   const [topHouses, setTopHouses] = useState<HouseStat[]>([]);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [consumiblesValue, setConsumiblesValue] = useState<number>(0);
@@ -1438,6 +1447,21 @@ function PanoramaTab() {
         }
         const families = Array.from(byFamily.values()).sort((a, b) => b.total - a.total);
         setFamilyStats(families);
+
+        // Agrupar por marca
+        const byBrand = new Map<string, BrandStat>();
+        for (const it of items) {
+          const brand = it.brand?.trim() || '(Sin marca)';
+          const cur = byBrand.get(brand) ?? { brand, total: 0, byStatus: {}, byFamily: {}, installed: 0, totalCostCop: 0 };
+          cur.total++;
+          cur.byStatus[it.status] = (cur.byStatus[it.status] ?? 0) + 1;
+          const family = it.inventory_categories?.family ?? 'sin_familia';
+          cur.byFamily[family] = (cur.byFamily[family] ?? 0) + 1;
+          if (it.status === 'installed') cur.installed++;
+          if (it.acquired_cost_cop != null) cur.totalCostCop += Number(it.acquired_cost_cop);
+          byBrand.set(brand, cur);
+        }
+        setBrandStats(Array.from(byBrand.values()).sort((a, b) => b.total - a.total));
 
         // Top casas por cantidad de equipos instalados
         const byHouse = new Map<string, HouseStat>();
@@ -1528,6 +1552,56 @@ function PanoramaTab() {
                 );
               })}
             </div>
+          </div>
+
+          {/* Tarjetas por marca */}
+          <div className="glass-panel" style={{ padding: 16 }}>
+            <h3 style={{ margin: 0, fontSize: '0.95rem', marginBottom: 12 }}>Por marca de fabricante</h3>
+            {brandStats.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Aún no hay equipos con marca registrada.</p>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+                {brandStats.map((bs) => (
+                  <div key={bs.brand} style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: 14, borderLeft: '4px solid #f59e0b' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                      <h4 style={{ margin: 0, fontSize: '0.92rem' }}>{bs.brand}</h4>
+                      <span style={{ marginLeft: 'auto', fontFamily: 'ui-monospace, monospace', fontSize: '1.2rem', fontWeight: 700 }}>{bs.total}</span>
+                    </div>
+                    {/* Estados */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                      {Object.entries(bs.byStatus).map(([status, count]) => {
+                        const m = STATUS_META[status];
+                        if (!m || count === 0) return null;
+                        return (
+                          <span key={status} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.66rem', fontWeight: 600, padding: '2px 7px', borderRadius: 10, background: m.color + '20', color: m.color }}>
+                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: m.color }} />
+                            {m.label}: {count}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {/* Familias */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                      {Object.entries(bs.byFamily).map(([fam, count]) => (
+                        <span key={fam} style={{ fontSize: '0.66rem', fontWeight: 500, padding: '2px 6px', borderRadius: 6, background: 'rgba(255,255,255,0.04)', color: 'var(--text-secondary)' }}>
+                          {FAMILY_LABELS[fam] ?? fam}: <strong>{count}</strong>
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '0.78rem', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                      <div>
+                        <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Instalados</div>
+                        <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{bs.installed}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Inversión</div>
+                        <div style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>${fmtMoney(bs.totalCostCop)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Top casas por equipos instalados */}

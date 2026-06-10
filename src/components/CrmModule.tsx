@@ -1106,7 +1106,11 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
       try {
         const r = await fetch(`/api/crm/stage-fields?module=${def.toModule}&stage=${def.toStage}`);
         const j = await r.json();
-        const dbFields: DbField[] = j.fields ?? [];
+        // Filtrar fields deprecados que aún puedan estar persistidos en crm_stage_fields.
+        // 'reservation_id' fue retirado del flujo (la reserva se crea automáticamente
+        // al pasar a Alistamiento, ya no se pide UUID a mano).
+        const DEPRECATED_KEYS = new Set(['reservation_id']);
+        const dbFields: DbField[] = (j.fields ?? []).filter((f: DbField) => !DEPRECATED_KEYS.has(f.field_key));
         setFields(dbFields);
         const init: Record<string, string> = {};
         const customDataRaw = (project as unknown as Record<string, unknown>).custom_data as Record<string, unknown> | undefined;

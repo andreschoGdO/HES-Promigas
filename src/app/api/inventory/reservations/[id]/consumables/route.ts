@@ -68,6 +68,12 @@ export async function GET(_request: Request, context: Ctx) {
     .from('inventory_reservation_consumables')
     .select('id, quantity, fulfilled_at, consumable_id, inventory_consumables(id, name, sku, unit, stock_quantity, cost_per_unit_cop)')
     .eq('reservation_id', id);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // Si la tabla no existe todavía (migration 23 pendiente), devolvemos vacío.
+    if (/inventory_reservation_consumables|schema cache|does not exist/i.test(error.message)) {
+      return NextResponse.json({ lines: [] });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ lines: data ?? [] });
 }

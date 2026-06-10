@@ -12,14 +12,28 @@ export async function GET(request: Request) {
   const status = url.searchParams.get('status');
   const visitId = url.searchParams.get('visit_id');
 
-  let q = supabaseAdmin
-    .from('inventory_reservations')
-    .select('*, field_visits(visit_type, casa, visit_date), inventory_reservation_items(id, picked_at, inventory_items(id, serial_number, brand, model, status, inventory_categories(name, family))), inventory_reservation_consumables(id, quantity, fulfilled_at, inventory_consumables(id, name, sku, unit, stock_quantity))')
-    .order('created_at', { ascending: false });
-  if (status) q = q.eq('status', status);
-  if (visitId) q = q.eq('visit_id', visitId);
+  // Intentar con consumibles (requiere migration 23). Si la tabla aún no
+  // existe en BD, fallback a la query previa sin consumibles.
+  const SELECT_WITH_CONSUMABLES = '*, field_visits(visit_type, casa, visit_date), inventory_reservation_items(id, picked_at, inventory_items(id, serial_number, brand, model, status, inventory_categories(name, family))), inventory_reservation_consumables(id, quantity, fulfilled_at, inventory_consumables(id, name, sku, unit, stock_quantity))';
+  const SELECT_LEGACY          = '*, field_visits(visit_type, casa, visit_date), inventory_reservation_items(id, picked_at, inventory_items(id, serial_number, brand, model, status, inventory_categories(name, family)))';
 
-  const { data, error } = await q.limit(200);
+  const buildQuery = (selectStr: string) => {
+    let q = supabaseAdmin
+      .from('inventory_reservations')
+      .select(selectStr)
+      .order('created_at', { ascending: false });
+    if (status) q = q.eq('status', status);
+    if (visitId) q = q.eq('visit_id', visitId);
+    return q.limit(200);
+  };
+
+  let { data, error } = await buildQuery(SELECT_WITH_CONSUMABLES);
+  if (error && /inventory_reservation_consumables|schema cache/i.test(error.message)) {
+    // La tabla aún no existe — reintenta con el select legacy.
+    const fallback = await buildQuery(SELECT_LEGACY);
+    data = fallback.data;
+    error = fallback.error;
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ reservations: data });
 }

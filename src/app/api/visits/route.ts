@@ -13,11 +13,13 @@ export async function GET(request: Request) {
   const status = url.searchParams.get('status');
   const from = url.searchParams.get('from');
   const to = url.searchParams.get('to');
+  const technician = url.searchParams.get('technician');
+  const contratista = url.searchParams.get('contratista');
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 100), 500);
 
   let q = supabaseAdmin
     .from('field_visits')
-    .select('id, visit_type, casa, house_id, technician_name, technician_email, visit_date, visit_time, status, notes, created_at, updated_at, completed_at')
+    .select('id, visit_type, casa, house_id, technician_name, technician_email, contratista, visit_date, visit_time, status, notes, created_at, updated_at, completed_at')
     .order('visit_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -26,6 +28,8 @@ export async function GET(request: Request) {
   if (status) q = q.eq('status', status);
   if (from) q = q.gte('visit_date', from);
   if (to) q = q.lte('visit_date', to);
+  if (technician) q = q.ilike('technician_name', `%${technician}%`);
+  if (contratista) q = q.ilike('contratista', `%${contratista}%`);
 
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -48,6 +52,7 @@ export async function POST(request: Request) {
       casa: body.casa ?? null,
       technician_name: body.technician_name ?? null,
       technician_email: body.technician_email ?? null,
+      contratista: body.contratista ?? null,
       visit_date: body.visit_date ?? new Date().toISOString().slice(0, 10),
       visit_time: body.visit_time ?? null,
       status: body.status === 'completed' ? 'completed' : 'draft',

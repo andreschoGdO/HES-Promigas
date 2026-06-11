@@ -10,6 +10,7 @@ export interface VisitPDFData {
   casa: string | null;
   technician_name: string | null;
   technician_email: string | null;
+  contratista: string | null;
   visit_date: string;
   visit_time: string | null;
   status: string;
@@ -271,15 +272,24 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
     y += boxHeight + 3;
   }
 
-  // Quien realiza la visita (footer firma)
+  // Quien realiza la visita + contratista (footer firma)
   const tecnico = String(visit.form_data?.quien_realiza_visita ?? visit.technician_name ?? '');
-  if (y > pageHeight - 20) { doc.addPage(); y = drawHeader(doc, schema, visit); }
+  const contratistaStr = visit.contratista ?? '';
+  if (y > pageHeight - 24) { doc.addPage(); y = drawHeader(doc, schema, visit); }
   doc.setFontSize(8);
   doc.setTextColor(MUTED);
   doc.text('Quien realiza la visita:', doc.internal.pageSize.getWidth() - margin - 70, y + 5);
   doc.setTextColor(TEXT);
   doc.setFont('helvetica', 'bold');
   doc.text(tecnico || '—', doc.internal.pageSize.getWidth() - margin - 70, y + 10);
+  if (contratistaStr) {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(MUTED);
+    doc.text('Contratista:', doc.internal.pageSize.getWidth() - margin - 70, y + 15);
+    doc.setTextColor(TEXT);
+    doc.setFont('helvetica', 'bold');
+    doc.text(contratistaStr, doc.internal.pageSize.getWidth() - margin - 70, y + 20);
+  }
   doc.setFont('helvetica', 'normal');
 
   // ───── Página(s) de fotos ─────
@@ -351,4 +361,36 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
   const safeCasa = (visit.casa ?? 'sin-casa').replace(/[^a-zA-Z0-9_-]/g, '_');
   const filename = `Acta-${schema.shortLabel.replace(/\s+/g, '_')}-${safeCasa}-${visit.visit_date}.pdf`;
   doc.save(filename);
+}
+
+/**
+ * Versión "build only" — devuelve el Blob y el filename sugerido sin disparar
+ * descarga. Útil para empaquetar múltiples actas en un .zip.
+ */
+export async function buildVisitPDFBlob(visit: VisitPDFData, photos: VisitPhoto[]): Promise<{ blob: Blob; filename: string }> {
+  // Reusar la lógica de generateVisitPDF, pero produciendo Blob en vez de doc.save.
+  // jsPDF expone .output('blob') para esto.
+  const schema = findSchema(visit.visit_type);
+  if (!schema) throw new Error(`Schema no encontrado para ${visit.visit_type}`);
+
+  // Hack mínimo: monkey-patch temporal de doc.save para capturar el blob.
+  // (Evita duplicar 170 líneas de drawing). Restauramos al terminar.
+  // jsPDF.prototype.save tiene overloads incompatibles entre sí; el cast a
+  // unknown→Function es la vía menos invasiva sin tocar la API pública.
+  const proto = jsPDF.prototype as unknown as { save: (filename: string) => jsPDF };
+  const originalSave = proto.save;
+  let capturedBlob: Blob | null = null;
+  let capturedName = 'acta.pdf';
+  proto.save = function (this: jsPDF, filename: string) {
+    capturedBlob = this.output('blob') as Blob;
+    capturedName = filename;
+    return this;
+  };
+  try {
+    await generateVisitPDF(visit, photos);
+  } finally {
+    proto.save = originalSave;
+  }
+  if (!capturedBlob) throw new Error('No se generó el PDF');
+  return { blob: capturedBlob, filename: capturedName };
 }

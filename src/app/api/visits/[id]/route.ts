@@ -45,7 +45,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const { id } = await context.params;
     const body = await request.json();
     const updates: Record<string, unknown> = {};
-    const allowed = ['casa', 'house_id', 'technician_name', 'technician_email', 'visit_date', 'visit_time', 'status', 'form_data', 'notes', 'lat', 'lng'];
+    const allowed = ['casa', 'house_id', 'technician_name', 'technician_email', 'contratista', 'visit_date', 'visit_time', 'status', 'form_data', 'notes', 'lat', 'lng'];
     for (const k of allowed) {
       if (k in body) updates[k] = body[k];
     }

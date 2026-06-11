@@ -20,6 +20,7 @@ interface VisitListItem {
   visit_type: VisitType;
   casa: string | null;
   technician_name: string | null;
+  contratista: string | null;
   visit_date: string;
   status: 'draft' | 'completed' | 'cancelled';
   notes: string | null;
@@ -162,6 +163,12 @@ function HistorialTable({ onOpen }: { onOpen: (id: string) => void }) {
   const [filterType, setFilterType] = useState<VisitType | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'draft' | 'completed'>('all');
   const [filterCasa, setFilterCasa] = useState<string>('');
+  const [filterFrom, setFilterFrom] = useState<string>('');
+  const [filterTo, setFilterTo] = useState<string>('');
+  const [filterContratista, setFilterContratista] = useState<string>('');
+  const [filterTechnician, setFilterTechnician] = useState<string>('');
+  const [zipBusy, setZipBusy] = useState(false);
+  const [zipProgress, setZipProgress] = useState<{ done: number; total: number } | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -169,12 +176,16 @@ function HistorialTable({ onOpen }: { onOpen: (id: string) => void }) {
     if (filterType !== 'all') params.set('type', filterType);
     if (filterStatus !== 'all') params.set('status', filterStatus);
     if (filterCasa) params.set('casa', filterCasa);
+    if (filterFrom) params.set('from', filterFrom);
+    if (filterTo) params.set('to', filterTo);
+    if (filterContratista) params.set('contratista', filterContratista);
+    if (filterTechnician) params.set('technician', filterTechnician);
     const r = await fetch(`/api/visits?${params}`);
     const j = await r.json();
     setItems(j.visits ?? []);
     setLoading(false);
   };
-  useEffect(() => { load(); }, [filterType, filterStatus, filterCasa]);
+  useEffect(() => { load(); }, [filterType, filterStatus, filterCasa, filterFrom, filterTo, filterContratista, filterTechnician]);
 
   const handleDownloadPDF = async (id: string) => {
     try {
@@ -186,6 +197,65 @@ function HistorialTable({ onOpen }: { onOpen: (id: string) => void }) {
       alert('Error generando PDF: ' + (e instanceof Error ? e.message : 'desconocido'));
     }
   };
+
+  // Descarga masiva: empaqueta cada acta completada (de las filtradas) en su PDF
+  // y junta todo en un .zip. JSZip se carga lazy (1ª vez ~50KB) para no inflar el bundle.
+  const handleDownloadZip = async () => {
+    const completed = items.filter((it) => it.status === 'completed');
+    if (completed.length === 0) {
+      alert('No hay actas completadas en los filtros actuales.');
+      return;
+    }
+    if (!confirm(`Se generará un .zip con ${completed.length} acta(s) en PDF. Puede tardar 1-2 min. ¿Continuar?`)) return;
+
+    setZipBusy(true);
+    setZipProgress({ done: 0, total: completed.length });
+    try {
+      const { default: JSZip } = await import('jszip');
+      const { buildVisitPDFBlob } = await import('@/lib/visit-pdf');
+      const zip = new JSZip();
+      let done = 0;
+      for (const it of completed) {
+        try {
+          const r = await fetch(`/api/visits/${it.id}`);
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error ?? 'fetch fallo');
+          const { blob, filename } = await buildVisitPDFBlob(j.visit as VisitPDFData, (j.photos ?? []) as VisitPhoto[]);
+          zip.file(filename, blob);
+        } catch (e) {
+          console.error(`Acta ${it.id} fallida:`, e);
+        }
+        done++;
+        setZipProgress({ done, total: completed.length });
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `actas-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Error generando ZIP: ' + (e instanceof Error ? e.message : 'desconocido'));
+    } finally {
+      setZipBusy(false);
+      setZipProgress(null);
+    }
+  };
+
+  const clearFilters = () => {
+    setFilterType('all');
+    setFilterStatus('all');
+    setFilterCasa('');
+    setFilterFrom('');
+    setFilterTo('');
+    setFilterContratista('');
+    setFilterTechnician('');
+  };
+  const hasActiveFilters = filterType !== 'all' || filterStatus !== 'all' || filterCasa || filterFrom || filterTo || filterContratista || filterTechnician;
+  const completedCount = items.filter((it) => it.status === 'completed').length;
 
   const handleDelete = async (item: VisitListItem) => {
     const label = `${findSchema(item.visit_type)?.shortLabel ?? item.visit_type}${item.casa ? ' · ' + item.casa : ''}`;
@@ -215,13 +285,57 @@ function HistorialTable({ onOpen }: { onOpen: (id: string) => void }) {
             );
           })}
         </div>
-        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Estado</div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-          <button className={`chip ${filterStatus === 'all' ? 'active' : ''}`} onClick={() => setFilterStatus('all')}>Todos</button>
-          <button className={`chip ${filterStatus === 'draft' ? 'active' : ''}`} onClick={() => setFilterStatus('draft')}>Borradores</button>
-          <button className={`chip ${filterStatus === 'completed' ? 'active' : ''}`} onClick={() => setFilterStatus('completed')}>Completadas</button>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 14, alignItems: 'flex-end' }}>
+          <div style={{ flex: '0 0 auto' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Estado</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button className={`chip ${filterStatus === 'all' ? 'active' : ''}`} onClick={() => setFilterStatus('all')}>Todos</button>
+              <button className={`chip ${filterStatus === 'draft' ? 'active' : ''}`} onClick={() => setFilterStatus('draft')}>Borradores</button>
+              <button className={`chip ${filterStatus === 'completed' ? 'active' : ''}`} onClick={() => setFilterStatus('completed')}>Completadas</button>
+            </div>
+          </div>
+
+          <div style={{ flex: '1 1 220px', minWidth: 220 }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Rango de fechas</div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input type="date" value={filterFrom} max={filterTo || undefined} onChange={(e) => setFilterFrom(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>→</span>
+              <input type="date" value={filterTo} min={filterFrom || undefined} onChange={(e) => setFilterTo(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+            </div>
+          </div>
         </div>
-        <input type="text" placeholder="Buscar por casa…" value={filterCasa} onChange={(e) => setFilterCasa(e.target.value)} style={{ width: '100%' }} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 14 }}>
+          <input type="text" placeholder="Buscar por casa…" value={filterCasa} onChange={(e) => setFilterCasa(e.target.value)} />
+          <input type="text" placeholder="Contratista (empresa)…" value={filterContratista} onChange={(e) => setFilterContratista(e.target.value)} />
+          <input type="text" placeholder="Quien llena el acta (técnico)…" value={filterTechnician} onChange={(e) => setFilterTechnician(e.target.value)} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            {items.length} resultado{items.length === 1 ? '' : 's'} · {completedCount} completada{completedCount === 1 ? '' : 's'}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="chip" style={{ fontSize: '0.78rem', padding: '6px 10px' }}>
+                Limpiar filtros
+              </button>
+            )}
+            <button
+              onClick={handleDownloadZip}
+              disabled={zipBusy || completedCount === 0}
+              className="primary-btn"
+              style={{ fontSize: '0.82rem', padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              title={completedCount === 0 ? 'No hay actas completadas en los filtros' : `Descargar ${completedCount} acta(s) completadas en .zip`}
+            >
+              <FileDown size={14} />
+              {zipBusy && zipProgress
+                ? `Generando… ${zipProgress.done}/${zipProgress.total}`
+                : `Descargar ${completedCount} acta(s) en ZIP`}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Tabla en desktop / cards en móvil */}
@@ -342,6 +456,7 @@ interface VisitFull {
   casa: string | null;
   technician_name: string | null;
   technician_email: string | null;
+  contratista: string | null;
   visit_date: string;
   visit_time: string | null;
   status: 'draft' | 'completed' | 'cancelled';
@@ -422,6 +537,7 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
         body: JSON.stringify({
           casa: visit.casa, house_id: visit.house_id,
           technician_name: visit.technician_name, technician_email: visit.technician_email || userEmail,
+          contratista: visit.contratista,
           visit_date: visit.visit_date, visit_time: visit.visit_time,
           form_data: visit.form_data, notes: visit.notes,
           lat: visit.lat, lng: visit.lng,
@@ -599,7 +715,13 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           <FieldWrapper label="Técnico que realiza la visita" required>
             <input type="text" value={visit.technician_name ?? ''}
               onChange={(e) => setVisit((v) => v ? { ...v, technician_name: e.target.value } : v)}
-              placeholder="Nombre completo" />
+              placeholder="Nombre completo (persona que firma el acta)" />
+          </FieldWrapper>
+
+          <FieldWrapper label="Empresa contratista">
+            <input type="text" value={visit.contratista ?? ''}
+              onChange={(e) => setVisit((v) => v ? { ...v, contratista: e.target.value } : v)}
+              placeholder="Ej. Energía Solar SAS (empresa que ejecuta)" />
           </FieldWrapper>
 
           <FieldWrapper label="Fecha">

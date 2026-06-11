@@ -23,7 +23,6 @@ export interface SidebarVisibility {
   facturacion?: boolean;
   reportes?: boolean;
   planner?: boolean;
-  alertas?: boolean;
   configuracion?: boolean;
 }
 
@@ -43,7 +42,6 @@ export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: stri
   { id: 'facturacion',   label: 'Facturación',             group: 'general' },
   { id: 'reportes',      label: 'Reportes',                group: 'general' },
   { id: 'planner',       label: 'Planner',                 group: 'general' },
-  { id: 'alertas',       label: 'NAR',                     group: 'sistema' },
   { id: 'configuracion', label: 'Configuración API',       group: 'sistema' },
 ];
 

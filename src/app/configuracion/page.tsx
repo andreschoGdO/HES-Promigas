@@ -53,9 +53,9 @@ const ENDPOINTS_INTERNAL: EndpointDef[] = [
   { method: 'GET',  path: '/api/inventory/items',               auth: 'session', module: 'inventario', desc: 'Catálogo de equipos serializados con filtros.' },
   { method: 'GET',  path: '/api/inventory/movements',           auth: 'session', module: 'inventario', desc: 'Audit log de movimientos de inventario.' },
   { method: 'POST', path: '/api/inventory/reservations',        auth: 'session', module: 'inventario', desc: 'Crear reserva de equipos para una visita planeada.' },
-  { method: 'GET',  path: '/api/alerts/events',                 auth: 'session', module: 'alertas',    desc: 'Eventos de alertas disparadas.' },
-  { method: 'GET',  path: '/api/alerts/top?days=N',             auth: 'session', module: 'alertas',    desc: 'Top alertas más frecuentes en N días por regla+casa.' },
-  { method: 'GET',  path: '/api/alerts/rules',                  auth: 'session', module: 'alertas',    desc: 'CRUD de reglas de alerta.' },
+  { method: 'GET',  path: '/api/alerts/events',                 auth: 'session', module: 'dashboard',  desc: 'Eventos de alertas disparadas (NAR vive dentro del dashboard).' },
+  { method: 'GET',  path: '/api/alerts/top?days=N',             auth: 'session', module: 'dashboard',  desc: 'Top alertas más frecuentes en N días por regla+casa.' },
+  { method: 'GET',  path: '/api/alerts/rules',                  auth: 'session', module: 'dashboard',  desc: 'CRUD de reglas de alerta.' },
   { method: 'GET',  path: '/api/visits',                        auth: 'session', module: 'visitas',    desc: 'CRUD de visitas en campo (previa, instalación, emergencia, normalización).' },
   { method: 'GET',  path: '/api/metrum/devices',                auth: 'session', module: 'dashboard',  desc: 'Listado raw de devices desde Metrum (proxy).' },
   { method: 'GET',  path: '/api/metrum/timeseries',             auth: 'session', module: 'dashboard',  desc: 'Series de tiempo crudas desde Metrum para granular charts.' },
@@ -189,7 +189,6 @@ function ModulesSection({ isModuleVisible }: { isModuleVisible: (id: keyof Sideb
     { id: 'visitas',       path: '/visitas',       name: 'Visitas en Campo',        desc: '4 tipos de acta (previa, instalación, emergencia, normalización) con fotos, GPS, PDF y handoff bidireccional con inventario.' },
     { id: 'inventario',    path: '/inventario',    name: 'Inventario (WMS-lite)',   desc: 'Equipos por serial, consumibles con stock bajo, ubicaciones jerárquicas, reservas por visita, audit log completo.' },
     { id: 'reportes',      path: '/reportes',      name: 'Reportes',                desc: 'Reportes operativos con descarga CSV + vista imprimible.' },
-    { id: 'alertas',       path: '/alertas',       name: 'Configuración Alertas',   desc: 'CRUD de reglas. 40+ variables agrupadas en 6 categorías. Evaluador automático cada 15 min y diario.' },
     { id: 'configuracion', path: '/configuracion', name: 'Configuración API',       desc: 'Conexión Metrum, visibilidad del menú, esta documentación.' },
   ];
   const visibleModules = allModules.filter((m) => isModuleVisible(m.id));

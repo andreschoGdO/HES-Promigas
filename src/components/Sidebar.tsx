@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BarChart3, Settings, LogOut, Sun, Bell, ClipboardCheck, Package, HardHat, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, ClipboardCheck, Package, HardHat, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { readVisibility, fetchVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
 
@@ -99,7 +99,6 @@ export function Sidebar() {
     { id: 'planner',     label: 'Planner', path: '/planner', icon: CalendarRange },
   ];
   const adminItemsAll = [
-    { id: 'alertas',       label: 'NAR', path: '/alertas', icon: Bell },
     { id: 'configuracion', label: 'Configuración API', path: '/configuracion', icon: Settings },
   ];
   const navItems = navItemsAll.filter((i) => isItemVisible(i.id, visibility));

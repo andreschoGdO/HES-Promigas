@@ -4,13 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
-import { Download, AlertCircle, Info, Zap, Sun, Calendar, BarChart3 } from 'lucide-react';
+import { Download, AlertCircle, Info, Sun, Calendar, BarChart3, Lightbulb, Filter } from 'lucide-react';
+import { ALERT_CATEGORIES, type AlertCategory } from '@/lib/alert-variables';
 
 // ───── Helpers ─────
 const dateStr = (d: Date) => d.toISOString().slice(0, 10);
 const today = () => new Date();
-const formatCOP = (n: number) =>
-  n === 0 ? '$0' : `$${Math.round(n).toLocaleString('es-CO')}`;
 
 const downloadCSV = (filename: string, headers: string[], rows: (string | number | null | undefined)[][]) => {
   const escape = (v: unknown): string => {
@@ -34,18 +33,27 @@ interface RankRow {
   alertas_high: number;
   alertas_medium: number;
   notificaciones: number;
-  reactiva_cop: number;
-  dias_reactiva: number;
+  recomendaciones: number;
   curtailment_kwh: number;
 }
 
-interface CurtailmentRow {
+interface RankApiRow {
+  casa: string;
+  house_id: string | null;
+  alertas_high: number;
+  alertas_medium: number;
+  notificaciones: number;
+  recomendaciones: number;
+}
+
+interface CurtailmentApiRow {
   casa: string;
   curtailment_kwh: number;
   devices_count: number;
+  days: number;
 }
 
-type MetricKey = 'alertas' | 'notificaciones' | 'reactiva' | 'curtailment';
+type MetricKey = 'alertas' | 'notificaciones' | 'curtailment' | 'recomendaciones';
 
 interface MetricDef {
   key: MetricKey;
@@ -56,22 +64,26 @@ interface MetricDef {
   unit: string;
   format: (n: number) => string;
   value: (r: RankRow) => number;
-  available: boolean;
-  disabledReason?: string;
 }
 
-type RangeKey = '7d' | '30d' | 'month';
+type RangePreset = '7d' | '30d' | 'month' | 'custom';
 
-const RANGES: Array<{ key: RangeKey; label: string }> = [
-  { key: '7d',    label: 'Últimos 7 días' },
-  { key: '30d',   label: 'Últimos 30 días' },
-  { key: 'month', label: 'Mes actual' },
+const PRESETS: Array<{ key: RangePreset; label: string }> = [
+  { key: '7d',     label: 'Últimos 7 días' },
+  { key: '30d',    label: 'Últimos 30 días' },
+  { key: 'month',  label: 'Mes actual' },
+  { key: 'custom', label: 'Personalizado' },
 ];
 
-const rangeToDates = (r: RangeKey): { from: string; to: string } => {
+const presetToDates = (r: RangePreset): { from: string; to: string } => {
   const now = today();
   if (r === 'month') {
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: dateStr(start), to: dateStr(now) };
+  }
+  if (r === 'custom') {
+    // Caller maneja custom — devolvemos lo mismo de 7d como fallback inicial
+    const start = new Date(now.getTime() - 7 * 86400000);
     return { from: dateStr(start), to: dateStr(now) };
   }
   const days = r === '7d' ? 7 : 30;
@@ -89,7 +101,6 @@ const METRICS: MetricDef[] = [
     unit: 'eventos',
     format: (n) => `${n}`,
     value: (r) => r.alertas_high + r.alertas_medium,
-    available: true,
   },
   {
     key: 'notificaciones',
@@ -100,29 +111,26 @@ const METRICS: MetricDef[] = [
     unit: 'eventos',
     format: (n) => `${n}`,
     value: (r) => r.notificaciones,
-    available: true,
-  },
-  {
-    key: 'reactiva',
-    label: 'Reactiva CREG (COP estimado)',
-    short: 'Reactiva',
-    color: '#f59e0b',
-    icon: Zap,
-    unit: 'COP',
-    format: formatCOP,
-    value: (r) => r.reactiva_cop,
-    available: true,
   },
   {
     key: 'curtailment',
-    label: 'Curtailment DC (kWh acumulados en el rango)',
+    label: 'Curtailment DC (kWh acumulados)',
     short: 'Curtailment',
     color: '#10b981',
     icon: Sun,
     unit: 'kWh',
     format: (n) => `${n.toFixed(1)} kWh`,
     value: (r) => r.curtailment_kwh,
-    available: true,
+  },
+  {
+    key: 'recomendaciones',
+    label: 'Recomendaciones (reglas con ≥3 disparos)',
+    short: 'Recomendaciones',
+    color: '#8b5cf6',
+    icon: Lightbulb,
+    unit: 'reglas',
+    format: (n) => `${n}`,
+    value: (r) => r.recomendaciones,
   },
 ];
 
@@ -132,25 +140,38 @@ const metricMeta = (k: MetricKey) => METRICS.find((m) => m.key === k)!;
 // HouseRanking — ranking de casas agrupado por métricas NAR
 // ═══════════════════════════════════════════════════════════════════
 export function HouseRanking() {
-  const [range, setRange] = useState<RangeKey>('7d');
+  const [preset, setPreset] = useState<RangePreset>('7d');
+  const [customFrom, setCustomFrom] = useState<string>(() => dateStr(new Date(Date.now() - 7 * 86400000)));
+  const [customTo, setCustomTo] = useState<string>(() => dateStr(today()));
   const [selected, setSelected] = useState<Set<MetricKey>>(new Set(['alertas']));
   const [sortBy, setSortBy] = useState<MetricKey>('alertas');
-  const [rows, setRows] = useState<RankRow[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<Set<AlertCategory>>(new Set());
+  const [rows, setRows] = useState<RankApiRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [curtailmentMap, setCurtailmentMap] = useState<Map<string, number>>(new Map());
   const [curtailmentLoading, setCurtailmentLoading] = useState(false);
   const [curtailmentError, setCurtailmentError] = useState<string | null>(null);
 
-  const { from, to } = useMemo(() => rangeToDates(range), [range]);
-  const wantsCurtailment = selected.has('curtailment');
+  // Resolver fechas efectivas según preset o custom
+  const { from, to } = useMemo(() => {
+    if (preset === 'custom') return { from: customFrom, to: customTo };
+    return presetToDates(preset);
+  }, [preset, customFrom, customTo]);
 
+  const wantsCurtailment = selected.has('curtailment');
+  const categoriesParam = useMemo(
+    () => (selectedCategories.size === 0 ? '' : `&categories=${Array.from(selectedCategories).join(',')}`),
+    [selectedCategories],
+  );
+
+  // Fetch del ranking base (alertas + notif + recomendaciones)
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true); setError(null);
       try {
-        const res = await fetch(`/api/nar/ranking?from=${from}&to=${to}`);
+        const res = await fetch(`/api/nar/ranking?from=${from}&to=${to}${categoriesParam}`);
         const j = await res.json();
         if (cancelled) return;
         if (!res.ok) throw new Error(j.error ?? 'Error');
@@ -162,13 +183,12 @@ export function HouseRanking() {
       }
     })();
     return () => { cancelled = true; };
-  }, [from, to]);
+  }, [from, to, categoriesParam]);
 
-  // Curtailment se calcula solo cuando el usuario lo marca — es pesado
-  // (Metrum + irradiancia por todos los inversores). Cache por rango.
+  // Curtailment: fetch separado, cache por rango (BD lo sirve rápido si el cron corrió)
   useEffect(() => {
     if (!wantsCurtailment) return;
-    if (curtailmentMap.size > 0) return; // ya cargado para este rango
+    if (curtailmentMap.size > 0) return;
     let cancelled = false;
     (async () => {
       setCurtailmentLoading(true); setCurtailmentError(null);
@@ -178,9 +198,7 @@ export function HouseRanking() {
         if (cancelled) return;
         if (!res.ok) throw new Error(j.error ?? 'Error');
         const m = new Map<string, number>();
-        for (const r of (j.items ?? []) as CurtailmentRow[]) {
-          m.set(r.casa, r.curtailment_kwh);
-        }
+        for (const r of (j.items ?? []) as CurtailmentApiRow[]) m.set(r.casa, r.curtailment_kwh);
         setCurtailmentMap(m);
       } catch (e) {
         if (!cancelled) setCurtailmentError(e instanceof Error ? e.message : 'Error');
@@ -191,30 +209,15 @@ export function HouseRanking() {
     return () => { cancelled = true; };
   }, [wantsCurtailment, from, to, curtailmentMap]);
 
-  // Invalidar cache de curtailment cuando cambia el rango
+  // Invalidar curtailment al cambiar rango
   useEffect(() => { setCurtailmentMap(new Map()); }, [from, to]);
 
-  // Merge curtailment en rows
-  const enrichedRows = useMemo<RankRow[]>(() => {
-    const out = rows.map((r) => ({ ...r, curtailment_kwh: curtailmentMap.get(r.casa) ?? 0 }));
-    // Casas que solo tienen curtailment (no aparecen en alertas/reactiva) — agregarlas
-    const seen = new Set(out.map((r) => r.casa));
-    for (const [casa, kwh] of curtailmentMap.entries()) {
-      if (seen.has(casa)) continue;
-      out.push({ casa, house_id: null, alertas_high: 0, alertas_medium: 0, notificaciones: 0, reactiva_cop: 0, dias_reactiva: 0, curtailment_kwh: kwh });
-    }
-    return out;
-  }, [rows, curtailmentMap]);
-
   const toggleMetric = (k: MetricKey) => {
-    const meta = metricMeta(k);
-    if (!meta.available) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(k)) {
-        if (next.size === 1) return prev; // no permitir vaciar
+        if (next.size === 1) return prev;
         next.delete(k);
-        // Si se ocultó la columna por la que ordenamos, ordenar por la primera disponible
         if (sortBy === k) setSortBy(Array.from(next)[0]);
       } else {
         next.add(k);
@@ -223,12 +226,30 @@ export function HouseRanking() {
     });
   };
 
+  const toggleCategory = (c: AlertCategory) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c); else next.add(c);
+      return next;
+    });
+  };
+
   const selectedMetrics = useMemo(
-    () => METRICS.filter((m) => selected.has(m.key) && m.available),
+    () => METRICS.filter((m) => selected.has(m.key)),
     [selected],
   );
 
   const sortMeta = useMemo(() => metricMeta(sortBy), [sortBy]);
+
+  const enrichedRows = useMemo<RankRow[]>(() => {
+    const out: RankRow[] = rows.map((r) => ({ ...r, curtailment_kwh: curtailmentMap.get(r.casa) ?? 0 }));
+    const seen = new Set(out.map((r) => r.casa));
+    for (const [casa, kwh] of curtailmentMap.entries()) {
+      if (seen.has(casa)) continue;
+      out.push({ casa, house_id: null, alertas_high: 0, alertas_medium: 0, notificaciones: 0, recomendaciones: 0, curtailment_kwh: kwh });
+    }
+    return out;
+  }, [rows, curtailmentMap]);
 
   const sortedRows = useMemo(() => {
     const arr = [...enrichedRows];
@@ -243,11 +264,8 @@ export function HouseRanking() {
 
   const exportCSV = () => {
     const headers = ['Casa', ...selectedMetrics.map((m) => m.short)];
-    const csvRows = sortedRows.map((r) => [
-      r.casa,
-      ...selectedMetrics.map((m) => m.value(r)),
-    ]);
-    downloadCSV(`nar-ranking-${range}-${from}-a-${to}.csv`, headers, csvRows);
+    const csvRows = sortedRows.map((r) => [r.casa, ...selectedMetrics.map((m) => m.value(r))]);
+    downloadCSV(`nar-ranking-${from}-a-${to}.csv`, headers, csvRows);
   };
 
   const totalCasas = sortedRows.length;
@@ -255,26 +273,48 @@ export function HouseRanking() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* CONTROLES — rango + métricas + descarga */}
+      {/* CONTROLES — rango + métricas + categorías + descarga */}
       <div className="glass-panel" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* Rango */}
+        {/* Rango: presets + date inputs custom */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             <Calendar size={14} /> Rango:
           </span>
-          {RANGES.map((r) => (
+          {PRESETS.map((p) => (
             <button
-              key={r.key}
-              onClick={() => setRange(r.key)}
-              className={`chip ${range === r.key ? 'active' : ''}`}
+              key={p.key}
+              onClick={() => setPreset(p.key)}
+              className={`chip ${preset === p.key ? 'active' : ''}`}
               style={{ fontSize: '0.82rem', padding: '6px 12px' }}
             >
-              {r.label}
+              {p.label}
             </button>
           ))}
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
-            {from} → {to}
-          </span>
+          {preset === 'custom' && (
+            <>
+              <input
+                type="date"
+                value={customFrom}
+                max={customTo}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                style={{ padding: '6px 10px', fontSize: '0.82rem', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
+              />
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>→</span>
+              <input
+                type="date"
+                value={customTo}
+                min={customFrom}
+                max={dateStr(today())}
+                onChange={(e) => setCustomTo(e.target.value)}
+                style={{ padding: '6px 10px', fontSize: '0.82rem', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text-primary)' }}
+              />
+            </>
+          )}
+          {preset !== 'custom' && (
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>
+              {from} → {to}
+            </span>
+          )}
         </div>
 
         {/* Métricas */}
@@ -284,20 +324,17 @@ export function HouseRanking() {
           </span>
           {METRICS.map((m) => {
             const Icon = m.icon;
-            const isOn = selected.has(m.key) && m.available;
+            const isOn = selected.has(m.key);
             return (
               <button
                 key={m.key}
                 onClick={() => toggleMetric(m.key)}
-                disabled={!m.available}
-                title={m.available ? m.label : m.disabledReason}
+                title={m.label}
                 className={`chip ${isOn ? 'active' : ''}`}
                 style={{
                   fontSize: '0.82rem',
                   padding: '6px 12px',
                   borderLeft: `3px solid ${m.color}`,
-                  opacity: m.available ? 1 : 0.45,
-                  cursor: m.available ? 'pointer' : 'not-allowed',
                   display: 'inline-flex', alignItems: 'center', gap: 6,
                 }}
               >
@@ -313,6 +350,34 @@ export function HouseRanking() {
           >
             <Download size={14} /> Descargar CSV
           </button>
+        </div>
+
+        {/* Filtro de categoría (aplica a alertas/notif/recomendaciones — no a curtailment) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            <Filter size={14} /> Categorías:
+          </span>
+          <button
+            onClick={() => setSelectedCategories(new Set())}
+            className={`chip ${selectedCategories.size === 0 ? 'active' : ''}`}
+            style={{ fontSize: '0.78rem', padding: '4px 10px' }}
+          >
+            Todas
+          </button>
+          {(Object.keys(ALERT_CATEGORIES) as AlertCategory[]).map((c) => {
+            const meta = ALERT_CATEGORIES[c];
+            const isOn = selectedCategories.has(c);
+            return (
+              <button
+                key={c}
+                onClick={() => toggleCategory(c)}
+                className={`chip ${isOn ? 'active' : ''}`}
+                style={{ fontSize: '0.78rem', padding: '4px 10px', borderLeft: `3px solid ${meta.color}`, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                <span>{meta.icon}</span> {meta.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Selector "ordenar por" cuando hay más de una métrica activa */}
@@ -336,7 +401,7 @@ export function HouseRanking() {
       {error && <div className="alert-error">{error}</div>}
       {curtailmentLoading && (
         <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', padding: '8px 12px', background: 'rgba(16,185,129,0.08)', borderRadius: 6, borderLeft: '3px solid #10b981' }}>
-          Calculando curtailment desde Metrum + irradiancia… puede tardar 10-30s para rangos amplios.
+          Cargando curtailment… si el cron nocturno no ha corrido aún, esto puede tardar (calcula y persiste para futuras consultas).
         </div>
       )}
       {curtailmentError && (

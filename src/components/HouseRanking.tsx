@@ -257,10 +257,21 @@ export function HouseRanking() {
     return arr;
   }, [enrichedRows, sortMeta]);
 
-  const chartData = useMemo(
-    () => sortedRows.map((r) => ({ casa: r.casa, value: sortMeta.value(r) })),
-    [sortedRows, sortMeta],
-  );
+  // Para alertas: barras stacked por severidad (high + medium).
+  // Para el resto: una sola barra con el valor total de la métrica.
+  const chartData = useMemo(() => {
+    if (sortBy === 'alertas') {
+      return sortedRows.map((r) => ({
+        casa: r.casa,
+        high: r.alertas_high,
+        medium: r.alertas_medium,
+        value: r.alertas_high + r.alertas_medium, // mantenido para el tooltip "Total"
+      }));
+    }
+    return sortedRows.map((r) => ({ casa: r.casa, value: sortMeta.value(r) }));
+  }, [sortedRows, sortBy, sortMeta]);
+
+  const isStackedAlertas = sortBy === 'alertas';
 
   const exportCSV = () => {
     const headers = ['Casa', ...selectedMetrics.map((m) => m.short)];
@@ -410,13 +421,25 @@ export function HouseRanking() {
 
       {/* GRÁFICO horizontal */}
       <div className="glass-panel" style={{ padding: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
           <h3 style={{ margin: 0, fontSize: '0.95rem' }}>
             Ranking por casa — {sortMeta.short}
           </h3>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
-            {casasConDatos} de {totalCasas} casas con datos
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            {isStackedAlertas && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.74rem', color: 'var(--text-secondary)' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 10, height: 10, background: '#ef4444', borderRadius: 2 }} /> Alta
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 10, height: 10, background: '#f59e0b', borderRadius: 2 }} /> Media
+                </span>
+              </div>
+            )}
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
+              {casasConDatos} de {totalCasas} casas con datos
+            </span>
+          </div>
         </div>
         {loading ? (
           <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>
@@ -429,7 +452,7 @@ export function HouseRanking() {
         ) : (
           <ResponsiveContainer width="100%" height={Math.max(220, chartData.length * 28)}>
             <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 32, bottom: 4, left: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} />
               <YAxis
                 type="category"
@@ -438,14 +461,38 @@ export function HouseRanking() {
                 tick={{ fontSize: 11, fill: 'var(--text-secondary)' }}
               />
               <Tooltip
-                contentStyle={{ background: 'rgba(15,23,42,0.96)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, fontSize: '0.82rem' }}
-                formatter={(v) => [sortMeta.format(Number(v) || 0), sortMeta.short] as [string, string]}
+                cursor={{ fill: 'var(--bg-elevated)', opacity: 0.4 }}
+                contentStyle={{
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  fontSize: '0.82rem',
+                  boxShadow: '0 6px 24px rgba(0,0,0,0.12)',
+                }}
+                labelStyle={{ color: 'var(--text-primary)', fontWeight: 600 }}
+                itemStyle={{ color: 'var(--text-primary)' }}
+                formatter={(v, name) => {
+                  const n = Number(v) || 0;
+                  if (isStackedAlertas) {
+                    const label = name === 'high' ? 'Alta' : name === 'medium' ? 'Media' : String(name);
+                    return [`${n} ${n === 1 ? 'evento' : 'eventos'}`, label] as [string, string];
+                  }
+                  return [sortMeta.format(n), sortMeta.short] as [string, string];
+                }}
               />
-              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                {chartData.map((_, i) => (
-                  <Cell key={i} fill={sortMeta.color} />
-                ))}
-              </Bar>
+              {isStackedAlertas ? (
+                <>
+                  <Bar dataKey="high" stackId="alertas" fill="#ef4444" name="high" />
+                  <Bar dataKey="medium" stackId="alertas" fill="#f59e0b" name="medium" radius={[0, 4, 4, 0]} />
+                </>
+              ) : (
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  {chartData.map((_, i) => (
+                    <Cell key={i} fill={sortMeta.color} />
+                  ))}
+                </Bar>
+              )}
             </BarChart>
           </ResponsiveContainer>
         )}

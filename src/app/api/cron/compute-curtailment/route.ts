@@ -41,22 +41,6 @@ export async function GET(request: Request) {
     const toStr = dateStr(to);
 
     const startTs = Date.now();
-
-    // Debug: aplicar los mismos filtros de computeCurtailmentByDay
-    const { data: dbg, error: dbgErr } = await supabaseAdmin
-      .from('devices')
-      .select('id, casa, marca, metrum_id, type, is_active')
-      .not('metrum_id', 'is', null)
-      .not('casa', 'is', null)
-      .not('marca', 'is', null)
-      .limit(500);
-    const debug = {
-      err: dbgErr?.message ?? null,
-      count_after_filters: (dbg ?? []).length,
-      first_5: (dbg ?? []).slice(0, 5),
-      distinct_marca_filtered: Array.from(new Set((dbg ?? []).map((d) => d.marca))),
-    };
-
     const rows = await computeCurtailmentByDay(fromStr, toStr);
 
     let upserted = 0;
@@ -93,7 +77,6 @@ export async function GET(request: Request) {
       rows_upserted: upserted,
       casas: new Set(rows.map((r) => r.casa)).size,
       elapsed_ms: Date.now() - startTs,
-      debug,
     });
   } catch (err) {
     return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : 'Error' }, { status: 500 });

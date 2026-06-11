@@ -258,32 +258,104 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     compute: (v) => (v.powerAPg ?? 0) - (v.BattPower ?? 0),
     appliesToInverter: true,
   },
-  // Envolvente DC: P95 por hora-del-día del rango visible. "Techo" de generación
-  // típico de esta casa a cada hora — referencia para detectar curtailment.
+  // Envolvente DC ajustada por irradiancia: P95(DC, hora) × GHI_actual / P95(GHI, hora).
+  // El factor "GHI_actual / P95(GHI)" representa qué tan despejado está el cielo HOY
+  // a esa hora vs los días más limpios históricos. Multiplicando el P95 de DC por ese
+  // ratio, el envelope se ajusta a la nubosidad real y deja solo gap por sombra,
+  // suciedad, falla o curtailment. Si no hay GHI (no city, API caído), cae al P95 puro.
   envelope_dc_LV: {
     deps: ['powerAEgdc_LV'],
     perRowDeps: [],
-    precompute: (rows) => envelopeByHour(rows, 'powerAEgdc_LV'),
+    precompute: (rows) => {
+      // Calcula 3 cosas:
+      //   p95dc[h]  = P95 de powerAEgdc_LV por hora
+      //   p95ghi[h] = P95 de ghi_w_m2 por hora (si está disponible en vals)
+      //   ghiByTs   = mapa ts→ghi del rango visible (para lookup en compute)
+      const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
+      const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
+      const ghiByTs = new Map<number, number>();
+      for (const r of rows) {
+        const dc = r.vals.powerAEgdc_LV;
+        const ghi = r.vals.ghi_w_m2;
+        const d = new Date(r.ts - 5 * 3600 * 1000);
+        const h = d.getUTCHours();
+        if (dc !== null && dc !== undefined && Number.isFinite(dc)) byHourDc[h].push(dc);
+        if (ghi !== null && ghi !== undefined && Number.isFinite(ghi)) {
+          byHourGhi[h].push(ghi);
+          ghiByTs.set(r.ts, ghi);
+        }
+      }
+      const p95 = (arr: number[]): number | null => {
+        if (arr.length === 0) return null;
+        if (arr.length === 1) return arr[0];
+        const s = [...arr].sort((a, b) => a - b);
+        return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
+      };
+      return {
+        p95dc:  byHourDc.map(p95),
+        p95ghi: byHourGhi.map(p95),
+        ghiByTs,
+      };
+    },
     compute: (_v, ctx) => {
-      const env = ctx?.precomputed as Array<number | null> | undefined;
-      if (!env || !ctx) return null;
-      return env[ctx.hourLocal] ?? null;
+      if (!ctx) return null;
+      const pc = ctx.precomputed as { p95dc: Array<number | null>; p95ghi: Array<number | null>; ghiByTs: Map<number, number> } | undefined;
+      if (!pc) return null;
+      const baseDc = pc.p95dc[ctx.hourLocal];
+      if (baseDc === null || baseDc === undefined) return null;
+      // Si tenemos GHI real para este ts + P95(GHI) válido → ajustar
+      const ghiNow = pc.ghiByTs.get(ctx.ts);
+      const ghiP95 = pc.p95ghi[ctx.hourLocal];
+      if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
+        return baseDc * (ghiNow / ghiP95);
+      }
+      // Fallback: P95 puro (comportamiento legacy)
+      return baseDc;
     },
     appliesToInverter: true,
   },
-  // Curtailment DC instantáneo: max(0, envelope − real) cuando hay saturación
+  // Curtailment DC instantáneo: max(0, envelope_ajustado − real) cuando hay saturación
   // (batería ≥95% AND no exportando AND de día). En momentos normales = 0.
+  // Usa el MISMO envelope ajustado por irradiancia para mayor precisión.
   curtailment_dc_w_LV: {
     deps: ['powerAEgdc_LV', 'BattSOC', 'ExportGrid_LV'],
-    precompute: (rows) => envelopeByHour(rows, 'powerAEgdc_LV'),
+    precompute: (rows) => {
+      const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
+      const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
+      const ghiByTs = new Map<number, number>();
+      for (const r of rows) {
+        const dc = r.vals.powerAEgdc_LV;
+        const ghi = r.vals.ghi_w_m2;
+        const d = new Date(r.ts - 5 * 3600 * 1000);
+        const h = d.getUTCHours();
+        if (dc !== null && dc !== undefined && Number.isFinite(dc)) byHourDc[h].push(dc);
+        if (ghi !== null && ghi !== undefined && Number.isFinite(ghi)) {
+          byHourGhi[h].push(ghi);
+          ghiByTs.set(r.ts, ghi);
+        }
+      }
+      const p95 = (arr: number[]): number | null => {
+        if (arr.length === 0) return null;
+        if (arr.length === 1) return arr[0];
+        const s = [...arr].sort((a, b) => a - b);
+        return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
+      };
+      return { p95dc: byHourDc.map(p95), p95ghi: byHourGhi.map(p95), ghiByTs };
+    },
     compute: (v, ctx) => {
       if (!ctx) return 0;
-      const env = ctx.precomputed as Array<number | null> | undefined;
-      const envH = env?.[ctx.hourLocal];
-      if (envH === null || envH === undefined) return 0;
+      const pc = ctx.precomputed as { p95dc: Array<number | null>; p95ghi: Array<number | null>; ghiByTs: Map<number, number> } | undefined;
+      if (!pc) return 0;
+      let baseDc = pc.p95dc[ctx.hourLocal];
+      if (baseDc === null || baseDc === undefined) return 0;
+      const ghiNow = pc.ghiByTs.get(ctx.ts);
+      const ghiP95 = pc.p95ghi[ctx.hourLocal];
+      if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
+        baseDc = baseDc * (ghiNow / ghiP95);
+      }
       const saturated = v.BattSOC >= 95 && Math.abs(v.ExportGrid_LV) < 100 && ctx.isDaylight;
       if (!saturated) return 0;
-      return Math.max(0, envH - v.powerAEgdc_LV);
+      return Math.max(0, baseDc - v.powerAEgdc_LV);
     },
     appliesToInverter: true,
   },
@@ -847,6 +919,10 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   );
   // granData ahora se indexa por deviceId → key → puntos
   const [granData, setGranData] = useState<Record<string, Record<string, { ts: number; value: string | number }[]>>>({});
+  // Irradiancia solar por ciudad — alimentada por /api/solar/irradiance (Open-Meteo).
+  // Key: ciudad normalizada → Map<dateHourKey, ghi_w_m2>
+  // dateHourKey = `YYYY-MM-DD|HH` en hora local Colombia (UTC-5).
+  const [cityGhi, setCityGhi] = useState<Map<string, Map<string, number>>>(new Map());
   const [granLoading, setGranLoading] = useState(false);
   const [granError, setGranError] = useState<string | null>(null);
   const [showDataTable, setShowDataTable] = useState(false);
@@ -1087,6 +1163,42 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       if (fetchErrors.length > 0 && !promoted) {
         setGranError(`Metrum rechazó ${fetchErrors.length} consultas. Posibles causas: rango muy largo para el intervalo, key sin datos, o problemas de la API. Detalle: ${fetchErrors[0]}`);
       }
+
+      // Fetch irradiancia solar por ciudad — usado por envelope_dc_LV ajustado.
+      // Solo dispara si al menos un device seleccionado tiene city y alguna key
+      // derivada que la necesite (envelope_dc_LV o curtailment_dc_w_LV).
+      const citiesNeeded = new Set<string>();
+      for (const devId of granularDeviceIds) {
+        const devKeys = selectedKeysByDevice[devId];
+        if (!devKeys) continue;
+        const needsIrradiance = Array.from(devKeys).some((k) => k === 'envelope_dc_LV' || k === 'curtailment_dc_w_LV');
+        if (!needsIrradiance) continue;
+        const dev = devices.find((d) => d.id === devId);
+        if (dev?.city) citiesNeeded.add(dev.city);
+      }
+      if (citiesNeeded.size > 0) {
+        const ghiMap = new Map<string, Map<string, number>>();
+        await Promise.all(Array.from(citiesNeeded).map(async (city) => {
+          try {
+            // Pedimos también 30 días extra atrás para tener buena muestra del P95(GHI)
+            const fromExtended = new Date(new Date(startDate).getTime() - 30 * 86400000).toISOString().slice(0, 10);
+            const r = await fetch(`/api/solar/irradiance?city=${encodeURIComponent(city)}&from=${fromExtended}&to=${endDate}`);
+            if (!r.ok) return;
+            const j = await r.json();
+            type GhiRow = { date: string; hour: number; ghi_w_m2: number };
+            const dayHourGhi = new Map<string, number>();
+            for (const row of ((j.data ?? []) as GhiRow[])) {
+              dayHourGhi.set(`${row.date}|${row.hour}`, row.ghi_w_m2);
+            }
+            ghiMap.set(city, dayHourGhi);
+          } catch {
+            // Si el API falla, dejamos el envelope en modo P95 legacy.
+          }
+        }));
+        setCityGhi(ghiMap);
+      } else {
+        setCityGhi(new Map());
+      }
     } catch (e) {
       setGranError(e instanceof Error ? e.message : 'Error');
     } finally {
@@ -1321,6 +1433,9 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     //    Si la derivada define `precompute`, se ejecuta primero con toda la serie
     //    del device (útil para envolventes P95 por hora-del-día, baselines, etc.).
     for (const [devId, selectedSet] of Object.entries(selectedKeysByDevice)) {
+      // Mapa GHI por (date|hour) para este device — solo si su city está en cityGhi.
+      const dev = devices.find((d) => d.id === devId);
+      const ghiForDevice = dev?.city ? cityGhi.get(dev.city) : null;
       for (const k of selectedSet) {
         if (!isDerivedKey(k)) continue;
         const meta = DERIVED_KEYS[k];
@@ -1333,6 +1448,15 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           for (const [ts, row] of byTs) {
             const vals: Record<string, number | null> = {};
             for (const dep of meta.deps) vals[dep] = (row[`${devId}__${dep}`] ?? null) as number | null;
+            // Inyectar ghi_w_m2 si el device tiene city con GHI cacheado.
+            // Lookup por (date_local, hour_local) — Open-Meteo nos da datos por hora COT.
+            if (ghiForDevice) {
+              const d = new Date(ts - 5 * 3600 * 1000);
+              const dateLocal = d.toISOString().slice(0, 10);
+              const hourLocal = d.getUTCHours();
+              const ghi = ghiForDevice.get(`${dateLocal}|${hourLocal}`);
+              if (ghi !== undefined) vals.ghi_w_m2 = ghi;
+            }
             seriesRows.push({ ts, vals });
           }
           precomputed = meta.precompute(seriesRows);
@@ -1360,7 +1484,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       }
     }
     return Array.from(byTs.entries()).map(([ts, vals]) => ({ ts, ...vals })).sort((a, b) => a.ts - b.ts);
-  }, [granData, selectedKeysByDevice]);
+  }, [granData, selectedKeysByDevice, cityGhi, devices]);
 
   // Agregación diaria (min/avg/max) por device+key
   const dailyData = useMemo(() => {

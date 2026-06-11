@@ -589,16 +589,25 @@ export const VARIABLES: VariableMeta[] = [
     key: 'envelope_dc_LV', label: 'Envolvente DC (techo solar)', unit: 'W',
     category: 'derivada', source: 'derived',
     description:
-      'Curva "lo que el sistema pudo generar" en DC a cada hora del día. Se calcula como el ' +
-      'percentil 95 de powerAEgdc_LV agrupado por hora-del-día sobre el rango de fechas visible. ' +
-      'En cada hora, los días buenos del rango definen el techo solar de esta casa.\n\n' +
-      'NO es una medición — es una referencia construida con la propia historia del inversor. ' +
-      'Cuando la curva real (powerAEgdc_LV) va por DEBAJO de esta envolvente, puede haber: nube, ' +
-      'sombra, suciedad, falla, o curtailment involuntario (batería llena + zero-export). Para ' +
-      'aislar el curtailment del resto, usar curtailment_dc_w_LV que aplica la condición de saturación.\n\n' +
-      'LIMITACIÓN: con rango visible de 1 día (~4 samples por hora) el P95 es prácticamente el ' +
-      'máximo y la envolvente queda pegada a la curva real → curtailment ≈ 0. Requiere ≥7 días ' +
-      'para una referencia significativa. Solo Livoltek (depende de powerAEgdc_LV).',
+      'Curva "lo que el sistema pudo generar" en DC para cada momento — ajustada por la ' +
+      'irradiancia real registrada en la ciudad de la casa.\n\n' +
+      'Fórmula: envelope(t) = P95(DC, hora_t) × [ GHI_real(t) / P95(GHI, hora_t) ]\n\n' +
+      '  • P95(DC, hora) — percentil 95 de powerAEgdc_LV por hora-del-día. "El techo solar ' +
+      'histórico" de esta casa: captura su personalidad (kWp, PR, orientación, sombra fija).\n' +
+      '  • GHI_real(t) — irradiancia (W/m²) real esa hora en la ciudad, de Open-Meteo.\n' +
+      '  • P95(GHI, hora) — el techo solar histórico de la ciudad — referencia "cielo despejado".\n\n' +
+      'El ratio GHI_real / P95(GHI) representa "qué tan despejado está hoy a esta hora vs los días ' +
+      'más limpios históricos". Multiplicando el P95 de DC por ese ratio, el envelope se MUEVE ' +
+      'con la nubosidad real — ya no asume días buenos cuando hay nubes.\n\n' +
+      'NO es medición — es la generación esperada dada la luz solar real y la "personalidad" ' +
+      'histórica del sistema. Cuando la curva real va por DEBAJO, hay sombra nueva, suciedad, ' +
+      'falla, o curtailment (batería llena + zero-export). Para aislar el curtailment usar ' +
+      'curtailment_dc_w_LV.\n\n' +
+      'FALLBACK: si la casa no tiene city configurada, Open-Meteo falla, o no hay P95(GHI) ' +
+      'válido, cae al P95 puro de DC sin ajuste por irradiancia.\n\n' +
+      'LIMITACIONES: Requiere ≥7 días para una referencia significativa. Solo Livoltek (depende ' +
+      'de powerAEgdc_LV). Ciudades soportadas: Cali, Bogotá, Medellín, Barranquilla, Cartagena, ' +
+      'Bucaramanga, Pereira, Manizales, Ibagué, Cúcuta.',
   },
   {
     key: 'curtailment_dc_w_LV', label: 'Curtailment DC instantáneo', unit: 'W',

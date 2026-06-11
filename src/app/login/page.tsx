@@ -5,10 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { Sun, LogIn, UserPlus, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
-
-const ALLOWED_DOMAINS = ['@gdo.com.co', '@promigas.com'];
-const isAllowedEmail = (email: string) => ALLOWED_DOMAINS.some((d) => email.toLowerCase().endsWith(d));
-const ALLOWED_DOMAINS_LABEL = ALLOWED_DOMAINS.join(' o ');
+import { getRoleFromEmail } from '@/lib/user-role';
 
 type Mode = 'signin' | 'signup';
 
@@ -26,8 +23,7 @@ function LoginInner() {
 
   useEffect(() => {
     const err = params.get('error');
-    if (err === 'domain') setMsg({ kind: 'error', text: `Solo se permite acceso a correos ${ALLOWED_DOMAINS_LABEL}.` });
-    else if (err === 'exchange-failed') setMsg({ kind: 'error', text: 'La sesión expiró. Vuelve a iniciar sesión.' });
+    if (err === 'exchange-failed') setMsg({ kind: 'error', text: 'La sesión expiró. Vuelve a iniciar sesión.' });
     else if (params.get('signup_ok') === '1') setMsg({ kind: 'success', text: 'Cuenta creada. Si Supabase está configurado para confirmar email, revisa tu correo. Si no, ya puedes entrar.' });
   }, [params]);
 
@@ -40,10 +36,6 @@ function LoginInner() {
     e.preventDefault();
     setMsg(null);
     const trimmedEmail = email.trim().toLowerCase();
-    if (!isAllowedEmail(trimmedEmail)) {
-      setMsg({ kind: 'error', text: `El correo debe terminar en ${ALLOWED_DOMAINS_LABEL}` });
-      return;
-    }
     if (password.length < 6) {
       setMsg({ kind: 'error', text: 'La contraseña debe tener al menos 6 caracteres' });
       return;
@@ -60,13 +52,11 @@ function LoginInner() {
       setMsg({ kind: 'error', text: friendly });
       return;
     }
-    if (!isAllowedEmail(data.user?.email ?? '')) {
-      await supa().auth.signOut();
-      setMsg({ kind: 'error', text: `Solo se permite acceso a correos ${ALLOWED_DOMAINS_LABEL}.` });
-      return;
-    }
     setMsg({ kind: 'success', text: 'Acceso autorizado, redirigiendo...' });
-    const next = params.get('next') ?? '/dashboard';
+    // Admins (gdo/promigas) → /dashboard. Contratistas → /visitas.
+    const role = getRoleFromEmail(data.user?.email ?? trimmedEmail);
+    const fallback = role === 'admin' ? '/dashboard' : '/visitas';
+    const next = params.get('next') ?? fallback;
     router.push(next);
     router.refresh();
   };
@@ -75,10 +65,6 @@ function LoginInner() {
     e.preventDefault();
     setMsg(null);
     const trimmedEmail = email.trim().toLowerCase();
-    if (!isAllowedEmail(trimmedEmail)) {
-      setMsg({ kind: 'error', text: `El correo debe terminar en ${ALLOWED_DOMAINS_LABEL}` });
-      return;
-    }
     if (password.length < 6) { setMsg({ kind: 'error', text: 'La contraseña debe tener al menos 6 caracteres' }); return; }
     if (password !== passwordConfirm) { setMsg({ kind: 'error', text: 'Las contraseñas no coinciden' }); return; }
     if (!fullName.trim()) { setMsg({ kind: 'error', text: 'Por favor escribe tu nombre completo' }); return; }
@@ -130,7 +116,7 @@ function LoginInner() {
             <div className="input-group" style={{ marginBottom: 0 }}>
               <label className="input-label">Correo corporativo</label>
               <input type="email" required autoFocus autoComplete="email"
-                placeholder={`tu.nombre${ALLOWED_DOMAINS[0]}`}
+                placeholder="tu.correo@empresa.com"
                 value={email} onChange={(e) => setEmail(e.target.value)} disabled={submitting} style={{ minHeight: 44 }} />
             </div>
             <div className="input-group" style={{ marginBottom: 0 }}>
@@ -166,7 +152,7 @@ function LoginInner() {
             <div className="input-group" style={{ marginBottom: 0 }}>
               <label className="input-label">Correo corporativo</label>
               <input type="email" required autoComplete="email"
-                placeholder={`tu.nombre${ALLOWED_DOMAINS[0]}`}
+                placeholder="tu.correo@empresa.com"
                 value={email} onChange={(e) => setEmail(e.target.value)} disabled={submitting} style={{ minHeight: 44 }} />
             </div>
             <div className="input-group" style={{ marginBottom: 0 }}>
@@ -200,7 +186,7 @@ function LoginInner() {
         )}
 
         <p style={{ marginTop: 18, fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5 }}>
-          Acceso restringido a <strong>{ALLOWED_DOMAINS_LABEL}</strong>.
+          Acceso administrativo para <strong>@gdo.com.co</strong> y <strong>@promigas.com</strong>. Contratistas con otros dominios solo verán <strong>Visitas en Campo</strong>.
         </p>
       </div>
     </div>

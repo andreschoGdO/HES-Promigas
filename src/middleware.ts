@@ -1,11 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { getRoleFromEmail, isPathAllowedForUser } from '@/lib/user-role';
 
 /**
- * Middleware de autenticación:
+ * Middleware de autenticación + autorización:
  *   1. Refresca la sesión (cookies) en cada request
  *   2. Si la ruta requiere auth y no hay sesión → redirige a /login
- *   3. Si la sesión existe pero el email NO termina en @gdo.com.co → cierra sesión y manda a /login
+ *   3. Determina rol por dominio del email (ver lib/user-role.ts):
+ *        - admin (gdo/promigas) → acceso total
+ *        - user  (otros)        → solo /visitas y /cuenta; resto → redirect a /visitas
  *
  * Excepciones (no requieren auth):
  *   - /login, /auth/callback
@@ -17,9 +20,6 @@ const PUBLIC_PATHS = [
   '/login',
   '/auth/callback',
 ];
-
-const ALLOWED_DOMAINS = ['@gdo.com.co', '@promigas.com'];
-const isAllowedEmail = (email: string) => ALLOWED_DOMAINS.some((d) => email.toLowerCase().endsWith(d));
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -65,11 +65,12 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Rutas públicas: dejar pasar (pero si ya está autenticado y va a /login, redirigir al dashboard)
+  // Rutas públicas: dejar pasar (pero si ya está autenticado y va a /login, redirigir según rol)
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     if (user && pathname === '/login') {
+      const role = getRoleFromEmail(user.email);
       const url = request.nextUrl.clone();
-      url.pathname = '/dashboard';
+      url.pathname = role === 'admin' ? '/dashboard' : '/visitas';
       return NextResponse.redirect(url);
     }
     return response;
@@ -83,13 +84,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Validación de dominio (@gdo.com.co o @promigas.com)
-  const email = user.email ?? '';
-  if (!isAllowedEmail(email)) {
-    await supabase.auth.signOut();
+  // Autorización por rol: los users (contratistas) solo ven /visitas y /cuenta.
+  // Cualquier intento de visitar otra ruta → redirect a /visitas.
+  const role = getRoleFromEmail(user.email);
+  if (role === 'user' && !isPathAllowedForUser(pathname)) {
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    url.searchParams.set('error', 'domain');
+    url.pathname = '/visitas';
     return NextResponse.redirect(url);
   }
 

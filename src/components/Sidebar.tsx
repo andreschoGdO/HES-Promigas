@@ -6,11 +6,12 @@ import { useEffect, useState } from 'react';
 import { BarChart3, Settings, LogOut, Sun, ClipboardCheck, Package, HardHat, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { readVisibility, fetchVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
+import { getRoleFromEmail, type UserRole } from '@/lib/user-role';
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ email: string; initial: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; initial: string; role: UserRole } | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   // Collapsed state (desktop only) — persiste en localStorage
   const [collapsed, setCollapsed] = useState(false);
@@ -71,7 +72,7 @@ export function Sidebar() {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user?.email) {
         const email = data.user.email;
-        setUser({ email, initial: email[0].toUpperCase() });
+        setUser({ email, initial: email[0].toUpperCase(), role: getRoleFromEmail(email) });
       }
     });
   }, []);
@@ -101,8 +102,15 @@ export function Sidebar() {
   const adminItemsAll = [
     { id: 'configuracion', label: 'Configuración API', path: '/configuracion', icon: Settings },
   ];
-  const navItems = navItemsAll.filter((i) => isItemVisible(i.id, visibility));
-  const adminItems = adminItemsAll.filter((i) => isItemVisible(i.id, visibility));
+  // Si el usuario no es admin (contratista), solo mostramos Visitas.
+  // El middleware ya garantiza que no pueda visitar otras rutas; el sidebar
+  // refleja eso ocultando los items inaccesibles.
+  const isUser = user?.role === 'user';
+  const navItems = (isUser
+    ? navItemsAll.filter((i) => i.id === 'visitas')
+    : navItemsAll.filter((i) => isItemVisible(i.id, visibility))
+  );
+  const adminItems = isUser ? [] : adminItemsAll.filter((i) => isItemVisible(i.id, visibility));
 
   return (
     <>

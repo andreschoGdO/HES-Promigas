@@ -88,14 +88,23 @@ export function Sidebar() {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user?.email) {
-        const email = data.user.email;
+    const applyUser = (email: string | null | undefined) => {
+      if (email) {
         const next: CachedUser = { email, initial: email[0].toUpperCase(), role: getRoleFromEmail(email) };
         setUser(next);
         writeCachedUser(next);
+      } else {
+        setUser(null);
+        try { window.localStorage.removeItem(USER_CACHE_KEY); } catch {}
       }
+    };
+    // Lectura inicial
+    supabase.auth.getUser().then(({ data }) => applyUser(data.user?.email));
+    // Reaccionar a cambios de sesión sin reload (login/logout/cambio de cuenta)
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      applyUser(session?.user?.email);
     });
+    return () => { sub.subscription.unsubscribe(); };
   }, []);
 
   const handleLogout = async () => {

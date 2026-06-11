@@ -143,6 +143,83 @@ const METRICS: MetricDef[] = [
 
 const metricMeta = (k: MetricKey) => METRICS.find((m) => m.key === k)!;
 
+// ───── Buckets cronológicos (semana o mes) ─────
+type Granularity = 'week' | 'month';
+
+interface Bucket {
+  key: string;       // identificador estable usado como dataKey en Recharts
+  label: string;     // texto a mostrar en leyenda y tooltip
+  color: string;     // color del segmento
+}
+
+// Paleta de gradiente verde (curtailment) → ámbar → rojo según avanza el tiempo
+const BUCKET_PALETTE = ['#10b981', '#34d399', '#fbbf24', '#f59e0b', '#fb923c', '#f97316', '#ef4444', '#dc2626'];
+
+function parseLocalDate(s: string): Date {
+  // YYYY-MM-DD → Date a medianoche LOCAL (no UTC) para evitar shift de zona
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function buildBuckets(from: string, to: string): { buckets: Bucket[]; bucketKeyOf: (recordDate: string) => string | null; granularity: Granularity } {
+  const fromD = parseLocalDate(from);
+  const toD = parseLocalDate(to);
+  const rangeDays = Math.floor((toD.getTime() - fromD.getTime()) / 86400000) + 1;
+  const granularity: Granularity = rangeDays <= 35 ? 'week' : 'month';
+
+  const buckets: Bucket[] = [];
+  const dayToKey = new Map<string, string>();
+
+  if (granularity === 'week') {
+    // 7 días por bucket comenzando en `from`
+    let idx = 0;
+    let cursor = new Date(fromD);
+    while (cursor <= toD) {
+      const start = new Date(cursor);
+      const end = new Date(cursor);
+      end.setDate(end.getDate() + 6);
+      if (end > toD) end.setTime(toD.getTime());
+      const key = `wk_${idx}`;
+      const label = `Semana ${idx + 1} (${start.toISOString().slice(5, 10)} → ${end.toISOString().slice(5, 10)})`;
+      buckets.push({ key, label, color: BUCKET_PALETTE[idx % BUCKET_PALETTE.length] });
+      // Mapear todos los días del bucket
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        dayToKey.set(ds, key);
+      }
+      cursor = new Date(end);
+      cursor.setDate(cursor.getDate() + 1);
+      idx++;
+    }
+  } else {
+    // 1 bucket por mes calendario en el rango
+    const MONTHS_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    let idx = 0;
+    let cursor = new Date(fromD.getFullYear(), fromD.getMonth(), 1);
+    while (cursor <= toD) {
+      const monthStart = new Date(cursor);
+      const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0); // último día del mes
+      const effStart = monthStart < fromD ? fromD : monthStart;
+      const effEnd = monthEnd > toD ? toD : monthEnd;
+      const key = `mo_${cursor.getFullYear()}_${cursor.getMonth()}`;
+      const label = `${MONTHS_ES[cursor.getMonth()]} ${cursor.getFullYear()}`;
+      buckets.push({ key, label, color: BUCKET_PALETTE[idx % BUCKET_PALETTE.length] });
+      for (let d = new Date(effStart); d <= effEnd; d.setDate(d.getDate() + 1)) {
+        const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        dayToKey.set(ds, key);
+      }
+      cursor.setMonth(cursor.getMonth() + 1);
+      idx++;
+    }
+  }
+
+  return {
+    buckets,
+    bucketKeyOf: (recordDate: string) => dayToKey.get(recordDate) ?? null,
+    granularity,
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // HouseRanking — ranking de casas agrupado por métricas NAR
 // ═══════════════════════════════════════════════════════════════════
@@ -158,8 +235,10 @@ export function HouseRanking() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [curtailmentMap, setCurtailmentMap] = useState<Map<string, number>>(new Map());
+  const [curtailmentDaily, setCurtailmentDaily] = useState<Array<{ casa: string; record_date: string; curtailment_kwh: number }>>([]);
   const [curtailmentLoading, setCurtailmentLoading] = useState(false);
   const [curtailmentError, setCurtailmentError] = useState<string | null>(null);
+  const [chronological, setChronological] = useState(false);
 
   // Resolver fechas efectivas según preset o custom
   const { from, to } = useMemo(() => {
@@ -203,21 +282,25 @@ export function HouseRanking() {
     return () => { cancelled = true; };
   }, [from, to, ruleParam]);
 
-  // Curtailment: fetch separado, cache por rango (BD lo sirve rápido si el cron corrió)
+  // Curtailment: fetch separado, cache por rango (BD lo sirve rápido si el cron corrió).
+  // Si el modo cronológico está activo, pedimos también el desglose diario.
+  const needsDaily = chronological && wantsCurtailment;
   useEffect(() => {
     if (!wantsCurtailment) return;
-    if (curtailmentMap.size > 0) return;
+    if (curtailmentMap.size > 0 && (!needsDaily || curtailmentDaily.length > 0)) return;
     let cancelled = false;
     (async () => {
       setCurtailmentLoading(true); setCurtailmentError(null);
       try {
-        const res = await fetch(`/api/nar/curtailment?from=${from}&to=${to}`);
+        const detailedParam = needsDaily ? '&detailed=1' : '';
+        const res = await fetch(`/api/nar/curtailment?from=${from}&to=${to}${detailedParam}`);
         const j = await res.json();
         if (cancelled) return;
         if (!res.ok) throw new Error(j.error ?? 'Error');
         const m = new Map<string, number>();
         for (const r of (j.items ?? []) as CurtailmentApiRow[]) m.set(r.casa, r.curtailment_kwh);
         setCurtailmentMap(m);
+        if (needsDaily) setCurtailmentDaily(j.daily ?? []);
       } catch (e) {
         if (!cancelled) setCurtailmentError(e instanceof Error ? e.message : 'Error');
       } finally {
@@ -225,10 +308,13 @@ export function HouseRanking() {
       }
     })();
     return () => { cancelled = true; };
-  }, [wantsCurtailment, from, to, curtailmentMap]);
+  }, [wantsCurtailment, needsDaily, from, to, curtailmentMap, curtailmentDaily.length]);
 
   // Invalidar curtailment al cambiar rango
-  useEffect(() => { setCurtailmentMap(new Map()); }, [from, to]);
+  useEffect(() => {
+    setCurtailmentMap(new Map());
+    setCurtailmentDaily([]);
+  }, [from, to]);
 
   const toggleMetric = (k: MetricKey) => {
     setSelected((prev) => {
@@ -268,21 +354,49 @@ export function HouseRanking() {
     return arr;
   }, [enrichedRows, sortMeta]);
 
-  // Para alertas: barras stacked por severidad (high + medium).
-  // Para el resto: una sola barra con el valor total de la métrica.
+  // Buckets cronológicos (solo se usan cuando chronological=true y sortBy=curtailment)
+  const isChronoCurtailment = chronological && sortBy === 'curtailment';
+  const chronoBuckets = useMemo(
+    () => (isChronoCurtailment ? buildBuckets(from, to) : null),
+    [isChronoCurtailment, from, to],
+  );
+
+  // chartData ramificada por modo de visualización:
+  //   - cronológico + curtailment → stacked bar por semana/mes
+  //   - alertas (default)         → stacked bar por severidad (high + medium)
+  //   - resto                     → barra única
   const chartData = useMemo(() => {
+    if (isChronoCurtailment && chronoBuckets) {
+      // Agregar kWh por (casa, bucket) desde curtailmentDaily
+      const byCasaBucket = new Map<string, Map<string, number>>();
+      for (const d of curtailmentDaily) {
+        const bk = chronoBuckets.bucketKeyOf(d.record_date);
+        if (!bk) continue;
+        let inner = byCasaBucket.get(d.casa);
+        if (!inner) { inner = new Map(); byCasaBucket.set(d.casa, inner); }
+        inner.set(bk, (inner.get(bk) ?? 0) + d.curtailment_kwh);
+      }
+      return sortedRows.map((r) => {
+        const inner = byCasaBucket.get(r.casa);
+        const row: Record<string, string | number> = { casa: r.casa };
+        for (const b of chronoBuckets.buckets) {
+          row[b.key] = Math.round((inner?.get(b.key) ?? 0) * 100) / 100;
+        }
+        return row;
+      });
+    }
     if (sortBy === 'alertas') {
       return sortedRows.map((r) => ({
         casa: r.casa,
         high: r.alertas_high,
         medium: r.alertas_medium,
-        value: r.alertas_high + r.alertas_medium, // mantenido para el tooltip "Total"
+        value: r.alertas_high + r.alertas_medium,
       }));
     }
     return sortedRows.map((r) => ({ casa: r.casa, value: sortMeta.value(r) }));
-  }, [sortedRows, sortBy, sortMeta]);
+  }, [sortedRows, sortBy, sortMeta, isChronoCurtailment, chronoBuckets, curtailmentDaily]);
 
-  const isStackedAlertas = sortBy === 'alertas';
+  const isStackedAlertas = sortBy === 'alertas' && !isChronoCurtailment;
 
   const exportCSV = () => {
     const headers = ['Casa', ...selectedMetrics.map((m) => m.short)];
@@ -429,6 +543,34 @@ export function HouseRanking() {
                 {m.short}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Toggle Cronológico — solo aplica a curtailment (los demás conteos no
+            tienen progresión temporal interesante en stacked). Divide el rango
+            en semanas (≤35d) o meses (>35d) y apila los segmentos. */}
+        {sortBy === 'curtailment' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Vista:</span>
+            <button
+              onClick={() => setChronological(false)}
+              className={`chip ${!chronological ? 'active' : ''}`}
+              style={{ fontSize: '0.76rem', padding: '4px 10px' }}
+            >
+              Total
+            </button>
+            <button
+              onClick={() => setChronological(true)}
+              className={`chip ${chronological ? 'active' : ''}`}
+              style={{ fontSize: '0.76rem', padding: '4px 10px' }}
+            >
+              Cronológico
+            </button>
+            {chronological && chronoBuckets && (
+              <span style={{ fontSize: '0.74rem', color: 'var(--text-tertiary)' }}>
+                {chronoBuckets.granularity === 'week' ? 'Por semana' : 'Por mes'} · {chronoBuckets.buckets.length} segmentos
+              </span>
+            )}
           </div>
         )}
       </div>

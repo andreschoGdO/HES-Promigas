@@ -28,9 +28,15 @@ export function Topbar() {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
+    // Lectura inicial
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user?.email) setEmail(data.user.email);
+      setEmail(data.user?.email ?? '');
     });
+    // Reaccionar a cambios de sesión (login/logout/cambio de cuenta sin reload)
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setEmail(session?.user?.email ?? '');
+    });
+    return () => { sub.subscription.unsubscribe(); };
   }, []);
 
   // No mostrar topbar en /login y /auth/*

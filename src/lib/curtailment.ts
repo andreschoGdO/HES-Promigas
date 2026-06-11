@@ -289,6 +289,25 @@ export async function computeCurtailmentByDay(from: string, to: string): Promise
 }
 
 /**
+ * Lee del cache de la BD el curtailment diario crudo para el rango [from, to].
+ * Útil para vistas cronológicas (stacked bar por semana/mes).
+ */
+export async function readCurtailmentDailyFromDb(from: string, to: string): Promise<Array<{ casa: string; record_date: string; curtailment_kwh: number }>> {
+  const { data, error } = await supabaseAdmin
+    .from('daily_curtailment_by_house')
+    .select('casa, record_date, curtailment_kwh')
+    .gte('record_date', from)
+    .lte('record_date', to)
+    .order('record_date', { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({
+    casa: r.casa,
+    record_date: r.record_date,
+    curtailment_kwh: Number(r.curtailment_kwh),
+  }));
+}
+
+/**
  * Lee del cache de la BD el curtailment integrado para el rango [from, to],
  * agregado por casa (suma kWh de todos los días).
  */

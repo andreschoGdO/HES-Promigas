@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { readCurtailmentFromDb, computeCurtailmentByDay } from '@/lib/curtailment';
+import { readCurtailmentFromDb, readCurtailmentDailyFromDb, computeCurtailmentByDay } from '@/lib/curtailment';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 /**
@@ -23,6 +23,7 @@ export async function GET(request: Request) {
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     const force = url.searchParams.get('force') === '1';
+    const detailed = url.searchParams.get('detailed') === '1';
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
       return NextResponse.json({ error: 'from y to requeridos (YYYY-MM-DD)' }, { status: 400 });
     }
@@ -77,8 +78,14 @@ export async function GET(request: Request) {
       source = 'live';
     }
 
+    // Modo detailed: además del agregado por casa, devolvemos el desglose
+    // diario crudo. El cliente lo agrupa por bucket (semana/mes) según el
+    // rango para construir un stacked bar cronológico.
+    const daily = detailed ? await readCurtailmentDailyFromDb(from, to) : undefined;
+
     return NextResponse.json({
       items,
+      daily,
       summary: {
         casas: items.length,
         from, to,

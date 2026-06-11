@@ -218,13 +218,17 @@ export async function computeCurtailmentByDay(from: string, to: string): Promise
   const fromTs = new Date(from + 'T00:00:00-05:00').getTime();
   const toTs = new Date(to + 'T23:59:59-05:00').getTime();
 
+  // No filtramos por `type` (el valor varía: "inversor", "Inversor", "inv-solar",
+  // "solar", etc. según la fuente). En su lugar usamos la marca como filtro:
+  // si la marca matchea Livoltek o DEYE, lo procesamos. Los medidores de red
+  // ("red") no tienen marca solar registrada, así que quedan fuera naturalmente.
   const { data: devices } = await supabaseAdmin
     .from('devices')
-    .select('id, metrum_id, casa, city, marca, type, is_active, cliente_id')
+    .select('id, metrum_id, casa, city, marca, type, is_active')
     .eq('is_active', true)
     .not('metrum_id', 'is', null)
     .not('casa', 'is', null)
-    .ilike('type', '%nversor%')
+    .not('marca', 'is', null)
     .limit(500);
 
   const valid: DeviceRow[] = (devices ?? [])

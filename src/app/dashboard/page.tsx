@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
 import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp, BarChart3, Cpu, AlertTriangle, AlertCircle, Bell, Info } from 'lucide-react';
 import { VARIABLES, findVariable, type VariableMeta } from '@/lib/variables-dict';
-import { HouseRanking } from '@/components/HouseRanking';
+import { NarFullView } from '@/components/NarFullView';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush,
   PieChart, Pie, Cell,
@@ -2708,7 +2708,7 @@ function ConsumosTab() {
 /* ---------------- TAB: NAR (Ranking por casa) ---------------- */
 
 function NarTab() {
-  return <HouseRanking />;
+  return <NarFullView hideTopHeader />;
 }
 
 /* ---------------- TAB: Control Manual Inversor ---------------- */

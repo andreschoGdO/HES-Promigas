@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { createSupabaseServer } from '@/lib/supabase-server';
 import { linkVisitToInventory } from '@/lib/inventory-visit-link';
+import { getRoleFromEmail } from '@/lib/user-role';
 
 /**
  * GET /api/visits?type=&casa=&status=&from=&to=
  * Lista visitas con filtros opcionales.
+ *
+ * Autorización por rol:
+ *   - admin (gdo/promigas): ve todas las visitas, todos los filtros funcionan.
+ *   - user  (contratista):  ve SOLO las visitas creadas por su propio email
+ *                           (created_by = email del usuario logueado).
+ *                           Los demás filtros se aplican sobre ese subconjunto.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -17,9 +25,23 @@ export async function GET(request: Request) {
   const contratista = url.searchParams.get('contratista');
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 100), 500);
 
+  // Determinar rol del usuario logueado para aplicar filtro de aislamiento.
+  let restrictToEmail: string | null = null;
+  try {
+    const supa = await createSupabaseServer();
+    const { data } = await supa.auth.getUser();
+    const email = data.user?.email ?? null;
+    if (email && getRoleFromEmail(email) === 'user') {
+      restrictToEmail = email.toLowerCase();
+    }
+  } catch {
+    // Si falla la lectura de sesión, NO aplicamos restricción adicional —
+    // el middleware ya bloqueó el acceso sin login.
+  }
+
   let q = supabaseAdmin
     .from('field_visits')
-    .select('id, visit_type, casa, house_id, technician_name, technician_email, contratista, visit_date, visit_time, status, notes, created_at, updated_at, completed_at')
+    .select('id, visit_type, casa, house_id, technician_name, technician_email, contratista, visit_date, visit_time, status, notes, created_at, updated_at, completed_at, created_by')
     .order('visit_date', { ascending: false })
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -30,6 +52,7 @@ export async function GET(request: Request) {
   if (to) q = q.lte('visit_date', to);
   if (technician) q = q.ilike('technician_name', `%${technician}%`);
   if (contratista) q = q.ilike('contratista', `%${contratista}%`);
+  if (restrictToEmail) q = q.eq('created_by', restrictToEmail);
 
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -46,6 +69,18 @@ export async function POST(request: Request) {
     if (!body.visit_type || !['previa', 'instalacion', 'emergencia', 'normalizacion'].includes(body.visit_type)) {
       return NextResponse.json({ error: 'visit_type inválido' }, { status: 400 });
     }
+
+    // created_by se setea del usuario logueado para evitar que un cliente
+    // malicioso lo manipule. Si no hay sesión (entorno dev con DISABLE_AUTH),
+    // se acepta lo del body como fallback.
+    let createdBy: string | null = null;
+    try {
+      const supa = await createSupabaseServer();
+      const { data } = await supa.auth.getUser();
+      createdBy = data.user?.email?.toLowerCase() ?? null;
+    } catch { /* sin sesión disponible */ }
+    if (!createdBy) createdBy = body.created_by ?? body.technician_email ?? null;
+
     const payload = {
       visit_type: body.visit_type,
       house_id: body.house_id ?? null,
@@ -60,7 +95,7 @@ export async function POST(request: Request) {
       lat: body.lat ?? null,
       lng: body.lng ?? null,
       notes: body.notes ?? null,
-      created_by: body.created_by ?? body.technician_email ?? null,
+      created_by: createdBy,
       completed_at: body.status === 'completed' ? new Date().toISOString() : null,
     };
     const { data, error } = await supabaseAdmin.from('field_visits').insert(payload).select('*').single();

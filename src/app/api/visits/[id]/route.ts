@@ -1,9 +1,40 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { createSupabaseServer } from '@/lib/supabase-server';
 import { linkVisitToInventory } from '@/lib/inventory-visit-link';
+import { getRoleFromEmail } from '@/lib/user-role';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+/**
+ * Si el usuario es contratista (rol 'user'), solo puede ver/editar/borrar
+ * sus propias visitas (created_by = su email). Devuelve null si está OK,
+ * o un NextResponse con 403/404 si debe bloquearse.
+ */
+async function enforceOwnership(visitId: string): Promise<NextResponse | null> {
+  try {
+    const supa = await createSupabaseServer();
+    const { data } = await supa.auth.getUser();
+    const email = data.user?.email?.toLowerCase() ?? null;
+    if (!email) return null; // sin sesión, deja que la regla normal de upstream maneje
+    if (getRoleFromEmail(email) === 'admin') return null; // admins pasan
+    // user: validar que la visita le pertenezca
+    const { data: visit } = await supabaseAdmin
+      .from('field_visits')
+      .select('created_by')
+      .eq('id', visitId)
+      .maybeSingle();
+    if (!visit) return NextResponse.json({ error: 'no encontrado' }, { status: 404 });
+    const owner = (visit.created_by ?? '').toLowerCase();
+    if (owner !== email) {
+      return NextResponse.json({ error: 'no autorizado' }, { status: 403 });
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -12,6 +43,9 @@ interface RouteContext {
  */
 export async function GET(_request: Request, context: RouteContext) {
   const { id } = await context.params;
+  const blocked = await enforceOwnership(id);
+  if (blocked) return blocked;
+
   const { data: visit, error } = await supabaseAdmin
     .from('field_visits')
     .select('*')
@@ -43,6 +77,9 @@ export async function GET(_request: Request, context: RouteContext) {
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
+    const blocked = await enforceOwnership(id);
+    if (blocked) return blocked;
+
     const body = await request.json();
     const updates: Record<string, unknown> = {};
     const allowed = ['casa', 'house_id', 'technician_name', 'technician_email', 'contratista', 'visit_date', 'visit_time', 'status', 'form_data', 'notes', 'lat', 'lng'];
@@ -85,6 +122,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 export async function DELETE(_request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
+    const blocked = await enforceOwnership(id);
+    if (blocked) return blocked;
+
     // Primero borrar fotos del storage
     const { data: photos } = await supabaseAdmin.from('field_visit_photos').select('storage_path').eq('visit_id', id);
     if (photos && photos.length > 0) {

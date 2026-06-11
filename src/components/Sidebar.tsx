@@ -8,10 +8,29 @@ import { createBrowserClient } from '@supabase/ssr';
 import { readVisibility, fetchVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
 import { getRoleFromEmail, type UserRole } from '@/lib/user-role';
 
+const USER_CACHE_KEY = 'sidebar-user-v1';
+
+interface CachedUser { email: string; initial: string; role: UserRole }
+
+const readCachedUser = (): CachedUser | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(USER_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as CachedUser) : null;
+  } catch { return null; }
+};
+
+const writeCachedUser = (u: CachedUser): void => {
+  if (typeof window === 'undefined') return;
+  try { window.localStorage.setItem(USER_CACHE_KEY, JSON.stringify(u)); } catch {}
+};
+
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [user, setUser] = useState<{ email: string; initial: string; role: UserRole } | null>(null);
+  // Lee del cache local para evitar el flash inicial (de admin con todos los items
+  // a user con solo Visitas) mientras supabase.auth.getUser() resuelve.
+  const [user, setUser] = useState<CachedUser | null>(() => readCachedUser());
   const [mobileOpen, setMobileOpen] = useState(false);
   // Collapsed state (desktop only) — persiste en localStorage
   const [collapsed, setCollapsed] = useState(false);
@@ -72,7 +91,9 @@ export function Sidebar() {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user?.email) {
         const email = data.user.email;
-        setUser({ email, initial: email[0].toUpperCase(), role: getRoleFromEmail(email) });
+        const next: CachedUser = { email, initial: email[0].toUpperCase(), role: getRoleFromEmail(email) };
+        setUser(next);
+        writeCachedUser(next);
       }
     });
   }, []);
@@ -83,6 +104,8 @@ export function Sidebar() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
     await supabase.auth.signOut();
+    // Limpiar cache del rol para que el siguiente login no muestre items del anterior
+    try { window.localStorage.removeItem(USER_CACHE_KEY); } catch {}
     router.push('/login');
     router.refresh();
   };
@@ -102,15 +125,19 @@ export function Sidebar() {
   const adminItemsAll = [
     { id: 'configuracion', label: 'Configuración API', path: '/configuracion', icon: Settings },
   ];
-  // Si el usuario no es admin (contratista), solo mostramos Visitas.
-  // El middleware ya garantiza que no pueda visitar otras rutas; el sidebar
-  // refleja eso ocultando los items inaccesibles.
+  // Si todavía no sabemos quién es el usuario (sin cache + getUser pendiente),
+  // NO renderizamos items. Es preferible un sidebar vacío 500ms a hacer flash
+  // de items que el contratista no debería ver.
+  const userLoaded = user !== null;
   const isUser = user?.role === 'user';
-  const navItems = (isUser
-    ? navItemsAll.filter((i) => i.id === 'visitas')
-    : navItemsAll.filter((i) => isItemVisible(i.id, visibility))
-  );
-  const adminItems = isUser ? [] : adminItemsAll.filter((i) => isItemVisible(i.id, visibility));
+  const navItems = !userLoaded
+    ? []
+    : isUser
+      ? navItemsAll.filter((i) => i.id === 'visitas')
+      : navItemsAll.filter((i) => isItemVisible(i.id, visibility));
+  const adminItems = !userLoaded || isUser
+    ? []
+    : adminItemsAll.filter((i) => isItemVisible(i.id, visibility));
 
   return (
     <>

@@ -610,6 +610,25 @@ export const VARIABLES: VariableMeta[] = [
       'Bucaramanga, Pereira, Manizales, Ibagué, Cúcuta.',
   },
   {
+    key: 'envelope_dc_estimado_LV', label: 'Envolvente DC estimada (Livoltek + DEYE)', unit: 'W',
+    category: 'derivada', source: 'derived',
+    description:
+      'Misma fórmula que envelope_dc_LV (P95 ajustado por irradiancia), pero usando Pdc_estimado ' +
+      '(= powerAPg − BattPower) como base de DC en vez de powerAEgdc_LV.\n\n' +
+      'Fórmula: envelope(t) = P95(Pdc_est, hora_t) × [ GHI_real(t) / P95(GHI, hora_t) ]\n\n' +
+      'Esta versión existe porque DEYE NO expone powerAEgdc_LV (lectura directa del bus DC). ' +
+      'Pdc_estimado infiere el DC a partir del AC saliente y la batería: en cualquier instante, ' +
+      'lo que entra al bus DC desde el PV = lo que sale a AC + lo que cargó la batería.\n\n' +
+      'TRADE-OFF vs envelope_dc_LV (Livoltek real): subestima ~3-5% porque no descuenta las ' +
+      'pérdidas de conversión del inversor (DC→AC ~95-97% eficiente). Si la casa es Livoltek, ' +
+      'preferir envelope_dc_LV. Si es DEYE, esta es la única opción.\n\n' +
+      'Lectura: igual que el envelope normal — cuando la curva real (Pdc_estimado) va por debajo, ' +
+      'hay sombra, suciedad o curtailment.\n\n' +
+      'FALLBACK: cae a P95 puro sin ajuste cuando no hay GHI disponible.\n\n' +
+      'LIMITACIONES: ≥7 días, subestimación constante por pérdidas de conversión. Ciudades ' +
+      'soportadas: las mismas de envelope_dc_LV.',
+  },
+  {
     key: 'curtailment_dc_w_LV', label: 'Curtailment DC instantáneo', unit: 'W',
     category: 'derivada', source: 'derived',
     description:

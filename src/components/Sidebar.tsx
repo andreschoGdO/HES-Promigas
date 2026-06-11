@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BarChart3, Settings, LogOut, Sun, ClipboardCheck, Package, HardHat, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, ClipboardCheck, Package, HardHat, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt, Users } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { readVisibility, fetchVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
 import { getRoleFromEmail, type UserRole } from '@/lib/user-role';
@@ -132,6 +132,7 @@ export function Sidebar() {
     { id: 'planner',     label: 'Planner', path: '/planner', icon: CalendarRange },
   ];
   const adminItemsAll = [
+    { id: 'usuarios',      label: 'Usuarios',          path: '/usuarios',      icon: Users },
     { id: 'configuracion', label: 'Configuración API', path: '/configuracion', icon: Settings },
   ];
   // Si todavía no sabemos quién es el usuario (sin cache + getUser pendiente),

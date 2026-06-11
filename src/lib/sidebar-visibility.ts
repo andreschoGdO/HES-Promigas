@@ -24,6 +24,7 @@ export interface SidebarVisibility {
   reportes?: boolean;
   planner?: boolean;
   configuracion?: boolean;
+  usuarios?: boolean;
 }
 
 const STORAGE_KEY = 'sidebar-visibility-v1';
@@ -42,6 +43,7 @@ export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: stri
   { id: 'facturacion',   label: 'Facturación',             group: 'general' },
   { id: 'reportes',      label: 'Reportes',                group: 'general' },
   { id: 'planner',       label: 'Planner',                 group: 'general' },
+  { id: 'usuarios',      label: 'Usuarios',                group: 'sistema' },
   { id: 'configuracion', label: 'Configuración API',       group: 'sistema' },
 ];
 

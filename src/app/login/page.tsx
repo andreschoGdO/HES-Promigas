@@ -24,7 +24,9 @@ function LoginInner() {
   useEffect(() => {
     const err = params.get('error');
     if (err === 'exchange-failed') setMsg({ kind: 'error', text: 'La sesión expiró. Vuelve a iniciar sesión.' });
-    else if (params.get('signup_ok') === '1') setMsg({ kind: 'success', text: 'Cuenta creada. Si Supabase está configurado para confirmar email, revisa tu correo. Si no, ya puedes entrar.' });
+    else if (err === 'pending') setMsg({ kind: 'info', text: 'Tu cuenta fue registrada y está pendiente de aprobación. Un administrador (Promigas / GdO) te habilitará pronto.' });
+    else if (err === 'disabled') setMsg({ kind: 'error', text: 'Tu cuenta está deshabilitada. Contacta al administrador para reactivarla.' });
+    else if (params.get('signup_ok') === '1') setMsg({ kind: 'success', text: 'Cuenta creada. Si sos contratista, queda pendiente hasta que un administrador (Promigas / GdO) la habilite.' });
   }, [params]);
 
   const supa = () => createBrowserClient(

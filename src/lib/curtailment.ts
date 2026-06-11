@@ -218,14 +218,14 @@ export async function computeCurtailmentByDay(from: string, to: string): Promise
   const fromTs = new Date(from + 'T00:00:00-05:00').getTime();
   const toTs = new Date(to + 'T23:59:59-05:00').getTime();
 
-  // No filtramos por `type` (el valor varía: "inversor", "Inversor", "inv-solar",
-  // "solar", etc. según la fuente). En su lugar usamos la marca como filtro:
-  // si la marca matchea Livoltek o DEYE, lo procesamos. Los medidores de red
-  // ("red") no tienen marca solar registrada, así que quedan fuera naturalmente.
+  // Filtro: el único requisito real es tener marca solar conocida (Livoltek/DEYE)
+  // + metrum_id + casa. NO filtramos por is_active: en producción muchos inversores
+  // están marcados como is_active=false pero siguen reportando datos a Metrum
+  // (campo legacy). La marca como filtro es suficiente para descartar medidores
+  // de red o gateways.
   const { data: devices } = await supabaseAdmin
     .from('devices')
-    .select('id, metrum_id, casa, city, marca, type, is_active')
-    .eq('is_active', true)
+    .select('id, metrum_id, casa, city, marca, type')
     .not('metrum_id', 'is', null)
     .not('casa', 'is', null)
     .not('marca', 'is', null)

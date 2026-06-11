@@ -41,25 +41,6 @@ export async function GET(request: Request) {
     const toStr = dateStr(to);
 
     const startTs = Date.now();
-
-    // Debug: cuántos devices hay según los filtros actuales
-    const { data: debugDevices, count: debugCount } = await supabaseAdmin
-      .from('devices')
-      .select('id, casa, marca, type, is_active, metrum_id', { count: 'exact' })
-      .limit(500);
-    const debug = {
-      total_in_devices: debugCount,
-      sample: (debugDevices ?? []).slice(0, 5).map((d) => ({
-        casa: d.casa, marca: d.marca, type: d.type, is_active: d.is_active, has_metrum: !!d.metrum_id,
-      })),
-      with_marca: (debugDevices ?? []).filter((d) => d.marca).length,
-      with_casa: (debugDevices ?? []).filter((d) => d.casa).length,
-      with_metrum: (debugDevices ?? []).filter((d) => d.metrum_id).length,
-      is_active: (debugDevices ?? []).filter((d) => d.is_active).length,
-      distinct_marca: Array.from(new Set((debugDevices ?? []).map((d) => d.marca).filter(Boolean))),
-      distinct_type: Array.from(new Set((debugDevices ?? []).map((d) => d.type).filter(Boolean))),
-    };
-
     const rows = await computeCurtailmentByDay(fromStr, toStr);
 
     let upserted = 0;
@@ -96,7 +77,6 @@ export async function GET(request: Request) {
       rows_upserted: upserted,
       casas: new Set(rows.map((r) => r.casa)).size,
       elapsed_ms: Date.now() - startTs,
-      debug,
     });
   } catch (err) {
     return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : 'Error' }, { status: 500 });

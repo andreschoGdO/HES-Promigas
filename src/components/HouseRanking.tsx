@@ -640,6 +640,10 @@ export function HouseRanking() {
                 itemStyle={{ color: 'var(--text-primary)' }}
                 formatter={(v, name) => {
                   const n = Number(v) || 0;
+                  if (isChronoCurtailment && chronoBuckets) {
+                    const b = chronoBuckets.buckets.find((x) => x.key === name);
+                    return [`${n.toFixed(1)} kWh`, b?.label ?? String(name)] as [string, string];
+                  }
                   if (isStackedAlertas) {
                     const label = name === 'high' ? 'Alta' : name === 'medium' ? 'Media' : String(name);
                     return [`${n} ${n === 1 ? 'evento' : 'eventos'}`, label] as [string, string];
@@ -647,7 +651,18 @@ export function HouseRanking() {
                   return [sortMeta.format(n), sortMeta.short] as [string, string];
                 }}
               />
-              {isStackedAlertas ? (
+              {isChronoCurtailment && chronoBuckets ? (
+                chronoBuckets.buckets.map((b, i) => (
+                  <Bar
+                    key={b.key}
+                    dataKey={b.key}
+                    stackId="curtailment"
+                    fill={b.color}
+                    name={b.key}
+                    radius={i === chronoBuckets.buckets.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
+                  />
+                ))
+              ) : isStackedAlertas ? (
                 <>
                   <Bar dataKey="high" stackId="alertas" fill="#ef4444" name="high" />
                   <Bar dataKey="medium" stackId="alertas" fill="#f59e0b" name="medium" radius={[0, 4, 4, 0]} />

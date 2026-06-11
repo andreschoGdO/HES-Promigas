@@ -40,6 +40,7 @@ export async function GET(request: Request) {
     const from = url.searchParams.get('from');
     const to = url.searchParams.get('to');
     const categoriesParam = url.searchParams.get('categories');
+    const ruleId = url.searchParams.get('rule_id');
 
     if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
       return NextResponse.json({ error: 'from y to son requeridos (YYYY-MM-DD)' }, { status: 400 });
@@ -49,16 +50,19 @@ export async function GET(request: Request) {
       ? new Set(categoriesParam.split(',').map((s) => s.trim()).filter(Boolean) as AlertCategory[])
       : null;
 
-    // 1. Eventos del rango con variable (para filtro por categoría)
-    const { data: events, error: evErr } = await supabaseAdmin
+    // 1. Eventos del rango (filtros opcionales: rule_id, category)
+    let q = supabaseAdmin
       .from('alert_events')
       .select('casa, house_id, severity, record_date, variable, rule_id')
       .gte('record_date', from)
       .lte('record_date', to)
       .limit(50000);
+    if (ruleId) q = q.eq('rule_id', ruleId);
+    const { data: events, error: evErr } = await q;
     if (evErr) return NextResponse.json({ error: evErr.message }, { status: 500 });
 
-    // Filtrar por categoría si aplica
+    // Filtrar por categoría si aplica (después del fetch, en memoria —
+    // la categoría se deriva de la variable, no es una columna indexable).
     const filteredEvents = (events ?? []).filter((ev) => {
       if (!ev.casa) return false;
       if (!categoriesFilter) return true;
@@ -106,6 +110,7 @@ export async function GET(request: Request) {
         total_events: filteredEvents.length,
         from, to,
         categories: categoriesFilter ? Array.from(categoriesFilter) : null,
+        rule_id: ruleId,
       },
     });
   } catch (err) {

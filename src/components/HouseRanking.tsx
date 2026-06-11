@@ -5,7 +5,14 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import { Download, AlertCircle, Info, Sun, Calendar, BarChart3, Lightbulb, Filter } from 'lucide-react';
-import { ALERT_CATEGORIES, type AlertCategory } from '@/lib/alert-variables';
+
+interface AlertRule {
+  id: string;
+  name: string;
+  variable: string;
+  severity: 'high' | 'medium' | 'low';
+  enabled: boolean;
+}
 
 // ───── Helpers ─────
 const dateStr = (d: Date) => d.toISOString().slice(0, 10);
@@ -145,7 +152,8 @@ export function HouseRanking() {
   const [customTo, setCustomTo] = useState<string>(() => dateStr(today()));
   const [selected, setSelected] = useState<Set<MetricKey>>(new Set(['alertas']));
   const [sortBy, setSortBy] = useState<MetricKey>('alertas');
-  const [selectedCategories, setSelectedCategories] = useState<Set<AlertCategory>>(new Set());
+  const [selectedRuleId, setSelectedRuleId] = useState<string>('');
+  const [rules, setRules] = useState<AlertRule[]>([]);
   const [rows, setRows] = useState<RankApiRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,10 +168,20 @@ export function HouseRanking() {
   }, [preset, customFrom, customTo]);
 
   const wantsCurtailment = selected.has('curtailment');
-  const categoriesParam = useMemo(
-    () => (selectedCategories.size === 0 ? '' : `&categories=${Array.from(selectedCategories).join(',')}`),
-    [selectedCategories],
-  );
+  const ruleParam = selectedRuleId ? `&rule_id=${encodeURIComponent(selectedRuleId)}` : '';
+
+  // Cargar lista de reglas una sola vez (para el dropdown)
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/alerts/rules');
+        const j = await r.json();
+        setRules((j.rules ?? []) as AlertRule[]);
+      } catch {
+        // si falla, el dropdown queda vacío — no es bloqueante
+      }
+    })();
+  }, []);
 
   // Fetch del ranking base (alertas + notif + recomendaciones)
   useEffect(() => {
@@ -171,7 +189,7 @@ export function HouseRanking() {
     (async () => {
       setLoading(true); setError(null);
       try {
-        const res = await fetch(`/api/nar/ranking?from=${from}&to=${to}${categoriesParam}`);
+        const res = await fetch(`/api/nar/ranking?from=${from}&to=${to}${ruleParam}`);
         const j = await res.json();
         if (cancelled) return;
         if (!res.ok) throw new Error(j.error ?? 'Error');
@@ -183,7 +201,7 @@ export function HouseRanking() {
       }
     })();
     return () => { cancelled = true; };
-  }, [from, to, categoriesParam]);
+  }, [from, to, ruleParam]);
 
   // Curtailment: fetch separado, cache por rango (BD lo sirve rápido si el cron corrió)
   useEffect(() => {
@@ -226,13 +244,6 @@ export function HouseRanking() {
     });
   };
 
-  const toggleCategory = (c: AlertCategory) => {
-    setSelectedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(c)) next.delete(c); else next.add(c);
-      return next;
-    });
-  };
 
   const selectedMetrics = useMemo(
     () => METRICS.filter((m) => selected.has(m.key)),
@@ -363,32 +374,45 @@ export function HouseRanking() {
           </button>
         </div>
 
-        {/* Filtro de categoría (aplica a alertas/notif/recomendaciones — no a curtailment) */}
+        {/* Filtro por regla específica (aplica a alertas/notif/recomendaciones — no a curtailment).
+            Si seleccionás una regla, el ranking solo cuenta eventos disparados por esa regla. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            <Filter size={14} /> Categorías:
+            <Filter size={14} /> Regla:
           </span>
-          <button
-            onClick={() => setSelectedCategories(new Set())}
-            className={`chip ${selectedCategories.size === 0 ? 'active' : ''}`}
-            style={{ fontSize: '0.78rem', padding: '4px 10px' }}
+          <select
+            value={selectedRuleId}
+            onChange={(e) => setSelectedRuleId(e.target.value)}
+            style={{
+              fontSize: '0.82rem',
+              padding: '6px 10px',
+              borderRadius: 6,
+              border: '1px solid var(--border)',
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-primary)',
+              minWidth: 280,
+            }}
           >
-            Todas
-          </button>
-          {(Object.keys(ALERT_CATEGORIES) as AlertCategory[]).map((c) => {
-            const meta = ALERT_CATEGORIES[c];
-            const isOn = selectedCategories.has(c);
-            return (
-              <button
-                key={c}
-                onClick={() => toggleCategory(c)}
-                className={`chip ${isOn ? 'active' : ''}`}
-                style={{ fontSize: '0.78rem', padding: '4px 10px', borderLeft: `3px solid ${meta.color}`, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
-                <span>{meta.icon}</span> {meta.label}
-              </button>
-            );
-          })}
+            <option value="">Todas las reglas</option>
+            {rules.map((r) => {
+              const sevTag = r.severity === 'high' ? 'ALTA' : r.severity === 'medium' ? 'MEDIA' : 'BAJA';
+              return (
+                <option key={r.id} value={r.id}>
+                  [{sevTag}] {r.name}
+                </option>
+              );
+            })}
+          </select>
+          {selectedRuleId && (
+            <button
+              onClick={() => setSelectedRuleId('')}
+              className="chip"
+              style={{ fontSize: '0.76rem', padding: '4px 10px' }}
+              title="Limpiar filtro de regla"
+            >
+              Limpiar
+            </button>
+          )}
         </div>
 
         {/* Selector "ordenar por" cuando hay más de una métrica activa */}

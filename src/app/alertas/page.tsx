@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { Bell, Plus, Trash2, AlertTriangle, AlertCircle, Info, Power, Lightbulb, Sparkles, Settings2, Wrench, TrendingUp, Zap } from 'lucide-react';
+import { Bell, Plus, Trash2, AlertTriangle, AlertCircle, Info, Power, Lightbulb, Sparkles, Settings2, Wrench, TrendingUp, Zap, BarChart3 } from 'lucide-react';
 import { ALERT_VARIABLES, ALERT_CATEGORIES, findVariableMeta, formatValue, type AlertCategory } from '@/lib/alert-variables';
 import { ReactivaCREG } from '@/components/ReactivaCREG';
+import { HouseRanking } from '@/components/HouseRanking';
 
 interface AlertRule {
   id: string;
@@ -71,9 +72,15 @@ const SEVERITIES: Array<{ key: 'high' | 'medium' | 'low'; label: string; color: 
 ];
 const sevMeta = (s: string) => SEVERITIES.find((x) => x.key === s) ?? SEVERITIES[2];
 
-type NarTab = 'notificaciones' | 'alertas' | 'recomendaciones' | 'reactiva' | 'reglas';
+type NarTab = 'ranking' | 'notificaciones' | 'alertas' | 'recomendaciones' | 'reactiva' | 'reglas';
 
 const NAR_META: Record<NarTab, { label: string; color: string; icon: typeof Bell; description: string }> = {
+  ranking: {
+    label: 'Ranking por casa',
+    color: '#07c5a8',
+    icon: BarChart3,
+    description: 'Vista agrupada por casa: tabla y gráfico horizontal de mayor a menor para alertas, notificaciones, reactiva CREG (y curtailment próximamente). Descargable en CSV.',
+  },
   notificaciones: {
     label: 'Notificaciones',
     color: '#3b82f6',
@@ -107,7 +114,7 @@ const NAR_META: Record<NarTab, { label: string; color: string; icon: typeof Bell
 };
 
 export default function NarPage() {
-  const [tab, setTab] = useState<NarTab>('alertas');
+  const [tab, setTab] = useState<NarTab>('ranking');
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [topAlerts, setTopAlerts] = useState<TopAlertRow[]>([]);
@@ -283,6 +290,7 @@ export default function NarPage() {
   }, [rules, filterCategory]);
 
   const counts: Record<NarTab, number> = {
+    ranking: 0,
     notificaciones: events.filter((e) => e.severity === 'low' && !e.acknowledged).length,
     alertas: events.filter((e) => (e.severity === 'high' || e.severity === 'medium') && !e.acknowledged).length,
     recomendaciones: recommendations.length,
@@ -351,7 +359,8 @@ export default function NarPage() {
           return (
             <button key={k} onClick={() => setTab(k)} className={`chip ${tab === k ? 'active' : ''}`}
               style={{ fontSize: '0.85rem', padding: '10px 14px', borderLeft: `4px solid ${m.color}`, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Icon size={14} /> {m.label} <span style={{ opacity: 0.7, marginLeft: 4 }}>({counts[k]})</span>
+              <Icon size={14} /> {m.label}
+              {k !== 'ranking' && <span style={{ opacity: 0.7, marginLeft: 4 }}>({counts[k]})</span>}
             </button>
           );
         })}
@@ -363,7 +372,7 @@ export default function NarPage() {
       </div>
 
       {/* Filtro de categoría (aplica a eventos y reglas) */}
-      {tab !== 'recomendaciones' && (
+      {tab !== 'recomendaciones' && tab !== 'ranking' && tab !== 'reactiva' && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
           <button onClick={() => setFilterCategory('all')} className={`chip ${filterCategory === 'all' ? 'active' : ''}`}>
             Todas las categorías
@@ -377,6 +386,8 @@ export default function NarPage() {
       )}
 
       {/* CONTENIDO POR TAB */}
+      {tab === 'ranking' && <HouseRanking />}
+
       {tab === 'notificaciones' && (
         <EventsList
           events={notiEvents}

@@ -371,7 +371,8 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
   },
   Pdc_DEY: {
     deps: ['powerAPg', 'BattPower'],
-    compute: (v) => (v.powerAPg ?? 0) + (v.BattPower ?? 0),
+    // DEYE usa convención OPUESTA a Livoltek (verificado en Casa 74): + descarga, − carga.
+    compute: (v) => (v.powerAPg ?? 0) - (v.BattPower ?? 0),
     appliesToInverter: true,
     brand: 'DEYE',
   },
@@ -422,7 +423,8 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     appliesToInverter: true,
     brand: 'Livoltek',
   },
-  // Envolvente DC para DEYE (única opción, no hay powerAEgdc_LV)
+  // Envolvente DC para DEYE (única opción, no hay powerAEgdc_LV).
+  // DEYE convención: + descarga, − carga → Pdc = AC − BattPower.
   envelope_dc_DEY: {
     deps: ['powerAPg', 'BattPower'],
     perRowDeps: [],
@@ -434,7 +436,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
         const apg = r.vals.powerAPg;
         const bp = r.vals.BattPower;
         const dcEst = (apg !== null && apg !== undefined && Number.isFinite(apg) && bp !== null && bp !== undefined && Number.isFinite(bp))
-          ? Number(apg) + Number(bp)
+          ? Number(apg) - Number(bp)
           : null;
         const ghi = r.vals.ghi_w_m2;
         const d = new Date(r.ts - 5 * 3600 * 1000);
@@ -474,7 +476,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
   curtailment_dc_DEY: {
     deps: ['powerAPg', 'BattPower', 'BattSOC', 'ExportGrid_DY'],
     precompute: (rows) => {
-      // Mismo bucle que envelope_dc_DEY
+      // Mismo bucle que envelope_dc_DEY (DEYE: Pdc = AC − BattPower)
       const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
       const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
       const ghiByTs = new Map<number, number>();
@@ -482,7 +484,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
         const apg = r.vals.powerAPg;
         const bp = r.vals.BattPower;
         const dcEst = (apg !== null && apg !== undefined && Number.isFinite(apg) && bp !== null && bp !== undefined && Number.isFinite(bp))
-          ? Number(apg) + Number(bp)
+          ? Number(apg) - Number(bp)
           : null;
         const ghi = r.vals.ghi_w_m2;
         const d = new Date(r.ts - 5 * 3600 * 1000);
@@ -514,7 +516,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       }
       const saturated = v.BattSOC >= 95 && Math.abs(v.ExportGrid_DY) < 100 && ctx.isDaylight;
       if (!saturated) return 0;
-      const dcEst = v.powerAPg + v.BattPower;
+      const dcEst = v.powerAPg - v.BattPower;
       return Math.max(0, baseDc - dcEst);
     },
     appliesToInverter: true,

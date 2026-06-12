@@ -120,11 +120,11 @@ async function processDevice(
   }
 
   if (brand === 'DEYE') {
-    // Convención verificada en Livoltek (junio 2026): Pdc = powerAPg + BattPower
-    // produce una curva que coincide con powerAEgdc_LV en casas Livoltek. Asumimos
-    // que DEYE comparte la misma convención de signo hasta verificar lo contrario.
+    // Convención DEYE es OPUESTA a Livoltek: en DEYE, BattPower > 0 = descarga,
+    // < 0 = carga. Verificado vía /api/debug/inspect-keys en Casa 74 (BattPower
+    // = -4190 W con batería cargando de día). Fórmula: Pdc = powerAPg − BattPower.
     for (const s of samples.values()) {
-      if (s.apg !== null && s.battPower !== null) s.dc = s.apg + s.battPower;
+      if (s.apg !== null && s.battPower !== null) s.dc = s.apg - s.battPower;
     }
   }
 

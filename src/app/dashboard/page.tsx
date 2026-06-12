@@ -225,6 +225,9 @@ interface DerivedKeyMeta {
   precompute?: (rows: Array<{ ts: number; vals: Record<string, number | null> }>) => unknown;
   compute: (vals: Record<string, number>, ctx?: ComputeContext) => number | null;
   appliesToInverter: boolean;
+  // Si se setea, la derivada solo aparece en inversores de esa marca.
+  // (Default: aparece en cualquier marca si las deps existen.)
+  brand?: 'Livoltek' | 'DEYE';
 }
 
 // Helper: P95 por hora-del-día (COT) sobre los samples disponibles del rango visible.
@@ -305,6 +308,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       return baseDc;
     },
     appliesToInverter: true,
+    brand: 'Livoltek',
   },
   // Curtailment DC instantáneo: max(0, envelope_ajustado − real) cuando hay saturación
   // (batería ≥95% AND no exportando AND de día). En momentos normales = 0.
@@ -350,6 +354,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       return Math.max(0, baseDc - v.powerAEgdc_LV);
     },
     appliesToInverter: true,
+    brand: 'Livoltek',
   },
   // ───────────────────────────────────────────────────────────────────
   // Variables SEPARADAS por marca (Livoltek vs DEYE)
@@ -362,11 +367,13 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     deps: ['powerAPg', 'BattPower'],
     compute: (v) => (v.powerAPg ?? 0) + (v.BattPower ?? 0),
     appliesToInverter: true,
+    brand: 'Livoltek',
   },
   Pdc_DEY: {
     deps: ['powerAPg', 'BattPower'],
     compute: (v) => (v.powerAPg ?? 0) + (v.BattPower ?? 0),
     appliesToInverter: true,
+    brand: 'DEYE',
   },
   // Envolvente DC estimada para Livoltek (usando Pdc_LIV como base)
   envelope_dc_LIV_est: {
@@ -413,6 +420,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       return baseDc;
     },
     appliesToInverter: true,
+    brand: 'Livoltek',
   },
   // Envolvente DC para DEYE (única opción, no hay powerAEgdc_LV)
   envelope_dc_DEY: {
@@ -459,6 +467,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       return baseDc;
     },
     appliesToInverter: true,
+    brand: 'DEYE',
   },
   // Curtailment para DEYE (DEYE no tiene curtailment_dc_LIV porque no expone
   // powerAEgdc_LV; usa Pdc_DEY como aproximación del DC real)
@@ -509,6 +518,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       return Math.max(0, baseDc - dcEst);
     },
     appliesToInverter: true,
+    brand: 'DEYE',
   },
 
   // Sacrificio AC por reactiva: cuando |Q| > 200 var, mide la activa perdida
@@ -525,6 +535,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       return Math.max(0, envH - v.powerAEg);
     },
     appliesToInverter: true,
+    brand: 'Livoltek',
   },
 };
 const isDerivedKey = (k: string): boolean => Object.prototype.hasOwnProperty.call(DERIVED_KEYS, k);
@@ -2022,9 +2033,13 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                   const rawKeySet = new Set(rawKeys);
                   // Inyectar keys derivadas que aplican a este device si todas sus deps existen
                   const isInv = (dev.type ?? '').toLowerCase() === 'inverter';
+                  const devMarca = (dev.marca ?? '').toLowerCase();
                   const derivedAvailable = DERIVED_KEY_LIST.filter((dk) => {
                     const meta = DERIVED_KEYS[dk];
                     if (meta.appliesToInverter && !isInv) return false;
+                    // Filtro por marca: si la derivada es específica a una marca
+                    // (Livoltek o DEYE), solo se muestra si la marca del device coincide.
+                    if (meta.brand && !devMarca.includes(meta.brand.toLowerCase())) return false;
                     return meta.deps.every((d) => rawKeySet.has(d));
                   });
                   const devKeys = [...derivedAvailable, ...rawKeys];

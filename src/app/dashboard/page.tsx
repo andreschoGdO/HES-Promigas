@@ -1186,7 +1186,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const [selectedKeysByDevice, setSelectedKeysByDevice] = useState<Record<string, Set<string>>>({});
   const [keysLoading, setKeysLoading] = useState(false);
   const [keysError, setKeysError] = useState<string | null>(null);
-  const [intervalLabel, setIntervalLabel] = useState<string>('1 hora');
+  const [intervalLabel, setIntervalLabel] = useState<string>('15 min');
   const [agg, setAgg] = useState<Agg>('AVG');
   // Multi-device: el usuario puede graficar varios devices a la vez en la sección granular
   const [granularDeviceIds, setGranularDeviceIds] = useState<Set<string>>(new Set());
@@ -1421,6 +1421,18 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDevice]);
+
+  // Forzar intervalo 15 min cuando se selecciona curtailment_kwh_*.
+  // Sin esto, intervalos más largos (1h, 1d) subestiman porque los gates
+  // de saturación se evalúan sobre promedios.
+  useEffect(() => {
+    const hasCurtKwh = Object.values(selectedKeysByDevice).some((s) =>
+      Array.from(s).some((k) => k.startsWith('curtailment_kwh_')),
+    );
+    if (hasCurtKwh && intervalLabel !== '15 min') {
+      setIntervalLabel('15 min');
+    }
+  }, [selectedKeysByDevice, intervalLabel]);
 
   const fetchGranular = async () => {
     if (granularDeviceIds.size === 0 || totalSelectedKeysCount === 0) return;
@@ -2283,8 +2295,8 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                 <span style={{ flex: 1, minWidth: 240 }}>
                   ⚠ <strong>curtailment_kwh</strong> en intervalo <strong>{intervalLabel}</strong> subestima el total real porque los gates (BattSOC≥95, |ExportGrid|&lt;100) se evalúan sobre promedios largos. Para coincidir con NAR, cambia a <strong>15 min</strong>.
                 </span>
-                <button onClick={() => setIntervalLabel('15 min')} className="primary-btn" style={{ fontSize: '0.78rem', padding: '4px 12px' }}>
-                  Cambiar a 15 min
+                <button onClick={() => { setIntervalLabel('15 min'); void fetchGranular(); }} className="primary-btn" style={{ fontSize: '0.78rem', padding: '4px 12px' }}>
+                  Cambiar a 15 min y recargar
                 </button>
               </div>
             )}

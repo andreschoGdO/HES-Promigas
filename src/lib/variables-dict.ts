@@ -658,10 +658,61 @@ export const VARIABLES: VariableMeta[] = [
       'set_reactive_power para corregir penalización CREG o dar soporte de voltaje, y querás ' +
       'medir qué tanta activa estás canjeando por reactiva. Solo Livoltek (DEYE no expone powerREg).',
   },
+  // ───── Variables SEPARADAS por marca (preferir estas sobre Pdc_estimado) ─────
   {
-    key: 'Pdc_estimado', label: 'Potencia DC estimada (bus inversor)', unit: 'W',
+    key: 'Pdc_LIV', label: 'Potencia DC estimada — Livoltek (Pdc_LIV)', unit: 'W',
     category: 'energia', source: 'derived',
     description:
+      'Potencia DC estimada por balance energético, específica para Livoltek.\n\n' +
+      'Fórmula: Pdc_LIV = powerAPg + BattPower\n\n' +
+      'Usa la convención estándar: BattPower > 0 = batería cargando (absorbe), ' +
+      'BattPower < 0 = batería descargando (aporta). Para verificar el signo en una ' +
+      'instalación específica, graficar Pdc_LIV junto a powerAEgdc_LV (medición DC ' +
+      'directa). Si coinciden con leve desfase (~3-5%), el signo está bien. Si Pdc_LIV ' +
+      'sale muy por encima o por debajo, probablemente el firmware reporta BattPower ' +
+      'con signo opuesto y hay que invertir la fórmula.\n\n' +
+      'No descuenta pérdidas de conversión DC→AC del inversor (~3-5% subestimación normal).',
+  },
+  {
+    key: 'Pdc_DEY', label: 'Potencia DC estimada — DEYE (Pdc_DEY)', unit: 'W',
+    category: 'energia', source: 'derived',
+    description:
+      'Potencia DC estimada por balance energético, específica para DEYE. Misma fórmula ' +
+      'que Pdc_LIV (powerAPg + BattPower) pero pensada para usarse en casas DEYE — DEYE ' +
+      'no expone powerAEgdc_LV, así que esta es la ÚNICA opción para ver DC.\n\n' +
+      'Si en una casa DEYE la curva sale invertida (negativa de día), probablemente la ' +
+      'convención de BattPower en DEYE es opuesta y hay que cambiar a powerAPg − BattPower.',
+  },
+  {
+    key: 'envelope_dc_LIV_est', label: 'Envolvente DC estimada — Livoltek', unit: 'W',
+    category: 'derivada', source: 'derived',
+    description:
+      'Envelope (P95 × GHI_real/P95_GHI) usando Pdc_LIV como base de DC. Pensado para ' +
+      'comparar contra envelope_dc_LV (que usa la medición DC real powerAEgdc_LV). Si ' +
+      'ambas curvas coinciden, el balance energético es consistente. Si divergen, hay ' +
+      'un sensor con problema o el signo de BattPower está al revés.',
+  },
+  {
+    key: 'envelope_dc_DEY', label: 'Envolvente DC — DEYE', unit: 'W',
+    category: 'derivada', source: 'derived',
+    description:
+      'Envelope para casas DEYE — única opción ya que no hay powerAEgdc_LV. Misma fórmula ' +
+      'que envelope_dc_LIV_est pero pensada conceptualmente para DEYE.',
+  },
+  {
+    key: 'curtailment_dc_DEY', label: 'Curtailment DC instantáneo — DEYE', unit: 'W',
+    category: 'derivada', source: 'derived',
+    description:
+      'Equivalente a curtailment_dc_w_LV pero para DEYE. Usa Pdc_DEY como medida del DC. ' +
+      'Solo despega de 0 cuando BattSOC ≥ 95, |ExportGrid_LV| < 100 W y hora local 6-18. ' +
+      'Magnitud: max(0, envelope_dc_DEY − Pdc_DEY).',
+  },
+
+  {
+    key: 'Pdc_estimado', label: 'Potencia DC estimada (bus inversor) [LEGACY]', unit: 'W',
+    category: 'energia', source: 'derived',
+    description:
+      '[LEGACY — preferir Pdc_LIV o Pdc_DEY que tienen el signo correcto verificado]\n\n' +
       'Potencia inferida en el bus DC del inversor — NO es medición directa ni es PV puro. ' +
       'Captura la dinámica completa del lado DC: aporte de los paneles + comportamiento de la batería (carga o descarga). ' +
       'Se calcula en el frontend como: Pdc_estimado = powerAPg − BattPower. ' +

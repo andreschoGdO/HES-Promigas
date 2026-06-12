@@ -409,6 +409,166 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     },
     appliesToInverter: true,
   },
+  // ───────────────────────────────────────────────────────────────────
+  // Variables SEPARADAS por marca (Livoltek vs DEYE)
+  // Necesarias porque la convención de signo de BattPower puede diferir
+  // entre marcas. Estas usan el signo `+` (convención estándar internacional:
+  // BattPower > 0 = carga, BattPower < 0 = descarga). En Livoltek se puede
+  // comparar Pdc_LIV vs powerAEgdc_LV para verificar empíricamente.
+  // ───────────────────────────────────────────────────────────────────
+  Pdc_LIV: {
+    deps: ['powerAPg', 'BattPower'],
+    compute: (v) => (v.powerAPg ?? 0) + (v.BattPower ?? 0),
+    appliesToInverter: true,
+  },
+  Pdc_DEY: {
+    deps: ['powerAPg', 'BattPower'],
+    compute: (v) => (v.powerAPg ?? 0) + (v.BattPower ?? 0),
+    appliesToInverter: true,
+  },
+  // Envolvente DC estimada para Livoltek (usando Pdc_LIV como base)
+  envelope_dc_LIV_est: {
+    deps: ['powerAPg', 'BattPower'],
+    perRowDeps: [],
+    precompute: (rows) => {
+      const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
+      const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
+      const ghiByTs = new Map<number, number>();
+      for (const r of rows) {
+        const apg = r.vals.powerAPg;
+        const bp = r.vals.BattPower;
+        const dcEst = (apg !== null && apg !== undefined && Number.isFinite(apg) && bp !== null && bp !== undefined && Number.isFinite(bp))
+          ? Number(apg) + Number(bp)
+          : null;
+        const ghi = r.vals.ghi_w_m2;
+        const d = new Date(r.ts - 5 * 3600 * 1000);
+        const h = d.getUTCHours();
+        if (dcEst !== null && Number.isFinite(dcEst)) byHourDc[h].push(dcEst);
+        if (ghi !== null && ghi !== undefined && Number.isFinite(ghi)) {
+          byHourGhi[h].push(ghi);
+          ghiByTs.set(r.ts, ghi);
+        }
+      }
+      const p95 = (arr: number[]): number | null => {
+        if (arr.length === 0) return null;
+        if (arr.length === 1) return arr[0];
+        const s = [...arr].sort((a, b) => a - b);
+        return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
+      };
+      return { p95dc: byHourDc.map(p95), p95ghi: byHourGhi.map(p95), ghiByTs };
+    },
+    compute: (_v, ctx) => {
+      if (!ctx) return null;
+      const pc = ctx.precomputed as { p95dc: Array<number | null>; p95ghi: Array<number | null>; ghiByTs: Map<number, number> } | undefined;
+      if (!pc) return null;
+      const baseDc = pc.p95dc[ctx.hourLocal];
+      if (baseDc === null || baseDc === undefined) return null;
+      const ghiNow = pc.ghiByTs.get(ctx.ts);
+      const ghiP95 = pc.p95ghi[ctx.hourLocal];
+      if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
+        return baseDc * (ghiNow / ghiP95);
+      }
+      return baseDc;
+    },
+    appliesToInverter: true,
+  },
+  // Envolvente DC para DEYE (única opción, no hay powerAEgdc_LV)
+  envelope_dc_DEY: {
+    deps: ['powerAPg', 'BattPower'],
+    perRowDeps: [],
+    precompute: (rows) => {
+      const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
+      const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
+      const ghiByTs = new Map<number, number>();
+      for (const r of rows) {
+        const apg = r.vals.powerAPg;
+        const bp = r.vals.BattPower;
+        const dcEst = (apg !== null && apg !== undefined && Number.isFinite(apg) && bp !== null && bp !== undefined && Number.isFinite(bp))
+          ? Number(apg) + Number(bp)
+          : null;
+        const ghi = r.vals.ghi_w_m2;
+        const d = new Date(r.ts - 5 * 3600 * 1000);
+        const h = d.getUTCHours();
+        if (dcEst !== null && Number.isFinite(dcEst)) byHourDc[h].push(dcEst);
+        if (ghi !== null && ghi !== undefined && Number.isFinite(ghi)) {
+          byHourGhi[h].push(ghi);
+          ghiByTs.set(r.ts, ghi);
+        }
+      }
+      const p95 = (arr: number[]): number | null => {
+        if (arr.length === 0) return null;
+        if (arr.length === 1) return arr[0];
+        const s = [...arr].sort((a, b) => a - b);
+        return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
+      };
+      return { p95dc: byHourDc.map(p95), p95ghi: byHourGhi.map(p95), ghiByTs };
+    },
+    compute: (_v, ctx) => {
+      if (!ctx) return null;
+      const pc = ctx.precomputed as { p95dc: Array<number | null>; p95ghi: Array<number | null>; ghiByTs: Map<number, number> } | undefined;
+      if (!pc) return null;
+      const baseDc = pc.p95dc[ctx.hourLocal];
+      if (baseDc === null || baseDc === undefined) return null;
+      const ghiNow = pc.ghiByTs.get(ctx.ts);
+      const ghiP95 = pc.p95ghi[ctx.hourLocal];
+      if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
+        return baseDc * (ghiNow / ghiP95);
+      }
+      return baseDc;
+    },
+    appliesToInverter: true,
+  },
+  // Curtailment para DEYE (DEYE no tiene curtailment_dc_w_LV porque no expone
+  // powerAEgdc_LV; usa Pdc_DEY como aproximación del DC real)
+  curtailment_dc_DEY: {
+    deps: ['powerAPg', 'BattPower', 'BattSOC', 'ExportGrid_LV'],
+    precompute: (rows) => {
+      // Mismo bucle que envelope_dc_DEY
+      const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
+      const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
+      const ghiByTs = new Map<number, number>();
+      for (const r of rows) {
+        const apg = r.vals.powerAPg;
+        const bp = r.vals.BattPower;
+        const dcEst = (apg !== null && apg !== undefined && Number.isFinite(apg) && bp !== null && bp !== undefined && Number.isFinite(bp))
+          ? Number(apg) + Number(bp)
+          : null;
+        const ghi = r.vals.ghi_w_m2;
+        const d = new Date(r.ts - 5 * 3600 * 1000);
+        const h = d.getUTCHours();
+        if (dcEst !== null && Number.isFinite(dcEst)) byHourDc[h].push(dcEst);
+        if (ghi !== null && ghi !== undefined && Number.isFinite(ghi)) {
+          byHourGhi[h].push(ghi);
+          ghiByTs.set(r.ts, ghi);
+        }
+      }
+      const p95 = (arr: number[]): number | null => {
+        if (arr.length === 0) return null;
+        if (arr.length === 1) return arr[0];
+        const s = [...arr].sort((a, b) => a - b);
+        return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
+      };
+      return { p95dc: byHourDc.map(p95), p95ghi: byHourGhi.map(p95), ghiByTs };
+    },
+    compute: (v, ctx) => {
+      if (!ctx) return 0;
+      const pc = ctx.precomputed as { p95dc: Array<number | null>; p95ghi: Array<number | null>; ghiByTs: Map<number, number> } | undefined;
+      if (!pc) return 0;
+      let baseDc = pc.p95dc[ctx.hourLocal];
+      if (baseDc === null || baseDc === undefined) return 0;
+      const ghiNow = pc.ghiByTs.get(ctx.ts);
+      const ghiP95 = pc.p95ghi[ctx.hourLocal];
+      if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
+        baseDc = baseDc * (ghiNow / ghiP95);
+      }
+      const saturated = v.BattSOC >= 95 && Math.abs(v.ExportGrid_LV) < 100 && ctx.isDaylight;
+      if (!saturated) return 0;
+      const dcEst = v.powerAPg + v.BattPower;
+      return Math.max(0, baseDc - dcEst);
+    },
+    appliesToInverter: true,
+  },
+
   // Sacrificio AC por reactiva: cuando |Q| > 200 var, mide la activa perdida
   // contra el envelope de P. Solo Livoltek (DEYE no expone reactiva).
   sacrificio_ac_w_LV: {

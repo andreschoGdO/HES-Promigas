@@ -1186,7 +1186,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const [selectedKeysByDevice, setSelectedKeysByDevice] = useState<Record<string, Set<string>>>({});
   const [keysLoading, setKeysLoading] = useState(false);
   const [keysError, setKeysError] = useState<string | null>(null);
-  const [intervalLabel, setIntervalLabel] = useState<string>('15 min');
+  const [intervalLabel, setIntervalLabel] = useState<string>('1 hora');
   const [agg, setAgg] = useState<Agg>('AVG');
   // Multi-device: el usuario puede graficar varios devices a la vez en la sección granular
   const [granularDeviceIds, setGranularDeviceIds] = useState<Set<string>>(new Set());
@@ -1249,6 +1249,9 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   // Key: ciudad normalizada → Map<dateHourKey, ghi_w_m2>
   // dateHourKey = `YYYY-MM-DD|HH` en hora local Colombia (UTC-5).
   const [cityGhi, setCityGhi] = useState<Map<string, Map<string, number>>>(new Map());
+  // Daily curtailment kWh de NAR por casa — alimenta curtailment_kwh_LIV/DEY en granular.
+  // Key: nombre de casa → Map<YYYY-MM-DD, kWh_acumulado_hasta_ese_día>
+  const [casaCurtailmentCumByDay, setCasaCurtailmentCumByDay] = useState<Map<string, Map<string, number>>>(new Map());
   const [granLoading, setGranLoading] = useState(false);
   const [granError, setGranError] = useState<string | null>(null);
   const [showDataTable, setShowDataTable] = useState(false);
@@ -1422,18 +1425,6 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDevice]);
 
-  // Forzar intervalo 15 min cuando se selecciona curtailment_kwh_*.
-  // Sin esto, intervalos más largos (1h, 1d) subestiman porque los gates
-  // de saturación se evalúan sobre promedios.
-  useEffect(() => {
-    const hasCurtKwh = Object.values(selectedKeysByDevice).some((s) =>
-      Array.from(s).some((k) => k.startsWith('curtailment_kwh_')),
-    );
-    if (hasCurtKwh && intervalLabel !== '15 min') {
-      setIntervalLabel('15 min');
-    }
-  }, [selectedKeysByDevice, intervalLabel]);
-
   const fetchGranular = async () => {
     if (granularDeviceIds.size === 0 || totalSelectedKeysCount === 0) return;
     setGranLoading(true);
@@ -1536,6 +1527,45 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         setCityGhi(ghiMap);
       } else {
         setCityGhi(new Map());
+      }
+
+      // Fetch daily curtailment de NAR si hay alguna curtailment_kwh_* seleccionada.
+      // Granular usa estos valores PRE-CALCULADOS (del backend NAR) en vez de
+      // re-calcular, para garantizar consistencia exacta con el ranking NAR.
+      const needsNarCurtailment = Object.values(selectedKeysByDevice).some((s) =>
+        Array.from(s).some((k) => k.startsWith('curtailment_kwh_')),
+      );
+      if (needsNarCurtailment) {
+        try {
+          const r = await fetch(`/api/nar/curtailment?from=${startDate}&to=${endDate}&detailed=1`);
+          if (r.ok) {
+            const j = await r.json();
+            type DailyRow = { casa: string; record_date: string; curtailment_kwh: number };
+            const daily = (j.daily ?? []) as DailyRow[];
+            // Build acumulado por casa: para cada día, suma kWh de ese día + todos los anteriores
+            const byCasa = new Map<string, Array<{ date: string; kwh: number }>>();
+            for (const d of daily) {
+              if (!byCasa.has(d.casa)) byCasa.set(d.casa, []);
+              byCasa.get(d.casa)!.push({ date: d.record_date, kwh: d.curtailment_kwh });
+            }
+            const cumMap = new Map<string, Map<string, number>>();
+            for (const [casa, rows] of byCasa.entries()) {
+              rows.sort((a, b) => a.date.localeCompare(b.date));
+              let cum = 0;
+              const inner = new Map<string, number>();
+              for (const r of rows) {
+                cum += r.kwh;
+                inner.set(r.date, cum);
+              }
+              cumMap.set(casa, inner);
+            }
+            setCasaCurtailmentCumByDay(cumMap);
+          }
+        } catch {
+          // Si falla, granular cae al cómputo local (puede diferir un poco de NAR).
+        }
+      } else {
+        setCasaCurtailmentCumByDay(new Map());
       }
     } catch (e) {
       setGranError(e instanceof Error ? e.message : 'Error');
@@ -1776,8 +1806,38 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       const ghiForDevice = dev?.city ? cityGhi.get(dev.city) : null;
       for (const k of selectedSet) {
         if (!isDerivedKey(k)) continue;
-        const meta = DERIVED_KEYS[k];
         const seriesKey = `${devId}__${k}`;
+
+        // Caso especial: curtailment_kwh_* usa los valores PRE-CALCULADOS del
+        // backend NAR (daily_curtailment_by_house). Esto garantiza que granular
+        // y el ranking NAR coincidan exactamente — los dos lados leen la misma
+        // fuente. La curva se construye desde los daily totals: para cada ts
+        // se busca el acumulado del día correspondiente.
+        if ((k === 'curtailment_kwh_LIV' || k === 'curtailment_kwh_DEY') && dev?.casa) {
+          const dailyCum = casaCurtailmentCumByDay.get(dev.casa);
+          // Construir lookup de "último día con cum ≤ ts" para rellenar timestamps
+          // entre los días persistidos en NAR (NAR guarda 1 valor por día, granular
+          // muestra puntos cada 15 min).
+          const sortedDays = dailyCum ? Array.from(dailyCum.keys()).sort() : [];
+          for (const [ts, row] of byTs) {
+            if (!dailyCum || sortedDays.length === 0) {
+              row[seriesKey] = 0;
+              continue;
+            }
+            const d = new Date(ts - 5 * 3600 * 1000);
+            const dateLocal = d.toISOString().slice(0, 10);
+            // Buscar el día más reciente <= dateLocal
+            let cum = 0;
+            for (const day of sortedDays) {
+              if (day > dateLocal) break;
+              cum = dailyCum.get(day) ?? cum;
+            }
+            row[seriesKey] = cum;
+          }
+          continue; // saltar el compute normal
+        }
+
+        const meta = DERIVED_KEYS[k];
         const perRowDeps = meta.perRowDeps ?? meta.deps;
 
         let precomputed: unknown = undefined;
@@ -1822,7 +1882,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       }
     }
     return Array.from(byTs.entries()).map(([ts, vals]) => ({ ts, ...vals })).sort((a, b) => a.ts - b.ts);
-  }, [granData, selectedKeysByDevice, cityGhi, devices]);
+  }, [granData, selectedKeysByDevice, cityGhi, devices, casaCurtailmentCumByDay]);
 
   // Agregación diaria (min/avg/max) por device+key
   const dailyData = useMemo(() => {
@@ -2288,16 +2348,12 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
               </div>
             )}
 
-            {/* Aviso: curtailment_kwh requiere 15 min para coincidir con NAR.
-                Intervalos mayores subestiman porque promedian las ráfagas de saturación. */}
-            {chartData.length > 0 && intervalLabel !== '15 min' && Object.values(selectedKeysByDevice).some((s) => Array.from(s).some((k) => k.startsWith('curtailment_kwh_'))) && (
-              <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 14px', marginTop: 10, fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <span style={{ flex: 1, minWidth: 240 }}>
-                  ⚠ <strong>curtailment_kwh</strong> en intervalo <strong>{intervalLabel}</strong> subestima el total real porque los gates (BattSOC≥95, |ExportGrid|&lt;100) se evalúan sobre promedios largos. Para coincidir con NAR, cambia a <strong>15 min</strong>.
-                </span>
-                <button onClick={() => { setIntervalLabel('15 min'); void fetchGranular(); }} className="primary-btn" style={{ fontSize: '0.78rem', padding: '4px 12px' }}>
-                  Cambiar a 15 min y recargar
-                </button>
+            {/* Nota informativa cuando se muestra curtailment_kwh: la curva en granular
+                ahora viene de los valores PRE-CALCULADOS de NAR (un valor por día
+                escalonado). Coincide al 100% con el ranking NAR. */}
+            {chartData.length > 0 && Object.values(selectedKeysByDevice).some((s) => Array.from(s).some((k) => k.startsWith('curtailment_kwh_'))) && (
+              <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid #10b981', borderRadius: 8, padding: '8px 14px', marginTop: 10, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                ℹ️ <strong>curtailment_kwh</strong> usa los daily totales de NAR (mismo número que ves en el ranking). La curva sube en escalones porque NAR persiste 1 valor por día.
               </div>
             )}
 

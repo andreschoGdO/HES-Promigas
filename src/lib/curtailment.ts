@@ -85,7 +85,14 @@ async function processDevice(
 
   let raw: Record<string, Array<{ ts: number; value: string | number }>>;
   try {
-    raw = await getTimeseries(token, dev.metrum_id, keys, fromTs, toTs, { limit: 50000 });
+    // Granularidad fija de 15 min: coincide con la vista granular y los gates
+    // se evalúan sobre promedios de 15 min (no horarios → no diluye tanto las
+    // ráfagas de saturación; no raw → reduce carga y permite rangos largos).
+    raw = await getTimeseries(token, dev.metrum_id, keys, fromTs, toTs, {
+      interval: 15 * 60 * 1000,
+      agg: 'AVG',
+      limit: 50000,
+    });
   } catch {
     return null;
   }
@@ -161,7 +168,10 @@ async function processDevice(
     const curtailmentW = Math.max(0, envelope - s.dc);
     if (curtailmentW <= 0) continue;
     const nextTs = sortedTs[i + 1] ?? ts;
-    const dtMs = Math.min(nextTs - ts, 15 * 60 * 1000);
+    // Cap a 16 min: la granularidad es 15 min, dejamos 1 min de margen para
+    // huecos cortos. Huecos más grandes (device offline) no deben inflar el
+    // integral asumiendo que la saturación continuó.
+    const dtMs = Math.min(nextTs - ts, 16 * 60 * 1000);
     if (dtMs <= 0) continue;
     const j = curtailmentW * (dtMs / 1000);
     byDayJ.set(dateLocal, (byDayJ.get(dateLocal) ?? 0) + j);

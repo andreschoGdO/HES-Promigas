@@ -586,50 +586,23 @@ export const VARIABLES: VariableMeta[] = [
   //  exponen todas sus dependencias.
   // ═══════════════════════════════════════════════════════════════════════
   {
-    key: 'envelope_dc_LV', label: 'Envolvente DC (techo solar)', unit: 'W',
+    key: 'envelope_dc_LIV', label: 'Envolvente DC (techo solar) — Livoltek', unit: 'W',
     category: 'derivada', source: 'derived',
     description:
       'Curva "lo que el sistema pudo generar" en DC para cada momento — ajustada por la ' +
       'irradiancia real registrada en la ciudad de la casa.\n\n' +
       'Fórmula: envelope(t) = P95(DC, hora_t) × [ GHI_real(t) / P95(GHI, hora_t) ]\n\n' +
-      '  • P95(DC, hora) — percentil 95 de powerAEgdc_LV por hora-del-día. "El techo solar ' +
-      'histórico" de esta casa: captura su personalidad (kWp, PR, orientación, sombra fija).\n' +
+      '  • P95(DC, hora) — percentil 95 de powerAEgdc_LV por hora-del-día.\n' +
       '  • GHI_real(t) — irradiancia (W/m²) real esa hora en la ciudad, de Open-Meteo.\n' +
-      '  • P95(GHI, hora) — el techo solar histórico de la ciudad — referencia "cielo despejado".\n\n' +
-      'El ratio GHI_real / P95(GHI) representa "qué tan despejado está hoy a esta hora vs los días ' +
-      'más limpios históricos". Multiplicando el P95 de DC por ese ratio, el envelope se MUEVE ' +
-      'con la nubosidad real — ya no asume días buenos cuando hay nubes.\n\n' +
-      'NO es medición — es la generación esperada dada la luz solar real y la "personalidad" ' +
-      'histórica del sistema. Cuando la curva real va por DEBAJO, hay sombra nueva, suciedad, ' +
-      'falla, o curtailment (batería llena + zero-export). Para aislar el curtailment usar ' +
-      'curtailment_dc_w_LV.\n\n' +
-      'FALLBACK: si la casa no tiene city configurada, Open-Meteo falla, o no hay P95(GHI) ' +
-      'válido, cae al P95 puro de DC sin ajuste por irradiancia.\n\n' +
-      'LIMITACIONES: Requiere ≥7 días para una referencia significativa. Solo Livoltek (depende ' +
-      'de powerAEgdc_LV). Ciudades soportadas: Cali, Bogotá, Medellín, Barranquilla, Cartagena, ' +
-      'Bucaramanga, Pereira, Manizales, Ibagué, Cúcuta.',
+      '  • P95(GHI, hora) — el techo solar histórico de la ciudad.\n\n' +
+      'Solo Livoltek (depende de powerAEgdc_LV, medición DC directa). Para DEYE usar envelope_dc_DEY. ' +
+      'Cuando la curva real va por DEBAJO, hay sombra nueva, suciedad, falla o curtailment. Para ' +
+      'aislar el curtailment usar curtailment_dc_LIV.\n\n' +
+      'Ciudades soportadas: Cali, Bogotá, Medellín, Barranquilla, Cartagena, Bucaramanga, Pereira, ' +
+      'Manizales, Ibagué, Cúcuta.',
   },
   {
-    key: 'envelope_dc_estimado_LV', label: 'Envolvente DC estimada (Livoltek + DEYE)', unit: 'W',
-    category: 'derivada', source: 'derived',
-    description:
-      'Misma fórmula que envelope_dc_LV (P95 ajustado por irradiancia), pero usando Pdc_estimado ' +
-      '(= powerAPg − BattPower) como base de DC en vez de powerAEgdc_LV.\n\n' +
-      'Fórmula: envelope(t) = P95(Pdc_est, hora_t) × [ GHI_real(t) / P95(GHI, hora_t) ]\n\n' +
-      'Esta versión existe porque DEYE NO expone powerAEgdc_LV (lectura directa del bus DC). ' +
-      'Pdc_estimado infiere el DC a partir del AC saliente y la batería: en cualquier instante, ' +
-      'lo que entra al bus DC desde el PV = lo que sale a AC + lo que cargó la batería.\n\n' +
-      'TRADE-OFF vs envelope_dc_LV (Livoltek real): subestima ~3-5% porque no descuenta las ' +
-      'pérdidas de conversión del inversor (DC→AC ~95-97% eficiente). Si la casa es Livoltek, ' +
-      'preferir envelope_dc_LV. Si es DEYE, esta es la única opción.\n\n' +
-      'Lectura: igual que el envelope normal — cuando la curva real (Pdc_estimado) va por debajo, ' +
-      'hay sombra, suciedad o curtailment.\n\n' +
-      'FALLBACK: cae a P95 puro sin ajuste cuando no hay GHI disponible.\n\n' +
-      'LIMITACIONES: ≥7 días, subestimación constante por pérdidas de conversión. Ciudades ' +
-      'soportadas: las mismas de envelope_dc_LV.',
-  },
-  {
-    key: 'curtailment_dc_w_LV', label: 'Curtailment DC instantáneo', unit: 'W',
+    key: 'curtailment_dc_LIV', label: 'Curtailment DC instantáneo — Livoltek', unit: 'W',
     category: 'derivada', source: 'derived',
     description:
       'Potencia DC perdida en este instante por curtailment involuntario — el sistema tenía sol ' +
@@ -645,7 +618,7 @@ export const VARIABLES: VariableMeta[] = [
       'activa. Solo Livoltek. Requiere ≥7 días en el rango visible para un envelope confiable.',
   },
   {
-    key: 'sacrificio_ac_w_LV', label: 'Sacrificio AC por reactiva', unit: 'W',
+    key: 'sacrificio_ac_LIV', label: 'Sacrificio AC por reactiva — Livoltek', unit: 'W',
     category: 'derivada', source: 'derived',
     description:
       'Potencia activa AC que se sacrificó por estar entregando reactiva. Cuando el inversor ' +
@@ -706,25 +679,6 @@ export const VARIABLES: VariableMeta[] = [
       'Equivalente a curtailment_dc_w_LV pero para DEYE. Usa Pdc_DEY como medida del DC. ' +
       'Solo despega de 0 cuando BattSOC ≥ 95, |ExportGrid_LV| < 100 W y hora local 6-18. ' +
       'Magnitud: max(0, envelope_dc_DEY − Pdc_DEY).',
-  },
-
-  {
-    key: 'Pdc_estimado', label: 'Potencia DC estimada (bus inversor) [LEGACY]', unit: 'W',
-    category: 'energia', source: 'derived',
-    description:
-      '[LEGACY — preferir Pdc_LIV o Pdc_DEY que tienen el signo correcto verificado]\n\n' +
-      'Potencia inferida en el bus DC del inversor — NO es medición directa ni es PV puro. ' +
-      'Captura la dinámica completa del lado DC: aporte de los paneles + comportamiento de la batería (carga o descarga). ' +
-      'Se calcula en el frontend como: Pdc_estimado = powerAPg − BattPower. ' +
-      '\n\nPor qué NO es Ppv puro: la fórmula resta el flujo de batería para "limpiar" el AC, pero el resultado todavía refleja la dinámica DC que la batería impone al bus. Cuando la batería se carga fuerte (PV → batería) el número se acerca a Ppv; cuando se descarga (batería → AC) el número se aleja de Ppv y refleja el déficit/superávit del bus DC. ' +
-      '\n\nConvención de BattPower observada en Livoltek/DEYE: negativo = cargando batería, positivo = descargando. ' +
-      '\n\nLIMITACIONES:\n' +
-      '  • Pérdidas de conversión del inversor (~3-5%) no se descuentan → subestimación.\n' +
-      '  • Pérdidas internas de la batería (calor durante carga) no se descuentan.\n' +
-      '  • Asume convención de signos constante; si el inversor cambia de modo (isla, falla) puede salir invertida.\n' +
-      '  • No equivale a las lecturas Ppv1/Ppv2 que algunas integraciones exponen por string.\n' +
-      '\nÚSALA PARA: visualizar la curva del bus DC, detectar caídas anómalas globales (sombra masiva, falla de inversor), comparar comportamiento entre casas.\n' +
-      'NO LA USES PARA: reportes regulatorios, auditorías de kWh exactos por panel, análisis fino por string.',
   },
 
   // ═══════════════════════════════════════════════════════════════════════

@@ -250,20 +250,12 @@ function envelopeByHour(
 }
 
 const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
-  Pdc_estimado: {
-    deps: ['powerAPg', 'BattPower'],
-    // P_dc ≈ AC out − Batt (positivo cuando descarga, negativo cuando carga).
-    // No es Ppv puro porque incorpora la dinámica DC de la batería — refleja
-    // el balance del bus DC del inversor, no la generación PV aislada.
-    compute: (v) => (v.powerAPg ?? 0) - (v.BattPower ?? 0),
-    appliesToInverter: true,
-  },
   // Envolvente DC ajustada por irradiancia: P95(DC, hora) × GHI_actual / P95(GHI, hora).
   // El factor "GHI_actual / P95(GHI)" representa qué tan despejado está el cielo HOY
   // a esa hora vs los días más limpios históricos. Multiplicando el P95 de DC por ese
   // ratio, el envelope se ajusta a la nubosidad real y deja solo gap por sombra,
   // suciedad, falla o curtailment. Si no hay GHI (no city, API caído), cae al P95 puro.
-  envelope_dc_LV: {
+  envelope_dc_LIV: {
     deps: ['powerAEgdc_LV'],
     perRowDeps: [],
     precompute: (rows) => {
@@ -317,7 +309,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
   // Curtailment DC instantáneo: max(0, envelope_ajustado − real) cuando hay saturación
   // (batería ≥95% AND no exportando AND de día). En momentos normales = 0.
   // Usa el MISMO envelope ajustado por irradiancia para mayor precisión.
-  curtailment_dc_w_LV: {
+  curtailment_dc_LIV: {
     deps: ['powerAEgdc_LV', 'BattSOC', 'ExportGrid_LV'],
     precompute: (rows) => {
       const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
@@ -356,56 +348,6 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       const saturated = v.BattSOC >= 95 && Math.abs(v.ExportGrid_LV) < 100 && ctx.isDaylight;
       if (!saturated) return 0;
       return Math.max(0, baseDc - v.powerAEgdc_LV);
-    },
-    appliesToInverter: true,
-  },
-  // Envolvente DC estimada (Livoltek + DEYE) — usa Pdc_estimado = powerAPg − BattPower
-  // como base de DC en vez de powerAEgdc_LV (que solo Livoltek expone).
-  // Misma fórmula con irradiancia: P95(Pdc_est, hora) × GHI_real / P95(GHI, hora).
-  // Subestima ~3-5% vs el real por pérdidas de conversión no descontadas. Es la
-  // única opción para DEYE.
-  envelope_dc_estimado_LV: {
-    deps: ['powerAPg', 'BattPower'],
-    perRowDeps: [],
-    precompute: (rows) => {
-      const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
-      const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
-      const ghiByTs = new Map<number, number>();
-      for (const r of rows) {
-        const apg = r.vals.powerAPg;
-        const bp = r.vals.BattPower;
-        const dcEst = (apg !== null && apg !== undefined && Number.isFinite(apg) && bp !== null && bp !== undefined && Number.isFinite(bp))
-          ? Number(apg) - Number(bp)
-          : null;
-        const ghi = r.vals.ghi_w_m2;
-        const d = new Date(r.ts - 5 * 3600 * 1000);
-        const h = d.getUTCHours();
-        if (dcEst !== null && Number.isFinite(dcEst)) byHourDc[h].push(dcEst);
-        if (ghi !== null && ghi !== undefined && Number.isFinite(ghi)) {
-          byHourGhi[h].push(ghi);
-          ghiByTs.set(r.ts, ghi);
-        }
-      }
-      const p95 = (arr: number[]): number | null => {
-        if (arr.length === 0) return null;
-        if (arr.length === 1) return arr[0];
-        const s = [...arr].sort((a, b) => a - b);
-        return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
-      };
-      return { p95dc: byHourDc.map(p95), p95ghi: byHourGhi.map(p95), ghiByTs };
-    },
-    compute: (_v, ctx) => {
-      if (!ctx) return null;
-      const pc = ctx.precomputed as { p95dc: Array<number | null>; p95ghi: Array<number | null>; ghiByTs: Map<number, number> } | undefined;
-      if (!pc) return null;
-      const baseDc = pc.p95dc[ctx.hourLocal];
-      if (baseDc === null || baseDc === undefined) return null;
-      const ghiNow = pc.ghiByTs.get(ctx.ts);
-      const ghiP95 = pc.p95ghi[ctx.hourLocal];
-      if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
-        return baseDc * (ghiNow / ghiP95);
-      }
-      return baseDc;
     },
     appliesToInverter: true,
   },
@@ -518,7 +460,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     },
     appliesToInverter: true,
   },
-  // Curtailment para DEYE (DEYE no tiene curtailment_dc_w_LV porque no expone
+  // Curtailment para DEYE (DEYE no tiene curtailment_dc_LIV porque no expone
   // powerAEgdc_LV; usa Pdc_DEY como aproximación del DC real)
   curtailment_dc_DEY: {
     deps: ['powerAPg', 'BattPower', 'BattSOC', 'ExportGrid_LV'],
@@ -571,7 +513,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
 
   // Sacrificio AC por reactiva: cuando |Q| > 200 var, mide la activa perdida
   // contra el envelope de P. Solo Livoltek (DEYE no expone reactiva).
-  sacrificio_ac_w_LV: {
+  sacrificio_ac_LIV: {
     deps: ['powerAEg', 'powerREg_LV'],
     precompute: (rows) => envelopeByHour(rows, 'powerAEg'),
     compute: (v, ctx) => {
@@ -1374,14 +1316,14 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         setGranError(`Metrum rechazó ${fetchErrors.length} consultas. Posibles causas: rango muy largo para el intervalo, key sin datos, o problemas de la API. Detalle: ${fetchErrors[0]}`);
       }
 
-      // Fetch irradiancia solar por ciudad — usado por envelope_dc_LV ajustado.
+      // Fetch irradiancia solar por ciudad — usado por envelope_dc_LIV ajustado.
       // Solo dispara si al menos un device seleccionado tiene city y alguna key
-      // derivada que la necesite (envelope_dc_LV, envelope_dc_estimado_LV o curtailment_dc_w_LV).
+      // derivada que la necesite (envelope_dc_LIV, envelope_dc_estimado_LV o curtailment_dc_LIV).
       const citiesNeeded = new Set<string>();
       for (const devId of granularDeviceIds) {
         const devKeys = selectedKeysByDevice[devId];
         if (!devKeys) continue;
-        const needsIrradiance = Array.from(devKeys).some((k) => k === 'envelope_dc_LV' || k === 'envelope_dc_estimado_LV' || k === 'curtailment_dc_w_LV');
+        const needsIrradiance = Array.from(devKeys).some((k) => k === 'envelope_dc_LIV' || k === 'envelope_dc_estimado_LV' || k === 'curtailment_dc_LIV');
         if (!needsIrradiance) continue;
         const dev = devices.find((d) => d.id === devId);
         if (dev?.city) citiesNeeded.add(dev.city);

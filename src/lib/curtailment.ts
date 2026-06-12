@@ -118,8 +118,11 @@ async function processDevice(
   }
 
   if (brand === 'DEYE') {
+    // Convención verificada en Livoltek (junio 2026): Pdc = powerAPg + BattPower
+    // produce una curva que coincide con powerAEgdc_LV en casas Livoltek. Asumimos
+    // que DEYE comparte la misma convención de signo hasta verificar lo contrario.
     for (const s of samples.values()) {
-      if (s.apg !== null && s.battPower !== null) s.dc = s.apg - s.battPower;
+      if (s.apg !== null && s.battPower !== null) s.dc = s.apg + s.battPower;
     }
   }
 

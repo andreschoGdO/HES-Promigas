@@ -602,6 +602,23 @@ export const VARIABLES: VariableMeta[] = [
       'Manizales, Ibagué, Cúcuta.',
   },
   {
+    key: 'curtailment_kwh_LIV', label: 'Curtailment DC acumulado — Livoltek', unit: 'kWh',
+    category: 'derivada', source: 'derived',
+    description:
+      'Integral acumulada del curtailment a lo largo del rango visible. Misma lógica que el ' +
+      'cron NAR: por cada muestra calcula curtailment_W instantáneo (con gates SOC≥95, ' +
+      '|ExportGrid_LV|<100, daylight 6-18), integra trapezoidal con la siguiente muestra, y ' +
+      'suma. Curva monotonamente creciente — el valor del último punto = total perdido en el ' +
+      'rango. Sirve para auditar el ranking NAR contra muestras concretas.',
+  },
+  {
+    key: 'curtailment_kwh_DEY', label: 'Curtailment DC acumulado — DEYE', unit: 'kWh',
+    category: 'derivada', source: 'derived',
+    description:
+      'Igual que curtailment_kwh_LIV pero para DEYE: usa Pdc = powerAPg − BattPower (convención ' +
+      'DEYE) y gate de ExportGrid_DY. Curva monotonamente creciente en kWh.',
+  },
+  {
     key: 'curtailment_dc_LIV', label: 'Curtailment DC instantáneo — Livoltek', unit: 'W',
     category: 'derivada', source: 'derived',
     description:

@@ -357,6 +357,167 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     brand: 'Livoltek',
   },
   // ───────────────────────────────────────────────────────────────────
+  // Curtailment ACUMULADO en kWh: integra trapezoidal el curtailment_W
+  // de cada muestra. Curva monotonamente creciente en el rango. Misma
+  // lógica que el cron NAR (src/lib/curtailment.ts).
+  // ───────────────────────────────────────────────────────────────────
+  curtailment_kwh_LIV: {
+    deps: ['powerAEgdc_LV', 'BattSOC', 'ExportGrid_LV'],
+    perRowDeps: [],
+    precompute: (rows) => {
+      const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
+      const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
+      const ghiByTs = new Map<number, number>();
+      for (const r of rows) {
+        const dc = r.vals.powerAEgdc_LV;
+        const ghi = r.vals.ghi_w_m2;
+        const d = new Date(r.ts - 5 * 3600 * 1000);
+        const h = d.getUTCHours();
+        if (dc !== null && dc !== undefined && Number.isFinite(dc)) byHourDc[h].push(dc);
+        if (ghi !== null && ghi !== undefined && Number.isFinite(ghi)) {
+          byHourGhi[h].push(ghi);
+          ghiByTs.set(r.ts, ghi);
+        }
+      }
+      const p95 = (arr: number[]): number | null => {
+        if (arr.length === 0) return null;
+        if (arr.length === 1) return arr[0];
+        const s = [...arr].sort((a, b) => a - b);
+        return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
+      };
+      const p95dc = byHourDc.map(p95);
+      const p95ghi = byHourGhi.map(p95);
+
+      // Integrar acumulado por timestamp ordenado
+      const sorted = [...rows].sort((a, b) => a.ts - b.ts);
+      const cumByTs = new Map<number, number>();
+      let cumKwh = 0;
+      for (let i = 0; i < sorted.length; i++) {
+        const r = sorted[i];
+        const dc = r.vals.powerAEgdc_LV;
+        const battSoc = r.vals.BattSOC;
+        const exp = r.vals.ExportGrid_LV;
+        if (dc !== null && dc !== undefined && Number.isFinite(dc)
+            && battSoc !== null && battSoc !== undefined && Number.isFinite(battSoc)
+            && exp !== null && exp !== undefined && Number.isFinite(exp)) {
+          const d = new Date(r.ts - 5 * 3600 * 1000);
+          const h = d.getUTCHours();
+          const isDaylight = h >= 6 && h < 18;
+          const saturated = Number(battSoc) >= 95 && Math.abs(Number(exp)) < 100 && isDaylight;
+          if (saturated) {
+            let baseDc = p95dc[h];
+            if (baseDc !== null && baseDc !== undefined) {
+              const ghiNow = ghiByTs.get(r.ts);
+              const ghiP95 = p95ghi[h];
+              if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
+                baseDc = baseDc * (ghiNow / ghiP95);
+              }
+              const curtW = Math.max(0, baseDc - Number(dc));
+              if (curtW > 0) {
+                const nextTs = sorted[i + 1]?.ts ?? r.ts;
+                const dtMs = Math.min(nextTs - r.ts, 15 * 60 * 1000);
+                if (dtMs > 0) {
+                  // W × s = J → /3.6M = kWh
+                  cumKwh += (curtW * (dtMs / 1000)) / 3_600_000;
+                }
+              }
+            }
+          }
+        }
+        cumByTs.set(r.ts, cumKwh);
+      }
+      return cumByTs;
+    },
+    compute: (_v, ctx) => {
+      if (!ctx) return 0;
+      const m = ctx.precomputed as Map<number, number> | undefined;
+      return m?.get(ctx.ts) ?? 0;
+    },
+    appliesToInverter: true,
+    brand: 'Livoltek',
+  },
+  curtailment_kwh_DEY: {
+    deps: ['powerAPg', 'BattPower', 'BattSOC', 'ExportGrid_DY'],
+    perRowDeps: [],
+    precompute: (rows) => {
+      const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
+      const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
+      const ghiByTs = new Map<number, number>();
+      for (const r of rows) {
+        const apg = r.vals.powerAPg;
+        const bp = r.vals.BattPower;
+        // DEYE: Pdc = AC − BattPower (convención opuesta a Livoltek)
+        const dcEst = (apg !== null && apg !== undefined && Number.isFinite(apg) && bp !== null && bp !== undefined && Number.isFinite(bp))
+          ? Number(apg) - Number(bp)
+          : null;
+        const ghi = r.vals.ghi_w_m2;
+        const d = new Date(r.ts - 5 * 3600 * 1000);
+        const h = d.getUTCHours();
+        if (dcEst !== null && Number.isFinite(dcEst)) byHourDc[h].push(dcEst);
+        if (ghi !== null && ghi !== undefined && Number.isFinite(ghi)) {
+          byHourGhi[h].push(ghi);
+          ghiByTs.set(r.ts, ghi);
+        }
+      }
+      const p95 = (arr: number[]): number | null => {
+        if (arr.length === 0) return null;
+        if (arr.length === 1) return arr[0];
+        const s = [...arr].sort((a, b) => a - b);
+        return s[Math.min(s.length - 1, Math.floor(s.length * 0.95))];
+      };
+      const p95dc = byHourDc.map(p95);
+      const p95ghi = byHourGhi.map(p95);
+
+      const sorted = [...rows].sort((a, b) => a.ts - b.ts);
+      const cumByTs = new Map<number, number>();
+      let cumKwh = 0;
+      for (let i = 0; i < sorted.length; i++) {
+        const r = sorted[i];
+        const apg = r.vals.powerAPg;
+        const bp = r.vals.BattPower;
+        const battSoc = r.vals.BattSOC;
+        const exp = r.vals.ExportGrid_DY;
+        if (apg !== null && apg !== undefined && Number.isFinite(apg)
+            && bp !== null && bp !== undefined && Number.isFinite(bp)
+            && battSoc !== null && battSoc !== undefined && Number.isFinite(battSoc)
+            && exp !== null && exp !== undefined && Number.isFinite(exp)) {
+          const dc = Number(apg) - Number(bp);
+          const d = new Date(r.ts - 5 * 3600 * 1000);
+          const h = d.getUTCHours();
+          const isDaylight = h >= 6 && h < 18;
+          const saturated = Number(battSoc) >= 95 && Math.abs(Number(exp)) < 100 && isDaylight;
+          if (saturated) {
+            let baseDc = p95dc[h];
+            if (baseDc !== null && baseDc !== undefined) {
+              const ghiNow = ghiByTs.get(r.ts);
+              const ghiP95 = p95ghi[h];
+              if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
+                baseDc = baseDc * (ghiNow / ghiP95);
+              }
+              const curtW = Math.max(0, baseDc - dc);
+              if (curtW > 0) {
+                const nextTs = sorted[i + 1]?.ts ?? r.ts;
+                const dtMs = Math.min(nextTs - r.ts, 15 * 60 * 1000);
+                if (dtMs > 0) {
+                  cumKwh += (curtW * (dtMs / 1000)) / 3_600_000;
+                }
+              }
+            }
+          }
+        }
+        cumByTs.set(r.ts, cumKwh);
+      }
+      return cumByTs;
+    },
+    compute: (_v, ctx) => {
+      if (!ctx) return 0;
+      const m = ctx.precomputed as Map<number, number> | undefined;
+      return m?.get(ctx.ts) ?? 0;
+    },
+    appliesToInverter: true,
+    brand: 'DEYE',
+  },
+  // ───────────────────────────────────────────────────────────────────
   // Variables SEPARADAS por marca (Livoltek vs DEYE)
   // Necesarias porque la convención de signo de BattPower puede diferir
   // entre marcas. Estas usan el signo `+` (convención estándar internacional:

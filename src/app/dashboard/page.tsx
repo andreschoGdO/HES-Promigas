@@ -734,6 +734,7 @@ const filterByType = (devices: DeviceOption[], typeFilter: TypeFilter): DeviceOp
 type Agg = 'NONE' | 'AVG' | 'MIN' | 'MAX' | 'SUM' | 'COUNT';
 interface IntervalPreset { label: string; ms: number | null; }
 const PRESETS: IntervalPreset[] = [
+  { label: 'Sin agregar', ms: null },   // raw — necesario para curtailment_kwh y exactitud máxima
   { label: '15 min', ms: 15 * 60 * 1000 },
   { label: '1 hora', ms: 60 * 60 * 1000 },
   { label: '1 día', ms: 24 * 60 * 60 * 1000 },
@@ -2270,9 +2271,22 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                   </span>
                 ) : (
                   <>
-                    <strong>{chartData.length}</strong> puntos × {seriesKeys.length} serie{seriesKeys.length === 1 ? '' : 's'} cargados ({intervalLabel} agregado por AVG).
+                    <strong>{chartData.length}</strong> puntos × {seriesKeys.length} serie{seriesKeys.length === 1 ? '' : 's'} cargados ({intervalLabel}{intervalLabel === 'Sin agregar' ? ' (raw)' : ' agregado por AVG'}).
                   </>
                 )}
+              </div>
+            )}
+
+            {/* Aviso: si hay curtailment_kwh_* seleccionada y NO estás en raw, los valores
+                difieren mucho del NAR. Sugerir cambio. */}
+            {chartData.length > 0 && intervalLabel !== 'Sin agregar' && Object.values(selectedKeysByDevice).some((s) => Array.from(s).some((k) => k.startsWith('curtailment_kwh_'))) && (
+              <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 14px', marginTop: 10, fontSize: '0.82rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ flex: 1, minWidth: 240 }}>
+                  ⚠ <strong>curtailment_kwh</strong> en intervalo <strong>{intervalLabel}</strong> subestima el total real porque los gates (BattSOC≥95, |ExportGrid|&lt;100) se evalúan sobre promedios. Para coincidir con NAR, cambia a <strong>Sin agregar</strong>.
+                </span>
+                <button onClick={() => setIntervalLabel('Sin agregar')} className="primary-btn" style={{ fontSize: '0.78rem', padding: '4px 12px' }}>
+                  Cambiar a Sin agregar
+                </button>
               </div>
             )}
 

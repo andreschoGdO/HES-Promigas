@@ -472,7 +472,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
   // Curtailment para DEYE (DEYE no tiene curtailment_dc_LIV porque no expone
   // powerAEgdc_LV; usa Pdc_DEY como aproximación del DC real)
   curtailment_dc_DEY: {
-    deps: ['powerAPg', 'BattPower', 'BattSOC', 'ExportGrid_LV'],
+    deps: ['powerAPg', 'BattPower', 'BattSOC', 'ExportGrid_DY'],
     precompute: (rows) => {
       // Mismo bucle que envelope_dc_DEY
       const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
@@ -512,7 +512,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
         baseDc = baseDc * (ghiNow / ghiP95);
       }
-      const saturated = v.BattSOC >= 95 && Math.abs(v.ExportGrid_LV) < 100 && ctx.isDaylight;
+      const saturated = v.BattSOC >= 95 && Math.abs(v.ExportGrid_DY) < 100 && ctx.isDaylight;
       if (!saturated) return 0;
       const dcEst = v.powerAPg + v.BattPower;
       return Math.max(0, baseDc - dcEst);

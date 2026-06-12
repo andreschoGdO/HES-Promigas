@@ -78,7 +78,9 @@ async function processDevice(
 
   const dcKey = brand === 'Livoltek' ? 'powerAEgdc_LV' : 'powerAPg';
   const extraKeys = brand === 'DEYE' ? ['BattPower'] : [];
-  const gateKeys = ['BattSOC', 'ExportGrid_LV'];
+  // ExportGrid se nombra distinto por marca: Livoltek usa _LV, DEYE usa _DY
+  const exportGridKey = brand === 'Livoltek' ? 'ExportGrid_LV' : 'ExportGrid_DY';
+  const gateKeys = ['BattSOC', exportGridKey];
   const keys = [dcKey, ...extraKeys, ...gateKeys];
 
   let raw: Record<string, Array<{ ts: number; value: string | number }>>;
@@ -110,7 +112,7 @@ async function processDevice(
       if (!Number.isFinite(v)) continue;
       const s = ensure(point.ts);
       if (k === 'BattSOC') s.battSoc = v;
-      else if (k === 'ExportGrid_LV') s.exportGrid = v;
+      else if (k === 'ExportGrid_LV' || k === 'ExportGrid_DY') s.exportGrid = v;
       else if (k === 'powerAEgdc_LV') s.dc = v;
       else if (k === 'powerAPg') s.apg = v;
       else if (k === 'BattPower') s.battPower = v;

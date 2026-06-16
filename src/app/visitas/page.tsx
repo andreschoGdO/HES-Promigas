@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink } from 'lucide-react';
 import { VISIT_SCHEMAS, findSchema, type VisitType, type VisitTypeSchema, type VisitField } from '@/lib/visit-schemas';
@@ -34,6 +34,54 @@ const supa = () => createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
+
+/**
+ * Comprime una imagen del teléfono a un tamaño razonable antes de subirla.
+ * Las fotos de cámara modernas pesan 3-10 MB; comprimidas a 1920px JPEG 85%
+ * quedan en ~300-600 KB sin pérdida visible. Esto hace los uploads en mobile
+ * 10x más rápidos y evita que la app se sienta congelada.
+ *
+ * Si el archivo NO es imagen, o ya es <500 KB, lo devuelve tal cual.
+ */
+async function compressImageIfNeeded(file: File, maxDim = 1920, quality = 0.85): Promise<{ blob: Blob; filename: string }> {
+  if (!file.type.startsWith('image/') || file.size < 500_000) {
+    return { blob: file, filename: file.name };
+  }
+  try {
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result as string);
+      r.onerror = () => reject(r.error ?? new Error('FileReader fail'));
+      r.readAsDataURL(file);
+    });
+    const img: HTMLImageElement = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('image decode fail'));
+      i.src = dataUrl;
+    });
+    let { width, height } = img;
+    if (width > maxDim || height > maxDim) {
+      const scale = maxDim / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { blob: file, filename: file.name };
+    ctx.drawImage(img, 0, 0, width, height);
+    const blob: Blob | null = await new Promise((resolve) => {
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
+    });
+    if (!blob || blob.size >= file.size) return { blob: file, filename: file.name };
+    const filename = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+    return { blob, filename };
+  } catch {
+    return { blob: file, filename: file.name };
+  }
+}
 
 // Determina si un campo se renderiza ancho completo (textarea, radios con muchas opciones, etc.)
 const isFullWidthField = (f: VisitField) => {
@@ -524,9 +572,12 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     return <div className="glass-panel" style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Cargando visita…</div>;
   }
 
-  const setField = (key: string, value: unknown) => {
+  // setField estable: el identidad no cambia entre renders, así FieldInput puede
+  // memoizar y evitar re-render de todos los campos en cada keystroke. Clave en
+  // mobile: sin esto, escribir 1 letra re-renderiza 30+ campos + grid de fotos.
+  const setField = useCallback((key: string, value: unknown) => {
     setVisit((v) => v ? { ...v, form_data: { ...v.form_data, [key]: value } } : v);
-  };
+  }, []);
 
   const save = async (finalize = false) => {
     if (!visit) return;
@@ -577,8 +628,11 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     let nullUrlCount = 0;
     try {
       for (const file of Array.from(files)) {
+        // Comprimir antes de subir — fotos de cámara mobile son 3-10 MB,
+        // comprimidas pesan ~500 KB y suben 10x más rápido.
+        const { blob, filename } = await compressImageIfNeeded(file);
         const fd = new FormData();
-        fd.append('file', file);
+        fd.append('file', blob, filename);
         fd.append('description', catToUse);
         fd.append('uploaded_by', userEmail || 'unknown');
         const r = await fetch(`/api/visits/${visitId}/photos`, { method: 'POST', body: fd });
@@ -765,7 +819,7 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           <FieldsGrid>
             {sec.fields.map((f) => (
               <FieldWrapper key={f.key} label={f.label} required={f.required} unit={f.unit} fullWidth={isFullWidthField(f)} help={f.help}>
-                <FieldInput field={f} value={visit.form_data[f.key]} onChange={(v) => setField(f.key, v)} />
+                <FieldInput field={f} value={visit.form_data[f.key]} onSet={setField} />
               </FieldWrapper>
             ))}
           </FieldsGrid>
@@ -850,6 +904,7 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
                   {p.url && (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={p.url} alt={p.description ?? p.filename ?? ''}
+                      loading="lazy" decoding="async"
                       style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }}
                       onClick={() => window.open(p.url ?? '', '_blank')} />
                   )}
@@ -957,7 +1012,10 @@ function FieldWrapper({ label, required, unit, fullWidth, help, children }: {
 }
 
 /* ───────────── Render del input según tipo ───────────── */
-function FieldInput({ field, value, onChange }: { field: VisitField; value: unknown; onChange: (v: unknown) => void }) {
+// memo: solo re-renderiza si `value` o `field` cambian. Combinado con un setField
+// estable (useCallback en el padre), escribir en un campo NO re-renderiza los demás.
+const FieldInput = memo(function FieldInput({ field, value, onSet }: { field: VisitField; value: unknown; onSet: (key: string, v: unknown) => void }) {
+  const onChange = useCallback((v: unknown) => onSet(field.key, v), [onSet, field.key]);
   const v = value ?? (field.type === 'checkbox' ? false : '');
 
   if (field.type === 'textarea') {
@@ -1003,4 +1061,4 @@ function FieldInput({ field, value, onChange }: { field: VisitField; value: unkn
       style={{ width: '100%', minHeight: 44 }}
     />
   );
-}
+});

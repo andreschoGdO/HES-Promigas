@@ -59,7 +59,7 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'ciudad', label: 'Ciudad', type: 'text', required: true },
           { key: 'direccion', label: 'Dirección', type: 'textarea', required: true },
           { key: 'coordenadas', label: 'Coordenadas (lat, lng)', type: 'text', placeholder: '3.3197, -76.5443' },
-          { key: 'tipo_vivienda', label: 'Tipo de vivienda', type: 'select', options: ['Casa unifamiliar', 'Apartamento', 'Casa en conjunto cerrado', 'Local comercial', 'Otro'] },
+          { key: 'tipo_vivienda', label: 'Tipo de vivienda', type: 'select', options: ['Casa unifamiliar', 'Apartamento', 'Casa en conjunto cerrado', 'Local comercial', 'No tipo', 'Otro'] },
           { key: 'estrato_socioeconomico', label: 'Estrato socioeconómico', type: 'select', options: ['1', '2', '3', '4', '5', '6'] },
         ],
       },

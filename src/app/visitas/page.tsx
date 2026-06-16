@@ -568,16 +568,18 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     });
   }, []);
 
-  if (!visit || !schema) {
-    return <div className="glass-panel" style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Cargando visita…</div>;
-  }
-
-  // setField estable: el identidad no cambia entre renders, así FieldInput puede
-  // memoizar y evitar re-render de todos los campos en cada keystroke. Clave en
-  // mobile: sin esto, escribir 1 letra re-renderiza 30+ campos + grid de fotos.
+  // setField estable: identidad no cambia entre renders. IMPORTANTE: este hook
+  // DEBE estar antes de cualquier early return — Rules of Hooks: el orden de
+  // hooks debe ser consistente en cada render. Si visit es null al inicio y
+  // luego se carga, mover esto debajo del early return causa React error #310
+  // ("Rendered fewer hooks than expected") y la app crashea.
   const setField = useCallback((key: string, value: unknown) => {
     setVisit((v) => v ? { ...v, form_data: { ...v.form_data, [key]: value } } : v);
   }, []);
+
+  if (!visit || !schema) {
+    return <div className="glass-panel" style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>Cargando visita…</div>;
+  }
 
   const save = async (finalize = false) => {
     if (!visit) return;

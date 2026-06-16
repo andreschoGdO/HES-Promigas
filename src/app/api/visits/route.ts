@@ -81,13 +81,12 @@ export async function POST(request: Request) {
     } catch { /* sin sesión disponible */ }
     if (!createdBy) createdBy = body.created_by ?? body.technician_email ?? null;
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       visit_type: body.visit_type,
       house_id: body.house_id ?? null,
       casa: body.casa ?? null,
       technician_name: body.technician_name ?? null,
       technician_email: body.technician_email ?? null,
-      contratista: body.contratista ?? null,
       visit_date: body.visit_date ?? new Date().toISOString().slice(0, 10),
       visit_time: body.visit_time ?? null,
       status: body.status === 'completed' ? 'completed' : 'draft',
@@ -98,7 +97,16 @@ export async function POST(request: Request) {
       created_by: createdBy,
       completed_at: body.status === 'completed' ? new Date().toISOString() : null,
     };
-    const { data, error } = await supabaseAdmin.from('field_visits').insert(payload).select('*').single();
+    // contratista solo si fue enviado — la columna existe a partir de migración 34.
+    // Si la migración no se aplicó todavía, omitir el campo evita romper el INSERT.
+    if (body.contratista !== undefined) payload.contratista = body.contratista;
+
+    let { data, error } = await supabaseAdmin.from('field_visits').insert(payload).select('*').single();
+    // Fallback: si el error es por columna contratista inexistente, reintentar sin ella.
+    if (error && /contratista/i.test(error.message ?? '')) {
+      delete payload.contratista;
+      ({ data, error } = await supabaseAdmin.from('field_visits').insert(payload).select('*').single());
+    }
     if (error) throw error;
 
     let inventoryLink: { linked: string[]; skipped: string[] } | null = null;

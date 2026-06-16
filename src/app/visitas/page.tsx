@@ -819,7 +819,7 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           <FieldsGrid>
             {sec.fields.map((f) => (
               <FieldWrapper key={f.key} label={f.label} required={f.required} unit={f.unit} fullWidth={isFullWidthField(f)} help={f.help}>
-                <FieldInput field={f} value={visit.form_data[f.key]} onSet={setField} />
+                <FieldInput field={f} value={visit.form_data[f.key]} onChange={(v) => setField(f.key, v)} />
               </FieldWrapper>
             ))}
           </FieldsGrid>
@@ -1012,10 +1012,7 @@ function FieldWrapper({ label, required, unit, fullWidth, help, children }: {
 }
 
 /* ───────────── Render del input según tipo ───────────── */
-// memo: solo re-renderiza si `value` o `field` cambian. Combinado con un setField
-// estable (useCallback en el padre), escribir en un campo NO re-renderiza los demás.
-const FieldInput = memo(function FieldInput({ field, value, onSet }: { field: VisitField; value: unknown; onSet: (key: string, v: unknown) => void }) {
-  const onChange = useCallback((v: unknown) => onSet(field.key, v), [onSet, field.key]);
+function FieldInput({ field, value, onChange }: { field: VisitField; value: unknown; onChange: (v: unknown) => void }) {
   const v = value ?? (field.type === 'checkbox' ? false : '');
 
   if (field.type === 'textarea') {
@@ -1061,4 +1058,4 @@ const FieldInput = memo(function FieldInput({ field, value, onSet }: { field: Vi
       style={{ width: '100%', minHeight: 44 }}
     />
   );
-});
+}

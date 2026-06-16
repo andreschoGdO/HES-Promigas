@@ -1020,24 +1020,56 @@ function FieldInput({ field, value, onChange }: { field: VisitField; value: unkn
   if (field.type === 'textarea') {
     return <textarea value={String(v)} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder} rows={3} style={{ width: '100%' }} />;
   }
+  // Soporte para "Otro" con texto libre: si options incluye "Otro" y el value
+  // actual empieza con "Otro" (con o sin ": <texto>"), mostramos un input
+  // adicional. Se guarda como "Otro: <texto>" — el dropdown muestra "Otro"
+  // seleccionado y el input muestra el texto. Sin texto se guarda "Otro".
+  const hasOtroOption = field.options?.includes('Otro');
+  const valueStr = String(v);
+  const isOtroSelected = hasOtroOption && (valueStr === 'Otro' || valueStr.startsWith('Otro: '));
+  const otroText = valueStr.startsWith('Otro: ') ? valueStr.slice(6) : '';
+  const selectValue = isOtroSelected ? 'Otro' : valueStr;
+
   if (field.type === 'select') {
     return (
-      <select value={String(v)} onChange={(e) => onChange(e.target.value)}>
-        <option value="">— Selecciona —</option>
-        {field.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-      </select>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <select value={selectValue} onChange={(e) => onChange(e.target.value)}>
+          <option value="">— Selecciona —</option>
+          {field.options?.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+        {isOtroSelected && (
+          <input
+            type="text"
+            value={otroText}
+            onChange={(e) => onChange(e.target.value ? `Otro: ${e.target.value}` : 'Otro')}
+            placeholder="Especifica cuál…"
+            style={{ width: '100%', minHeight: 44 }}
+          />
+        )}
+      </div>
     );
   }
   if (field.type === 'radio') {
     return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {field.options?.map((opt) => (
-          <button key={opt} type="button" onClick={() => onChange(opt)}
-            className={`chip ${v === opt ? 'active' : ''}`}
-            style={{ fontSize: '0.82rem', padding: '8px 14px' }}>
-            {opt}
-          </button>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {field.options?.map((opt) => (
+            <button key={opt} type="button" onClick={() => onChange(opt)}
+              className={`chip ${(opt === 'Otro' ? isOtroSelected : v === opt) ? 'active' : ''}`}
+              style={{ fontSize: '0.82rem', padding: '8px 14px' }}>
+              {opt}
+            </button>
+          ))}
+        </div>
+        {isOtroSelected && (
+          <input
+            type="text"
+            value={otroText}
+            onChange={(e) => onChange(e.target.value ? `Otro: ${e.target.value}` : 'Otro')}
+            placeholder="Especifica cuál…"
+            style={{ width: '100%', minHeight: 44 }}
+          />
+        )}
       </div>
     );
   }

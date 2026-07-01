@@ -15,6 +15,27 @@ const fmtInt = (n: number) => n.toLocaleString('es-CO');
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtCOP = (n: number) => `$${fmtInt(n)}M COP`;
 
+/** Dibuja un ícono de sol vectorial (rayos + disco) — logo de Sunny. */
+function drawSunLogo(doc: jsPDF, cx: number, cy: number, radius: number, color: string = ACCENT) {
+  doc.setFillColor(color);
+  doc.setDrawColor(color);
+  doc.setLineWidth(radius * 0.18);
+  // Disco central
+  doc.circle(cx, cy, radius * 0.55, 'F');
+  // 8 rayos
+  const rayInner = radius * 0.75;
+  const rayOuter = radius * 1.15;
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4;
+    const x1 = cx + Math.cos(a) * rayInner;
+    const y1 = cy + Math.sin(a) * rayInner;
+    const x2 = cx + Math.cos(a) * rayOuter;
+    const y2 = cy + Math.sin(a) * rayOuter;
+    doc.line(x1, y1, x2, y2);
+  }
+  doc.setLineWidth(0.2); // reset
+}
+
 /** Encabezado uniforme para cada slide. */
 function drawHeader(doc: jsPDF, section: string, title: string) {
   const w = doc.internal.pageSize.getWidth();
@@ -28,13 +49,12 @@ function drawHeader(doc: jsPDF, section: string, title: string) {
   doc.setFontSize(22);
   doc.setTextColor(TEXT);
   doc.text(title, 20, 32);
-  // logo box (placeholder)
-  doc.setDrawColor(BORDER);
-  doc.setFillColor(HEAD_BG);
-  doc.roundedRect(w - 55, 12, 40, 18, 2, 2, 'FD');
+  // logo sol arriba a la derecha
+  drawSunLogo(doc, w - 25, 22, 6);
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
-  doc.setTextColor(MUTED);
-  doc.text('SUNNY', w - 35, 23, { align: 'center' });
+  doc.setTextColor(TEXT);
+  doc.text('SUNNY', w - 34, 24, { align: 'right' });
 }
 
 function drawFooter(doc: jsPDF, note: string) {
@@ -93,30 +113,33 @@ export function generateDashPDF(r: DashReport): void {
   const pageH = doc.internal.pageSize.getHeight();
 
   // ─── SLIDE 1: PORTADA ───
-  doc.setFillColor(DARK);
-  doc.rect(0, 0, pageW, pageH, 'F');
-  doc.setDrawColor('#4b5563');
-  doc.setFillColor('#3b3833');
-  doc.roundedRect(20, 15, 40, 20, 2, 2, 'FD');
-  doc.setFontSize(9);
-  doc.setTextColor('#d1d5db');
-  doc.text('LOGO', 40, 27, { align: 'center' });
+  // Logo sol arriba izq + wordmark
+  drawSunLogo(doc, 30, 25, 8);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(TEXT);
+  doc.text('SUNNY', 42, 27);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(ACCENT);
   doc.text('CONSTRUCCIÓN · SEGUIMIENTO SEMANAL', 20, pageH / 2 - 12);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(36);
-  doc.setTextColor('#ffffff');
+  doc.setFontSize(34);
+  doc.setTextColor(TEXT);
   doc.text('Avance Semanal de Instalación', 20, pageH / 2 + 2);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(14);
-  doc.setTextColor('#d1d5db');
+  doc.setTextColor(MUTED);
   doc.text('Sistemas Solares + BESS residenciales', 20, pageH / 2 + 14);
   doc.setFontSize(10);
-  doc.setTextColor('#9ca3af');
+  doc.setTextColor(MUTED);
   doc.text(`Semana del ${r.periodo.desde} al ${r.periodo.hasta} · ${r.periodo.anio}`, 20, pageH - 20);
+  // línea accent decorativa
+  doc.setDrawColor(ACCENT);
+  doc.setLineWidth(0.8);
+  doc.line(20, pageH / 2 - 20, 80, pageH / 2 - 20);
+  doc.setLineWidth(0.2);
 
   // ─── SLIDE 2: AVANCE GLOBAL ───
   doc.addPage();
@@ -344,22 +367,15 @@ export function generateDashPDF(r: DashReport): void {
 
   // ─── SLIDE 9: GRACIAS ───
   doc.addPage();
-  doc.setFillColor(DARK);
-  doc.rect(0, 0, pageW, pageH, 'F');
-  doc.setDrawColor('#4b5563');
-  doc.setFillColor('#3b3833');
-  doc.roundedRect(20, 15, 40, 20, 2, 2, 'FD');
-  doc.setFontSize(9);
-  doc.setTextColor('#d1d5db');
-  doc.text('LOGO', 40, 27, { align: 'center' });
+  drawSunLogo(doc, pageW / 2, pageH / 2 - 20, 14);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(48);
-  doc.setTextColor('#ffffff');
-  doc.text('Gracias', 20, pageH / 2);
+  doc.setTextColor(TEXT);
+  doc.text('Gracias', pageW / 2, pageH / 2 + 10, { align: 'center' });
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(ACCENT);
-  doc.text('Sunny · Avance Semanal de Construcción', 20, pageH / 2 + 10);
+  doc.text('Sunny · Avance Semanal de Construcción', pageW / 2, pageH / 2 + 22, { align: 'center' });
 
   doc.save(`Sunny_Avance_Construccion_${r.periodo.anio}.pdf`);
 }

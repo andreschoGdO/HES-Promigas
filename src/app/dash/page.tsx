@@ -99,10 +99,7 @@ export default function DashPage() {
       <section
         className="card"
         style={{
-          background: 'linear-gradient(135deg, #1f2937 0%, #0f172a 100%)',
-          color: '#fff',
           padding: 32,
-          borderRadius: 12,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -110,44 +107,53 @@ export default function DashPage() {
           flexWrap: 'wrap',
         }}
       >
-        <div>
-          <div style={{ color: ACCENT, fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            Construcción · Seguimiento semanal
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <div style={{
+            background: 'var(--accent-dim)',
+            border: '1px solid var(--accent-border)',
+            borderRadius: 14,
+            padding: 14,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <Sun size={40} strokeWidth={2.5} fill={ACCENT} color={ACCENT} />
           </div>
-          <h1 style={{ fontSize: '2rem', fontWeight: 700, margin: '6px 0', letterSpacing: '-0.02em' }}>
-            Avance Semanal de Instalación
-          </h1>
-          <div style={{ color: '#d1d5db', fontSize: '0.95rem' }}>
-            Sistemas Solares + BESS residenciales
-          </div>
-          <div style={{ color: '#9ca3af', fontSize: '0.85rem', marginTop: 8 }}>
-            Semana del {report.periodo.desde} al {report.periodo.hasta} · {report.periodo.anio}
+          <div>
+            <div style={{ color: ACCENT, fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Construcción · Seguimiento semanal
+            </div>
+            <h1 style={{ fontSize: '1.8rem', fontWeight: 700, margin: '4px 0', letterSpacing: '-0.02em' }}>
+              Avance Semanal de Instalación
+            </h1>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+              Sistemas Solares + BESS residenciales
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: 6 }}>
+              Semana del {report.periodo.desde} al {report.periodo.hasta} · {report.periodo.anio}
+            </div>
           </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-end' }}>
-          <div style={{ background: '#3b3833', border: '1px solid #4b5563', borderRadius: 8, padding: '10px 20px', color: '#d1d5db', fontSize: '0.8rem' }}>
-            <Sun size={20} style={{ verticalAlign: 'middle', marginRight: 6, color: ACCENT }} />
-            SUNNY
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #4b5563', background: '#1f2937', color: '#e5e7eb', fontSize: '0.8rem' }}
+              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
             />
-            <span style={{ color: '#9ca3af' }}>→</span>
+            <span style={{ color: 'var(--text-muted)' }}>→</span>
             <input
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #4b5563', background: '#1f2937', color: '#e5e7eb', fontSize: '0.8rem' }}
+              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
             />
             <button
               onClick={() => void load(from, to)}
               disabled={loading}
               title="Refrescar"
-              style={{ background: 'transparent', border: '1px solid #4b5563', color: '#e5e7eb', borderRadius: 6, padding: 6, cursor: 'pointer' }}
+              style={{ background: 'transparent', border: '1px solid var(--border-strong)', color: 'var(--text-secondary)', borderRadius: 6, padding: 6, cursor: 'pointer' }}
             >
               <RefreshCw size={14} className={loading ? 'spin' : ''} />
             </button>
@@ -406,15 +412,11 @@ export default function DashPage() {
       {/* ─── CIERRE ─── */}
       <section
         className="card"
-        style={{
-          background: 'linear-gradient(135deg, #1f2937 0%, #0f172a 100%)',
-          color: '#fff',
-          padding: 40,
-          textAlign: 'center',
-        }}
+        style={{ padding: 32, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}
       >
-        <h2 style={{ fontSize: '2.4rem', fontWeight: 700, margin: 0 }}>Gracias</h2>
-        <div style={{ color: ACCENT, fontWeight: 600, marginTop: 8 }}>
+        <Sun size={40} strokeWidth={2.5} fill={ACCENT} color={ACCENT} />
+        <h2 style={{ fontSize: '2rem', fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>Gracias</h2>
+        <div style={{ color: ACCENT, fontWeight: 600 }}>
           Sunny · Avance Semanal de Construcción
         </div>
       </section>

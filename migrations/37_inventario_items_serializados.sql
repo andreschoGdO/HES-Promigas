@@ -1,13 +1,14 @@
 -- ─────────────────────────────────────────────────────────────────
 -- Phase 37 — Convertir inventario a items SERIALIZADOS
 --
--- La migración 36 metió todo como consumables. Pero inversores, baterías,
--- BMS y Top Cover son equipos SERIALIZADOS. Solo paneles quedan como
--- consumables (216 pallets en Cali).
+-- La migración 36 metió todo como consumables. Pero TODO el inventario
+-- (inversores, baterías, BMS, Top Cover, paneles solares) son equipos
+-- SERIALIZADOS — cada unidad tiene su QR/serial único.
 --
--- Los items serializados se crean con serial placeholder tipo
--- 'PEND-<CAT>-<BODEGA>-###'. Los técnicos actualizarán el serial real
--- cuando escaneen QR en sitio.
+-- Los items se crean con serial placeholder tipo 'PEND-<CAT>-<BODEGA>-###'.
+-- Los técnicos actualizarán el serial real cuando escaneen QR en sitio.
+--
+-- Total items: 715 (134 BQ + 229 CT + 352 CL)
 -- ─────────────────────────────────────────────────────────────────
 
 begin;
@@ -17,9 +18,8 @@ delete from inventory_movements where item_id is not null;
 delete from inventory_reservations;
 delete from inventory_items;
 
--- 2. Borrar consumables excepto paneles solares
-delete from inventory_consumables
- where category_id != (select id from inventory_categories where code = 'JASOLAR_PANEL_595W');
+-- 2. Borrar todos los consumables — TODO va como items serializados
+delete from inventory_consumables;
 
 -- 3. Insertar items serializados usando CTEs (funciona en cualquier contexto).
 --    Cada (categoría × bodega × N) genera 1 fila con serial PEND-<CAT>-<BQ|CT|CL>-###.
@@ -52,7 +52,8 @@ with seed(cat_code, wh_code, qty, cost_cop, cat_short, wh_short) as (
     ('DEYE_BAT_HV_4KWH',   'BODEGA_CALI', 11, 6573155::numeric,  'DBH4',   'CL'),
     ('PYLONTECH_BAT_LV',   'BODEGA_CALI', 11, 6162641::numeric,  'PBL',    'CL'),
     ('PYLONTECH_BMS',      'BODEGA_CALI', 6,  2816695::numeric,  'PBMS',   'CL'),
-    ('DEYE_INV_6KW_LV',    'BODEGA_CALI', 4,  9363184::numeric,  'DINV6',  'CL')
+    ('DEYE_INV_6KW_LV',    'BODEGA_CALI', 4,  9363184::numeric,  'DINV6',  'CL'),
+    ('JASOLAR_PANEL_595W', 'BODEGA_CALI', 216, 280634::numeric,  'PAN595', 'CL')
 )
 insert into inventory_items (
   category_id, serial_number, brand, model, capacity_value, capacity_unit,
@@ -79,8 +80,8 @@ join inventory_categories ic on ic.code = s.cat_code
 join warehouses w on w.code = s.wh_code
 cross join lateral generate_series(1, s.qty) as gs(n);
 
--- 4. Panel solar es el único no-serializado
-update inventory_categories set is_serialized = false where code = 'JASOLAR_PANEL_595W';
+-- 4. TODAS las categorías son serializadas
+update inventory_categories set is_serialized = true;
 
 -- 5. default_cost_cop por categoría (precios del CSV)
 update inventory_categories set default_cost_cop = 4505104  where code = 'LIVOLTEK_BAT_HV';
@@ -102,4 +103,5 @@ commit;
 --   select w.name, count(*) as items
 --     from inventory_items i join warehouses w on w.id = i.warehouse_id
 --    group by w.name order by w.name;
--- Esperado: Barranquilla 134, Cartagena 229, Cali 136
+-- Esperado: Barranquilla 134, Cartagena 229, Cali 352 (incluye 216 paneles)
+-- Total: 715 items serializados

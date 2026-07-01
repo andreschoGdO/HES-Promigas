@@ -3863,85 +3863,90 @@ function consumeKits(kit: KitDef, n: number, stock: KitStock) {
 }
 
 /**
- * Algoritmo greedy priorizado:
- *   1. Calcula la capacidad TOTAL teórica (suma de max por kit sin conflicto)
- *   2. Convierte los % de prioridad en "presupuesto de kits" por tipo
- *   3. Itera los tipos en orden de prioridad; dentro de cada tipo distribuye
- *      equitativamente entre sub-kits según lo que el stock aún permita
- *   4. Al agotar un tipo, el remanente que no se pudo usar rebalsa al siguiente
+ * Weighted round-robin sobre KITS individuales.
+ *
+ * Este algoritmo mantiene el ratio T2/T3/T4 en tiempo real:
+ *   1. En cada iteración, calcula el "déficit" de cada tipo:
+ *        déficit = target% − (kits_actuales_del_tipo / total_kits_construidos)
+ *   2. Elige el tipo con el mayor déficit y intenta armar un kit de ese tipo,
+ *      alternando entre sus sub-kits (round-robin equitativo dentro del tipo).
+ *   3. Si no puede armar de ese tipo por falta de stock, prueba el siguiente
+ *      tipo con más déficit — así el algoritmo NUNCA se estanca mientras haya
+ *      combinación viable en stock.
+ *   4. Termina cuando ningún tipo puede armar más kits.
+ *
+ * Ventaja vs "presupuesto upfront": no sobreestima capacidad y respeta el
+ * ratio real a medida que el stock se consume. Un cambio de T4 15%→5% SÍ se
+ * refleja porque cada slot decide en tiempo real qué tipo va.
  */
 function computeKits(city: string, warehouseName: string, initialStock: KitStock): KitResult {
   const prio = PRIORITY_BY_CITY[city] ?? DEFAULT_PRIORITY;
   const stock: KitStock = { ...initialStock };
+  const kitsBuilt: Record<string, number> = {};
+  const countByTipo: Record<2 | 3 | 4, number> = { 2: 0, 3: 0, 4: 0 };
 
-  // Estimar capacidad total teórica sin conflicto (upper bound)
-  const teoricoPorKit: Record<string, number> = {};
-  let teoricoTotal = 0;
-  for (const kit of KIT_DEFS) {
-    const m = maxKitsFor(kit, initialStock);
-    teoricoPorKit[kit.id] = m;
-    teoricoTotal += m;
-  }
-
-  // Presupuesto por tipo — priorizado
-  const budget: Record<2 | 3 | 4, number> = {
-    2: Math.round(teoricoTotal * prio[2]),
-    3: Math.round(teoricoTotal * prio[3]),
-    4: Math.round(teoricoTotal * prio[4]),
+  const attempt = (tipo: 2 | 3 | 4): boolean => {
+    // Sub-kits del tipo, ordenados por menos-usado (round-robin equitativo)
+    const kitsDelTipo = KIT_DEFS
+      .filter((k) => k.tipo === tipo)
+      .slice()
+      .sort((a, b) => (kitsBuilt[a.id] ?? 0) - (kitsBuilt[b.id] ?? 0));
+    for (const kit of kitsDelTipo) {
+      if (maxKitsFor(kit, stock) >= 1) {
+        consumeKits(kit, 1, stock);
+        kitsBuilt[kit.id] = (kitsBuilt[kit.id] ?? 0) + 1;
+        countByTipo[tipo]++;
+        return true;
+      }
+    }
+    return false;
   };
 
-  const kitsBuilt: Record<string, number> = {};
+  // FASE 1 — Weighted round-robin respetando el ratio
+  let total = 0;
+  let progreso = true;
+  while (progreso) {
+    progreso = false;
+    // Ordenar tipos por déficit descendente (el más atrás del target va primero)
+    const denom = total + 1; // "si armo uno más, ¿cómo queda el ratio?"
+    const ordenPorDeficit: Array<2 | 3 | 4> = ([2, 3, 4] as const)
+      .slice()
+      .sort((a, b) => {
+        const deficitA = prio[a] - (countByTipo[a] / denom);
+        const deficitB = prio[b] - (countByTipo[b] / denom);
+        return deficitB - deficitA;
+      });
+    for (const tipo of ordenPorDeficit) {
+      // Solo intentamos si este tipo aún tiene "target" > 0
+      if (prio[tipo] <= 0) continue;
+      if (attempt(tipo)) {
+        total++;
+        progreso = true;
+        break;
+      }
+    }
+  }
 
-  // Orden de tipos: el de mayor % primero
+  // FASE 2 — Aprovechamiento final: si sobró stock y algún tipo con prio 0
+  // (o si el round-robin no logró terminar), armar lo que aún quepa.
+  // El orden respeta la prioridad de la ciudad.
   const tiposOrdenados: Array<2 | 3 | 4> = ([2, 3, 4] as const)
     .slice()
     .sort((a, b) => prio[b] - prio[a]);
-
-  for (const tipo of tiposOrdenados) {
-    const kitsDelTipo = KIT_DEFS.filter((k) => k.tipo === tipo);
-    let restante = budget[tipo];
-    // Round-robin: intentamos armar 1 de cada kit del tipo hasta agotar
-    let progreso = true;
-    while (restante > 0 && progreso) {
-      progreso = false;
-      for (const kit of kitsDelTipo) {
-        if (restante <= 0) break;
-        if (maxKitsFor(kit, stock) >= 1) {
-          consumeKits(kit, 1, stock);
-          kitsBuilt[kit.id] = (kitsBuilt[kit.id] ?? 0) + 1;
-          restante--;
-          progreso = true;
-        }
-      }
-    }
-    // El excedente que no pudimos armar cae al siguiente tipo
-    if (restante > 0) budget[tiposOrdenados[tiposOrdenados.indexOf(tipo) + 1] ?? 2] += restante;
-  }
-
-  // Post-pass: si sobró stock, seguimos armando lo que se pueda (menor prioridad primero)
   let progresoExtra = true;
   while (progresoExtra) {
     progresoExtra = false;
     for (const tipo of tiposOrdenados) {
-      for (const kit of KIT_DEFS.filter((k) => k.tipo === tipo)) {
-        if (maxKitsFor(kit, stock) >= 1) {
-          consumeKits(kit, 1, stock);
-          kitsBuilt[kit.id] = (kitsBuilt[kit.id] ?? 0) + 1;
-          progresoExtra = true;
-        }
+      if (attempt(tipo)) {
+        progresoExtra = true;
       }
     }
   }
 
-  const byTipo = { 2: 0, 3: 0, 4: 0 };
   let totalKits = 0;
-  for (const kit of KIT_DEFS) {
-    const built = kitsBuilt[kit.id] ?? 0;
-    byTipo[kit.tipo] += built;
-    totalKits += built;
-  }
+  for (const kit of KIT_DEFS) totalKits += kitsBuilt[kit.id] ?? 0;
 
-  return { warehouseName, city, priority: prio, initialStock, kitsBuilt, remaining: stock, totalKits, byTipo };
+  return { warehouseName, city, priority: prio, initialStock, kitsBuilt, remaining: stock, totalKits, byTipo: countByTipo };
 }
 
 interface WarehouseStock { id: string; code: string; name: string; city: string | null; stock: KitStock; }

@@ -10,7 +10,7 @@ const supa = () => createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
 );
 
-type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias' | 'panorama' | 'inversa' | 'transferencias';
+type Tab = 'equipos' | 'consumibles' | 'ubicaciones' | 'reservas' | 'movimientos' | 'categorias' | 'panorama' | 'inversa' | 'transferencias' | 'kits';
 
 interface Category {
   id: string;
@@ -154,6 +154,7 @@ const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof Cpu }> 
   transferencias: { label: 'Transferencias',       color: '#0ea5e9', Icon: Truck },
   panorama:       { label: 'Panorama',             color: '#07c5a8', Icon: Boxes },
   inversa:        { label: 'Logística inversa',    color: '#ef4444', Icon: Repeat },
+  kits:           { label: 'Kits',                  color: '#f59e0b', Icon: Package },
 };
 
 const LOCATION_TYPE_META: Record<string, { label: string; color: string; Icon: typeof Cpu }> = {
@@ -254,6 +255,7 @@ export default function InventarioPage() {
       {tab === 'transferencias' && <TransferenciasTab userEmail={userEmail} />}
       {tab === 'panorama' && <PanoramaTab />}
       {tab === 'inversa' && <LogisticaInversaTab />}
+      {tab === 'kits' && <KitsTab />}
     </div>
   );
 }
@@ -3721,5 +3723,445 @@ function EditReservationItemsModal({ reservationId, onClose, onSaved }: { reserv
         <button onClick={save} className="primary-btn" disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</button>
       </div>
     </ModalShell>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Tab KITS — cuántos kits solares se pueden armar con el stock actual
+ *
+ * Es meramente informativo. Toma el stock disponible por bodega (consumables +
+ * items con status='in_stock') y calcula cuántos kits completos se podrían
+ * ensamblar sin reutilizar equipos.
+ *
+ * Reglas:
+ *   - Cali        prioriza Tipo 2 (60% / 25% / 15% para T2 / T3 / T4)
+ *   - Cartagena   prioriza Tipo 3 y 4 (15% / 42.5% / 42.5%)
+ *   - Barranquilla prioriza Tipo 3 y 4 (15% / 42.5% / 42.5%)
+ *   - Solo Livoltek acepta Top Cover — para Tipo 4 con 6 baterías (Kit 4C)
+ *   - Los equipos NO se reutilizan (una vez asignados a un kit, no vuelven al pool)
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+// Códigos de categoría que necesitamos leer del catálogo
+const KIT_COMPONENT_CODES = {
+  INV_LIVOLTEK_10K: 'LIVOLTEK_INV_10KW',
+  INV_LIVOLTEK_15K: 'LIVOLTEK_INV_15KW',
+  INV_DEYE_15K:     'DEYE_INV_15KW_HV',
+  INV_DEYE_6K:      'DEYE_INV_6KW_LV',
+  BAT_LIVOLTEK:     'LIVOLTEK_BAT_HV',
+  BAT_DEYE:         'DEYE_BAT_HV_4KWH',
+  BAT_PYLONTECH:    'PYLONTECH_BAT_LV',
+  BMS_LIVOLTEK:     'LIVOLTEK_BMS',
+  BMS_DEYE:         'DEYE_BMS',
+  BMS_PYLONTECH:    'PYLONTECH_BMS',
+  TOP_LIVOLTEK:     'LIVOLTEK_TOP_COVER',
+} as const;
+
+interface KitReq { code: string; qty: number; }
+interface KitDef {
+  id: string;
+  tipo: 2 | 3 | 4;
+  label: string;
+  descripcion: string;
+  requiere: KitReq[];
+}
+
+const KIT_DEFS: KitDef[] = [
+  { id: 'K2A', tipo: 2, label: 'Kit 2A · Deye 6kw + Pylontech (2 bat)',
+    descripcion: '1× Inversor Deye 6kW LV · 2× Batería Pylontech LV · 1× BMS Pylontech',
+    requiere: [
+      { code: KIT_COMPONENT_CODES.INV_DEYE_6K, qty: 1 },
+      { code: KIT_COMPONENT_CODES.BAT_PYLONTECH, qty: 2 },
+      { code: KIT_COMPONENT_CODES.BMS_PYLONTECH, qty: 1 },
+    ] },
+  { id: 'K2B', tipo: 2, label: 'Kit 2B · Livoltek 10kw + Livoltek (2 bat)',
+    descripcion: '1× Inversor Livoltek 10kW · 2× Batería Livoltek HV · 1× BMS Livoltek',
+    requiere: [
+      { code: KIT_COMPONENT_CODES.INV_LIVOLTEK_10K, qty: 1 },
+      { code: KIT_COMPONENT_CODES.BAT_LIVOLTEK, qty: 2 },
+      { code: KIT_COMPONENT_CODES.BMS_LIVOLTEK, qty: 1 },
+    ] },
+  { id: 'K2C', tipo: 2, label: 'Kit 2C · Deye 6kw + Pylontech (3 bat)',
+    descripcion: '1× Inversor Deye 6kW LV · 3× Batería Pylontech LV · 1× BMS Pylontech',
+    requiere: [
+      { code: KIT_COMPONENT_CODES.INV_DEYE_6K, qty: 1 },
+      { code: KIT_COMPONENT_CODES.BAT_PYLONTECH, qty: 3 },
+      { code: KIT_COMPONENT_CODES.BMS_PYLONTECH, qty: 1 },
+    ] },
+  { id: 'K3A', tipo: 3, label: 'Kit 3A · Livoltek 10kw + Livoltek (3 bat)',
+    descripcion: '1× Inversor Livoltek 10kW · 3× Batería Livoltek HV · 1× BMS Livoltek',
+    requiere: [
+      { code: KIT_COMPONENT_CODES.INV_LIVOLTEK_10K, qty: 1 },
+      { code: KIT_COMPONENT_CODES.BAT_LIVOLTEK, qty: 3 },
+      { code: KIT_COMPONENT_CODES.BMS_LIVOLTEK, qty: 1 },
+    ] },
+  { id: 'K3B', tipo: 3, label: 'Kit 3B · Deye 15kw + Deye HV (3 bat)',
+    descripcion: '1× Inversor Deye 15kW HV · 3× Batería Deye HV · 1× BMS Deye',
+    requiere: [
+      { code: KIT_COMPONENT_CODES.INV_DEYE_15K, qty: 1 },
+      { code: KIT_COMPONENT_CODES.BAT_DEYE, qty: 3 },
+      { code: KIT_COMPONENT_CODES.BMS_DEYE, qty: 1 },
+    ] },
+  { id: 'K4A', tipo: 4, label: 'Kit 4A · Livoltek 15kw + Livoltek (4 bat)',
+    descripcion: '1× Inversor Livoltek 15kW · 4× Batería Livoltek HV · 1× BMS Livoltek',
+    requiere: [
+      { code: KIT_COMPONENT_CODES.INV_LIVOLTEK_15K, qty: 1 },
+      { code: KIT_COMPONENT_CODES.BAT_LIVOLTEK, qty: 4 },
+      { code: KIT_COMPONENT_CODES.BMS_LIVOLTEK, qty: 1 },
+    ] },
+  { id: 'K4B', tipo: 4, label: 'Kit 4B · Deye 15kw + Deye HV (4 bat)',
+    descripcion: '1× Inversor Deye 15kW HV · 4× Batería Deye HV · 1× BMS Deye',
+    requiere: [
+      { code: KIT_COMPONENT_CODES.INV_DEYE_15K, qty: 1 },
+      { code: KIT_COMPONENT_CODES.BAT_DEYE, qty: 4 },
+      { code: KIT_COMPONENT_CODES.BMS_DEYE, qty: 1 },
+    ] },
+  { id: 'K4C', tipo: 4, label: 'Kit 4C · Livoltek 15kw + Livoltek (6 bat) + Top Cover',
+    descripcion: '1× Inversor Livoltek 15kW · 6× Batería Livoltek HV · 1× BMS Livoltek · 1× Top Cover Livoltek',
+    requiere: [
+      { code: KIT_COMPONENT_CODES.INV_LIVOLTEK_15K, qty: 1 },
+      { code: KIT_COMPONENT_CODES.BAT_LIVOLTEK, qty: 6 },
+      { code: KIT_COMPONENT_CODES.BMS_LIVOLTEK, qty: 1 },
+      { code: KIT_COMPONENT_CODES.TOP_LIVOLTEK, qty: 1 },
+    ] },
+];
+
+// % de prioridad por tipo, por ciudad (bodega)
+const PRIORITY_BY_CITY: Record<string, { 2: number; 3: number; 4: number }> = {
+  'Cali':         { 2: 0.60, 3: 0.25, 4: 0.15 },
+  'Barranquilla': { 2: 0.15, 3: 0.425, 4: 0.425 },
+  'Cartagena':    { 2: 0.15, 3: 0.425, 4: 0.425 },
+};
+const DEFAULT_PRIORITY = { 2: 0.34, 3: 0.33, 4: 0.33 };
+
+interface KitStock { [categoryCode: string]: number; }
+interface KitResult {
+  warehouseName: string;
+  city: string;
+  priority: { 2: number; 3: number; 4: number };
+  initialStock: KitStock;
+  kitsBuilt: Record<string, number>;   // { K2A: 5, K2B: 3, ... }
+  remaining: KitStock;
+  totalKits: number;
+  byTipo: { 2: number; 3: number; 4: number };
+}
+
+/** Cuántos kits del tipo se pueden armar con el stock disponible (upper bound) */
+function maxKitsFor(kit: KitDef, stock: KitStock): number {
+  let m = Infinity;
+  for (const req of kit.requiere) {
+    const have = stock[req.code] ?? 0;
+    m = Math.min(m, Math.floor(have / req.qty));
+  }
+  return m === Infinity ? 0 : m;
+}
+
+/** Descuenta el consumo de N kits del stock */
+function consumeKits(kit: KitDef, n: number, stock: KitStock) {
+  for (const req of kit.requiere) {
+    stock[req.code] = (stock[req.code] ?? 0) - req.qty * n;
+  }
+}
+
+/**
+ * Algoritmo greedy priorizado:
+ *   1. Calcula la capacidad TOTAL teórica (suma de max por kit sin conflicto)
+ *   2. Convierte los % de prioridad en "presupuesto de kits" por tipo
+ *   3. Itera los tipos en orden de prioridad; dentro de cada tipo distribuye
+ *      equitativamente entre sub-kits según lo que el stock aún permita
+ *   4. Al agotar un tipo, el remanente que no se pudo usar rebalsa al siguiente
+ */
+function computeKits(city: string, warehouseName: string, initialStock: KitStock): KitResult {
+  const prio = PRIORITY_BY_CITY[city] ?? DEFAULT_PRIORITY;
+  const stock: KitStock = { ...initialStock };
+
+  // Estimar capacidad total teórica sin conflicto (upper bound)
+  const teoricoPorKit: Record<string, number> = {};
+  let teoricoTotal = 0;
+  for (const kit of KIT_DEFS) {
+    const m = maxKitsFor(kit, initialStock);
+    teoricoPorKit[kit.id] = m;
+    teoricoTotal += m;
+  }
+
+  // Presupuesto por tipo — priorizado
+  const budget: Record<2 | 3 | 4, number> = {
+    2: Math.round(teoricoTotal * prio[2]),
+    3: Math.round(teoricoTotal * prio[3]),
+    4: Math.round(teoricoTotal * prio[4]),
+  };
+
+  const kitsBuilt: Record<string, number> = {};
+
+  // Orden de tipos: el de mayor % primero
+  const tiposOrdenados: Array<2 | 3 | 4> = ([2, 3, 4] as const)
+    .slice()
+    .sort((a, b) => prio[b] - prio[a]);
+
+  for (const tipo of tiposOrdenados) {
+    const kitsDelTipo = KIT_DEFS.filter((k) => k.tipo === tipo);
+    let restante = budget[tipo];
+    // Round-robin: intentamos armar 1 de cada kit del tipo hasta agotar
+    let progreso = true;
+    while (restante > 0 && progreso) {
+      progreso = false;
+      for (const kit of kitsDelTipo) {
+        if (restante <= 0) break;
+        if (maxKitsFor(kit, stock) >= 1) {
+          consumeKits(kit, 1, stock);
+          kitsBuilt[kit.id] = (kitsBuilt[kit.id] ?? 0) + 1;
+          restante--;
+          progreso = true;
+        }
+      }
+    }
+    // El excedente que no pudimos armar cae al siguiente tipo
+    if (restante > 0) budget[tiposOrdenados[tiposOrdenados.indexOf(tipo) + 1] ?? 2] += restante;
+  }
+
+  // Post-pass: si sobró stock, seguimos armando lo que se pueda (menor prioridad primero)
+  let progresoExtra = true;
+  while (progresoExtra) {
+    progresoExtra = false;
+    for (const tipo of tiposOrdenados) {
+      for (const kit of KIT_DEFS.filter((k) => k.tipo === tipo)) {
+        if (maxKitsFor(kit, stock) >= 1) {
+          consumeKits(kit, 1, stock);
+          kitsBuilt[kit.id] = (kitsBuilt[kit.id] ?? 0) + 1;
+          progresoExtra = true;
+        }
+      }
+    }
+  }
+
+  const byTipo = { 2: 0, 3: 0, 4: 0 };
+  let totalKits = 0;
+  for (const kit of KIT_DEFS) {
+    const built = kitsBuilt[kit.id] ?? 0;
+    byTipo[kit.tipo] += built;
+    totalKits += built;
+  }
+
+  return { warehouseName, city, priority: prio, initialStock, kitsBuilt, remaining: stock, totalKits, byTipo };
+}
+
+interface WarehouseStock { id: string; code: string; name: string; city: string | null; stock: KitStock; }
+
+function KitsTab() {
+  const [results, setResults] = useState<KitResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setErr(null);
+      try {
+        // Traer categorías, bodegas, consumables e items en paralelo
+        const [rCats, rWh, rCons, rItems] = await Promise.all([
+          fetch('/api/inventory/categories').then((r) => r.json()),
+          fetch('/api/inventory/warehouses').then((r) => r.json()),
+          fetch('/api/inventory/consumables').then((r) => r.json()),
+          fetch('/api/inventory/items?status=in_stock&limit=5000').then((r) => r.json()),
+        ]);
+
+        const cats: Array<{ id: string; code: string }> = rCats.categories ?? [];
+        const catCodeById = new Map(cats.map((c) => [c.id, c.code]));
+
+        const warehouses: Array<{ id: string; code: string; name: string; city: string | null }> = rWh.warehouses ?? [];
+        const stocksByWh = new Map<string, WarehouseStock>();
+        for (const w of warehouses) {
+          stocksByWh.set(w.id, { id: w.id, code: w.code, name: w.name, city: w.city, stock: {} });
+        }
+
+        // Consumables: sumar por (warehouse × categoría)
+        const consumables: Array<{ warehouse_id: string | null; category_id: string | null; stock_quantity: number }> = rCons.consumables ?? [];
+        for (const c of consumables) {
+          if (!c.warehouse_id || !c.category_id) continue;
+          const wh = stocksByWh.get(c.warehouse_id);
+          const code = catCodeById.get(c.category_id);
+          if (!wh || !code) continue;
+          wh.stock[code] = (wh.stock[code] ?? 0) + Number(c.stock_quantity ?? 0);
+        }
+
+        // Items en status 'in_stock': +1 por unidad
+        const items: Array<{ warehouse_id: string | null; category_id: string | null; status: string }> = rItems.items ?? [];
+        for (const it of items) {
+          if (it.status !== 'in_stock' || !it.warehouse_id || !it.category_id) continue;
+          const wh = stocksByWh.get(it.warehouse_id);
+          const code = catCodeById.get(it.category_id);
+          if (!wh || !code) continue;
+          wh.stock[code] = (wh.stock[code] ?? 0) + 1;
+        }
+
+        // Calcular kits para cada bodega. Derivar "city" del name si city no está seteado.
+        const rs: KitResult[] = [];
+        for (const wh of stocksByWh.values()) {
+          const cityGuess = wh.city ?? (wh.name.includes('Cali') ? 'Cali'
+            : wh.name.includes('Barranquilla') ? 'Barranquilla'
+            : wh.name.includes('Cartagena') ? 'Cartagena' : 'Otro');
+          rs.push(computeKits(cityGuess, wh.name, wh.stock));
+        }
+        // Ordenar Cali, Barranquilla, Cartagena, otros
+        const order = ['Cali', 'Barranquilla', 'Cartagena'];
+        rs.sort((a, b) => {
+          const ia = order.indexOf(a.city); const ib = order.indexOf(b.city);
+          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        });
+        setResults(rs);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : 'Error');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const COMPONENT_LABELS: Record<string, string> = {
+    [KIT_COMPONENT_CODES.INV_LIVOLTEK_10K]: 'Inv. Livoltek 10kW',
+    [KIT_COMPONENT_CODES.INV_LIVOLTEK_15K]: 'Inv. Livoltek 15kW',
+    [KIT_COMPONENT_CODES.INV_DEYE_15K]:     'Inv. Deye 15kW HV',
+    [KIT_COMPONENT_CODES.INV_DEYE_6K]:      'Inv. Deye 6kW LV',
+    [KIT_COMPONENT_CODES.BAT_LIVOLTEK]:     'Bat. Livoltek HV',
+    [KIT_COMPONENT_CODES.BAT_DEYE]:         'Bat. Deye HV',
+    [KIT_COMPONENT_CODES.BAT_PYLONTECH]:    'Bat. Pylontech LV',
+    [KIT_COMPONENT_CODES.BMS_LIVOLTEK]:     'BMS Livoltek',
+    [KIT_COMPONENT_CODES.BMS_DEYE]:         'BMS Deye',
+    [KIT_COMPONENT_CODES.BMS_PYLONTECH]:    'BMS Pylontech',
+    [KIT_COMPONENT_CODES.TOP_LIVOLTEK]:     'Top Cover Livoltek',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Notas */}
+      <div className="glass-panel" style={{ padding: 18, borderLeft: '4px solid #f59e0b' }}>
+        <h3 style={{ margin: 0, fontSize: '0.95rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Package size={16} /> Kits solares — simulación
+        </h3>
+        <p style={{ margin: '8px 0 0', fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.55 }}>
+          Meramente informativo. Muestra cuántos kits completos se podrían armar con el stock actual de cada bodega,
+          <strong> sin reutilizar equipos</strong>.
+        </p>
+        <ul style={{ margin: '10px 0 0', paddingLeft: 20, fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          <li>Cali prioriza <strong>Tipo 2</strong> (60% / 25% / 15%). Barranquilla y Cartagena priorizan <strong>Tipo 3 y 4</strong> (15% / 42.5% / 42.5%).</li>
+          <li>Solo las soluciones <strong>Livoltek</strong> se pueden poner Top Cover para hacer paralelo con baterías, y solo en <strong>Tipo 4</strong>.</li>
+          <li>Cada kit lleva: <strong>1 Inversor + 1 BMS + Baterías según categoría</strong>.</li>
+        </ul>
+      </div>
+
+      {/* Definición de kits (referencia visual) */}
+      <div className="glass-panel" style={{ padding: 18 }}>
+        <h3 style={{ margin: '0 0 12px', fontSize: '0.95rem' }}>Categorías de kits</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
+          {([2, 3, 4] as const).map((tipo) => (
+            <div key={tipo} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f59e0b', marginBottom: 6 }}>
+                Solución Tipo {tipo}
+              </div>
+              {KIT_DEFS.filter((k) => k.tipo === tipo).map((kit) => (
+                <div key={kit.id} style={{ marginBottom: 8, fontSize: '0.78rem' }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{kit.label}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: 2 }}>{kit.descripcion}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {loading && <div className="glass-panel" style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>Calculando kits…</div>}
+      {err && <div className="alert-error">{err}</div>}
+
+      {/* Resultados por bodega */}
+      {!loading && results.map((r) => (
+        <div key={r.warehouseName} className="glass-panel" style={{ padding: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Building2 size={18} style={{ color: '#0ea5e9' }} /> {r.warehouseName}
+              </h3>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: 3 }}>
+                Ciudad: <strong>{r.city}</strong> · Prioridad:
+                {' '}T2 {(r.priority[2] * 100).toFixed(0)}% · T3 {(r.priority[3] * 100).toFixed(0)}% · T4 {(r.priority[4] * 100).toFixed(0)}%
+              </div>
+            </div>
+            <div style={{ background: '#f59e0b15', color: '#f59e0b', padding: '10px 16px', borderRadius: 10, fontWeight: 700 }}>
+              <div style={{ fontSize: '0.72rem', letterSpacing: '0.05em' }}>KITS POSIBLES</div>
+              <div style={{ fontSize: '1.6rem', lineHeight: 1 }}>{r.totalKits}</div>
+            </div>
+          </div>
+
+          {/* Breakdown por tipo */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
+            {([2, 3, 4] as const).map((tipo) => {
+              const total = r.byTipo[tipo];
+              const pct = r.totalKits > 0 ? Math.round((total / r.totalKits) * 100) : 0;
+              return (
+                <div key={tipo} style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>Tipo {tipo}</div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.1 }}>{total}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{pct}% del total</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desglose por sub-kit */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.05em', marginBottom: 6 }}>
+              DESGLOSE POR KIT
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+              {KIT_DEFS.map((kit) => {
+                const built = r.kitsBuilt[kit.id] ?? 0;
+                return (
+                  <div key={kit.id} style={{ padding: 10, background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '0.76rem', fontWeight: 600 }}>{kit.id} — Tipo {kit.tipo}</div>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>{kit.label.replace(/^Kit \w+ · /, '')}</div>
+                    </div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 700, color: built > 0 ? '#f59e0b' : 'var(--text-muted)' }}>
+                      {built}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Stock inicial vs consumido */}
+          <details>
+            <summary style={{ cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>
+              STOCK: INICIAL / CONSUMIDO / RESTANTE
+            </summary>
+            <table style={{ width: '100%', marginTop: 10, borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                  <th style={{ textAlign: 'left', padding: '6px 8px' }}>Componente</th>
+                  <th style={{ textAlign: 'right', padding: '6px 8px' }}>Inicial</th>
+                  <th style={{ textAlign: 'right', padding: '6px 8px' }}>Usado</th>
+                  <th style={{ textAlign: 'right', padding: '6px 8px' }}>Restante</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(COMPONENT_LABELS).map(([code, label]) => {
+                  const ini = r.initialStock[code] ?? 0;
+                  const rem = r.remaining[code] ?? 0;
+                  const usa = ini - rem;
+                  if (ini === 0 && rem === 0) return null;
+                  return (
+                    <tr key={code} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '6px 8px' }}>{label}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{ini}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', color: usa > 0 ? '#f59e0b' : 'var(--text-muted)' }}>{usa}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600 }}>{rem}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </details>
+        </div>
+      ))}
+    </div>
   );
 }

@@ -37,6 +37,10 @@ interface CrmProjectRow {
   zona: string | null;
   diseno_kwp: number | null;
   diseno_paneles: number | null;
+  diseno_baterias_cantidad: number | null;
+  diseno_bateria_capacidad_kwh: number | null;
+  diseno_bateria_marca: string | null;
+  diseno_inversor_marca: string | null;
   diseno_bateria_categoria_id: string | null;
   operativo_at: string | null;
   updated_at: string | null;
@@ -59,8 +63,8 @@ interface FacturaRow { project_id: string; capex: number | null; }
 interface CategoryRow {
   id: string;
   family: string | null;
-  marca_fabricante: string | null;
-  potencia_kw: number | null;
+  default_brand: string | null;
+  default_capacity_value: number | null;
 }
 
 interface InventoryItemRow {
@@ -121,7 +125,9 @@ export async function GET(request: Request) {
     .from('crm_projects')
     .select(`
       id, operations_stage, current_module, installation_date, contractor_name, zona,
-      diseno_kwp, diseno_paneles, diseno_bateria_categoria_id,
+      diseno_kwp, diseno_paneles,
+      diseno_baterias_cantidad, diseno_bateria_capacidad_kwh,
+      diseno_bateria_marca, diseno_inversor_marca, diseno_bateria_categoria_id,
       operativo_at, updated_at, created_at,
       agpe_operador_red, agpe_estado, agpe_fecha_estimada,
       garantia_marca, garantia_equipo, garantia_falla, garantia_estado, garantia_retorno_bodega,
@@ -142,7 +148,7 @@ export async function GET(request: Request) {
   // ─── CATEGORÍAS + INVENTARIO ───
   const { data: catsRaw } = await supabaseAdmin
     .from('inventory_categories')
-    .select('id, family, marca_fabricante, potencia_kw');
+    .select('id, family, default_brand, default_capacity_value');
   const cats = (catsRaw ?? []) as CategoryRow[];
   const catById = new Map(cats.map((c) => [c.id, c]));
 
@@ -151,16 +157,22 @@ export async function GET(request: Request) {
     .select('category_id, status, warehouse_id');
   const items = (itemsRaw ?? []) as InventoryItemRow[];
 
-  // Aproximar batería kWh: potencia_kw en categoría se usa como kWh nominal
-  // para categorías de familia 'battery' (típico en el catálogo actual).
-  const bateriaKwhByProj = new Map<string, number>();
-  projects.forEach((p) => {
+  // kWh total de batería por proyecto:
+  //   Primero mira los campos directos del proyecto (diseno_baterias_cantidad ×
+  //   diseno_bateria_capacidad_kwh) — ese es el dato canónico.
+  //   Fallback: la categoría en catálogo (default_capacity_value × cantidad).
+  const getKwh = (p: CrmProjectRow): number => {
+    if (p.diseno_baterias_cantidad != null && p.diseno_bateria_capacidad_kwh != null) {
+      return Number(p.diseno_baterias_cantidad) * Number(p.diseno_bateria_capacidad_kwh);
+    }
     if (p.diseno_bateria_categoria_id) {
       const c = catById.get(p.diseno_bateria_categoria_id);
-      if (c?.potencia_kw != null) bateriaKwhByProj.set(p.id, Number(c.potencia_kw));
+      if (c?.default_capacity_value != null) {
+        return Number(c.default_capacity_value) * Number(p.diseno_baterias_cantidad ?? 1);
+      }
     }
-  });
-  const getKwh = (p: CrmProjectRow) => bateriaKwhByProj.get(p.id) ?? 0;
+    return 0;
+  };
   const getKwp = (p: CrmProjectRow) => Number(p.diseno_kwp ?? 0);
   const getCapexM = (p: CrmProjectRow) => (capexByProj.get(p.id) ?? 0) / MILLIONS;
 
@@ -245,7 +257,7 @@ export async function GET(request: Request) {
   const marcaGroup = new Map<string, { casas: number; kwp: number; kwh: number }>();
   instaladasSemana.forEach((p) => {
     const cat = p.diseno_bateria_categoria_id ? catById.get(p.diseno_bateria_categoria_id) : undefined;
-    const marca = cat?.marca_fabricante ?? 'Sin marca';
+    const marca = cat?.default_brand ?? 'Sin marca';
     const cur = marcaGroup.get(marca) ?? { casas: 0, kwp: 0, kwh: 0 };
     cur.casas++;
     cur.kwp += getKwp(p);
@@ -308,7 +320,7 @@ export async function GET(request: Request) {
     };
     cur.casas++;
     const cat = p.diseno_bateria_categoria_id ? catById.get(p.diseno_bateria_categoria_id) : undefined;
-    if (!cur.marca && cat?.marca_fabricante) cur.marca = cat.marca_fabricante;
+    if (!cur.marca && cat?.default_brand) cur.marca = cat.default_brand;
     distGroup.set(key, cur);
   });
 
@@ -343,8 +355,8 @@ export async function GET(request: Request) {
   const stockGroup = new Map<string, DashReport['logistica']['stock'][number]>();
   items.filter((i) => i.status === 'available').forEach((i) => {
     const cat = catById.get(i.category_id);
-    if (!cat?.marca_fabricante) return;
-    const marca = cat.marca_fabricante;
+    if (!cat?.default_brand) return;
+    const marca = cat.default_brand;
     const fam = cat.family ?? 'other';
     const cur = stockGroup.get(marca) ?? { marca, paneles: 0, inversores: 0, baterias: 0, estructuras: 0, cobertura: 0 };
     if (fam === 'panel') cur.paneles++;

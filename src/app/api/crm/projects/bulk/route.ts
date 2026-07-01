@@ -39,6 +39,12 @@ const STRING_COLS = [
   'contractor_name', 'contractor_email', 'installation_date',
   'assigned_to', 'notes',
   'tipo_red',
+  // Dash Construcción (mig 39)
+  'zona',
+  'agpe_operador_red', 'agpe_estado', 'agpe_fecha_estimada', 'agpe_fecha_aprobacion',
+  'garantia_marca', 'garantia_equipo', 'garantia_falla', 'garantia_estado', 'garantia_retorno_bodega',
+  // Operativo
+  'operativo_at',
 ] as const;
 const NUM_COLS = [
   'estrato', 'lat', 'lng', 'autosuficiencia_objetivo_pct',
@@ -47,6 +53,7 @@ const NUM_COLS = [
   'diseno_kwp', 'diseno_paneles', 'diseno_baterias_cantidad',
   'diseno_inversor_potencia_kw', 'diseno_bateria_capacidad_kwh',
   'diseno_yield_estimado_kwh_mes',
+  'lectura_inicial_kwh',
 ] as const;
 
 export async function POST(request: Request) {
@@ -88,6 +95,14 @@ export async function POST(request: Request) {
       // Aprobación automática si viene aprobador
       if (str(r.diseno_aprobado_por)) {
         payload.diseno_aprobado_at = new Date().toISOString();
+      }
+      // Si el CSV manda stage=operativo pero no operativo_at, estamparlo con
+      // installation_date (si existe) o now(). Sin esto, el Dash no cuenta la
+      // casa en el mes correcto.
+      if (rowStage === 'operativo' && !payload.operativo_at) {
+        payload.operativo_at = str(r.installation_date)
+          ? new Date(String(r.installation_date)).toISOString()
+          : new Date().toISOString();
       }
       // Limpiar nulls para que la BD aplique sus defaults
       for (const k of Object.keys(payload)) {

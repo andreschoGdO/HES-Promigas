@@ -192,10 +192,13 @@ join crm_projects p on p.house_id = h.id
 on conflict (project_id) do nothing;
 
 -- ───────────────────────────────────────────────────────
--- 5. Inventory items (installed) — VISTA DE APOYO
--- Vista temporal con la data por casa para expandir con generate_series.
+-- 5. Inventory items (installed) — TABLA DE APOYO
+-- Tabla regular (no temporary) porque Supabase SQL Editor corre cada
+-- statement en sesión distinta y las TEMP se destruyen al terminar.
+-- La dropeamos al final del script.
 -- ───────────────────────────────────────────────────────
-create temporary table _casa_inv on commit drop as
+drop table if exists _casa_inv;
+create table _casa_inv as
 with data(cliente_id, casa_slug, paneles, bat_cant, kwh_unit,
           marca_inv, marca_bat, tiene_top, fecha, costo_bms,
           -- costos unitarios de la fila:
@@ -365,6 +368,9 @@ insert into crm_project_events (project_id, event_type, to_module, to_stage, act
 select p.id, 'created', 'operations', 'operativo', 'seed-mig-40', 'Seed masivo (mig 40) — 33 casas operativas'
 from crm_projects p
 where p.created_by is null and p.notes like '%JA Solar 595w%';
+
+-- 7. Limpiar tabla auxiliar
+drop table if exists _casa_inv;
 
 commit;
 

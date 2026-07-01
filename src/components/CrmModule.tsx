@@ -1473,7 +1473,12 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
   const [saving, setSaving] = useState(false);
 
   // Cargar catálogo de categorías serializadas para los selectores de diseño
-  type CatOpt = { id: string; name: string; family: string };
+  type CatOpt = {
+    id: string; name: string; family: string;
+    default_brand: string | null;
+    default_capacity_value: number | null;
+    default_capacity_unit: string | null;
+  };
   const [cats, setCats] = useState<CatOpt[]>([]);
   useEffect(() => {
     if (!isOps) return;
@@ -1482,13 +1487,19 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
         const r = await fetch('/api/inventory/categories');
         if (!r.ok) return;
         const j = await r.json();
-        setCats(((j.categories ?? []) as Array<{ id: string; name: string; family: string; is_serialized: boolean }>)
+        setCats(((j.categories ?? []) as Array<CatOpt & { is_serialized: boolean }>)
           .filter((c) => c.is_serialized)
-          .map((c) => ({ id: c.id, name: c.name, family: c.family })));
+          .map((c) => ({
+            id: c.id, name: c.name, family: c.family,
+            default_brand: c.default_brand,
+            default_capacity_value: c.default_capacity_value,
+            default_capacity_unit: c.default_capacity_unit,
+          })));
       } catch { /* opcional */ }
     })();
   }, [isOps]);
   const catsByFamily = (fam: string) => cats.filter((c) => c.family === fam);
+  const catById = (id: string) => cats.find((c) => c.id === id);
 
   // En operaciones la card de Dimensionado requiere la ficha completa.
   // Para evitar duplicar el endpoint interno, usamos el endpoint externo
@@ -1520,6 +1531,23 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
         if (k === 'title') continue;
         if (v === '' || v === undefined || v === null) continue;
         body[k] = v;
+      }
+
+      // Derivar marca/potencia/capacidad desde las categorías elegidas
+      // (así no le pedimos al usuario datos redundantes del catálogo).
+      if (form.diseno_inversor_categoria_id) {
+        const cat = catById(form.diseno_inversor_categoria_id);
+        if (cat) {
+          if (cat.default_brand && !body.diseno_inversor_marca) body.diseno_inversor_marca = cat.default_brand;
+          if (cat.default_capacity_value && !body.diseno_inversor_potencia_kw) body.diseno_inversor_potencia_kw = cat.default_capacity_value;
+        }
+      }
+      if (form.diseno_bateria_categoria_id) {
+        const cat = catById(form.diseno_bateria_categoria_id);
+        if (cat) {
+          if (cat.default_brand && !body.diseno_bateria_marca) body.diseno_bateria_marca = cat.default_brand;
+          if (cat.default_capacity_value && !body.diseno_bateria_capacidad_kwh) body.diseno_bateria_capacidad_kwh = cat.default_capacity_value;
+        }
       }
 
       const r = await fetch('/api/crm/projects', {
@@ -1577,23 +1605,19 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
               <FormField label="Autosuficiencia objetivo (%)" type="number" value={form.autosuficiencia_objetivo_pct ?? ''} onChange={(v) => set('autosuficiencia_objetivo_pct', v)} placeholder="90" />
               <FormField label="kWp diseño" type="number" value={form.diseno_kwp ?? ''} onChange={(v) => set('diseno_kwp', v)} placeholder="6" />
               <FormField label="Paneles (cantidad)" type="number" value={form.diseno_paneles ?? ''} onChange={(v) => set('diseno_paneles', v)} placeholder="6" />
+              <FormField label="Baterías (cantidad)" type="number" value={form.diseno_baterias_cantidad ?? ''} onChange={(v) => set('diseno_baterias_cantidad', v)} placeholder="2" />
               <FormFieldSelect label="Tipo de red" value={form.tipo_red ?? ''} onChange={(v) => set('tipo_red', v)}
                 options={['monofasica', 'bifasica', 'trifasica']} />
-              <FormField label="Marca inversor" value={form.diseno_inversor_marca ?? ''} onChange={(v) => set('diseno_inversor_marca', v)} placeholder="Livoltek" />
-              <FormField label="Potencia inversor (kW)" type="number" value={form.diseno_inversor_potencia_kw ?? ''} onChange={(v) => set('diseno_inversor_potencia_kw', v)} placeholder="10" />
-              <FormField label="Baterías (cantidad)" type="number" value={form.diseno_baterias_cantidad ?? ''} onChange={(v) => set('diseno_baterias_cantidad', v)} placeholder="2" />
-              <FormField label="Marca baterías" value={form.diseno_bateria_marca ?? ''} onChange={(v) => set('diseno_bateria_marca', v)} placeholder="Livoltek BHF" />
-              <FormField label="Capacidad por batería (kWh)" type="number" value={form.diseno_bateria_capacidad_kwh ?? ''} onChange={(v) => set('diseno_bateria_capacidad_kwh', v)} placeholder="5" />
               <FormField label="Responsable" required value={form.diseno_aprobado_por ?? ''} onChange={(v) => set('diseno_aprobado_por', v)} placeholder="Santiago Andrés Osorio Huertas" />
               <FormField label="Notas del diseño" value={form.diseno_notes ?? ''} onChange={(v) => set('diseno_notes', v)} placeholder="Paneles JA Solar 595W · Inversor Livoltek 10K · Baterías Livoltek" fullWidth />
             </FormSection>
 
-            <FormSection title="Equipos del diseño (catálogo)">
+            <FormSection title="Equipos del catálogo">
               <CategoryPicker label="Modelo de inversor" value={form.diseno_inversor_categoria_id ?? ''} onChange={(v) => set('diseno_inversor_categoria_id', v)} options={catsByFamily('inverter')} />
               <CategoryPicker label="Modelo de batería"  value={form.diseno_bateria_categoria_id ?? ''} onChange={(v) => set('diseno_bateria_categoria_id', v)} options={catsByFamily('battery')} />
               <CategoryPicker label="Modelo de panel"    value={form.diseno_panel_categoria_id ?? ''}   onChange={(v) => set('diseno_panel_categoria_id', v)}   options={catsByFamily('panel')} fullWidth />
               <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Al pasar a <strong>Alistamiento</strong>, el sistema reserva automáticamente los equipos disponibles en bodega usando estos modelos del catálogo. Si dejas alguno vacío, ese tipo no se reserva.
+                La marca y la potencia/capacidad se toman de la categoría elegida — no hace falta reescribirlas. Al pasar a <strong>Alistamiento</strong>, el sistema reserva automáticamente los equipos disponibles en bodega usando estos modelos. Si el modelo que necesitás no está en la lista, agrégalo primero en <strong>/inventario</strong>.
               </p>
             </FormSection>
 

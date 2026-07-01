@@ -1,0 +1,417 @@
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import type { DashReport } from '@/lib/dash-report-data';
+
+/**
+ * GET /api/dash/report?from=YYYY-MM-DD&to=YYYY-MM-DD
+ *
+ * Arma el reporte semanal de construcción a partir de datos reales:
+ *   - crm_projects (etapa, zona, contractor_name, installation_date, diseno_*, agpe_*, garantia_*)
+ *   - facturacion_records (capex)
+ *   - inventario_items (stock por marca × family, disponible)
+ *   - app_settings (dash_meta_anual_casas, dash_standby_dias, dash_solucion_umbrales)
+ *
+ * "Stand-by" se deriva: proyectos cuyo updated_at en la etapa actual supera
+ * el umbral configurado en `dash_standby_dias`.
+ */
+
+const MILLIONS = 1_000_000;
+
+function weekBounds(fromParam: string | null, toParam: string | null) {
+  const today = new Date();
+  const to = toParam ? new Date(toParam) : today;
+  const from = fromParam
+    ? new Date(fromParam)
+    : new Date(to.getTime() - 6 * 24 * 60 * 60 * 1000);
+  return { from, to };
+}
+
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+interface CrmProjectRow {
+  id: string;
+  operations_stage: string | null;
+  current_module: string | null;
+  installation_date: string | null;
+  contractor_name: string | null;
+  zona: string | null;
+  diseno_kwp: number | null;
+  diseno_paneles: number | null;
+  diseno_bateria_categoria_id: string | null;
+  operativo_at: string | null;
+  updated_at: string | null;
+  created_at: string | null;
+  agpe_operador_red: string | null;
+  agpe_estado: string | null;
+  agpe_fecha_estimada: string | null;
+  garantia_marca: string | null;
+  garantia_equipo: string | null;
+  garantia_falla: string | null;
+  garantia_estado: string | null;
+  garantia_retorno_bodega: string | null;
+  client_name: string | null;
+  code: string | null;
+  title: string | null;
+}
+
+interface FacturaRow { project_id: string; capex: number | null; }
+
+interface CategoryRow {
+  id: string;
+  family: string | null;
+  marca_fabricante: string | null;
+  potencia_kw: number | null;
+}
+
+interface InventoryItemRow {
+  category_id: string;
+  status: string | null;
+  warehouse_id: string | null;
+}
+
+interface StandbyDias { [stage: string]: number; }
+interface Umbrales {
+  sol1_max_paneles: number;
+  sol2_max_paneles: number;
+  sol3_max_paneles: number;
+  sol4_max_paneles: number;
+}
+
+function classifySolucion(paneles: number | null, u: Umbrales): 'sol1' | 'sol2' | 'sol3' | 'sol4' | null {
+  if (paneles == null) return null;
+  if (paneles <= u.sol1_max_paneles) return 'sol1';
+  if (paneles <= u.sol2_max_paneles) return 'sol2';
+  if (paneles <= u.sol3_max_paneles) return 'sol3';
+  if (paneles <= u.sol4_max_paneles) return 'sol4';
+  return 'sol4';
+}
+
+function inRange(dateStr: string | null, from: Date, to: Date): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  return d >= from && d <= to;
+}
+
+function daysSince(dateStr: string | null): number {
+  if (!dateStr) return 0;
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / (24 * 60 * 60 * 1000));
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const { from, to } = weekBounds(url.searchParams.get('from'), url.searchParams.get('to'));
+
+  // ─── SETTINGS ───
+  const { data: settings } = await supabaseAdmin
+    .from('app_settings')
+    .select('key, value')
+    .in('key', ['dash_meta_anual_casas', 'dash_standby_dias', 'dash_solucion_umbrales']);
+  const sMap = new Map((settings ?? []).map((s: { key: string; value: Record<string, unknown> }) => [s.key, s.value]));
+  const metaAnual = Number((sMap.get('dash_meta_anual_casas') as { value?: number })?.value ?? 230);
+  const standbyDias = (sMap.get('dash_standby_dias') as StandbyDias) ?? {
+    dimensionado: 14, alistamiento: 10, instalacion: 7, legalizacion: 21, logistica_inversa: 30,
+  };
+  const umbrales = (sMap.get('dash_solucion_umbrales') as Umbrales) ?? {
+    sol1_max_paneles: 5, sol2_max_paneles: 10, sol3_max_paneles: 16, sol4_max_paneles: 19,
+  };
+
+  // ─── PROYECTOS ───
+  const { data: projRaw, error: projErr } = await supabaseAdmin
+    .from('crm_projects')
+    .select(`
+      id, operations_stage, current_module, installation_date, contractor_name, zona,
+      diseno_kwp, diseno_paneles, diseno_bateria_categoria_id,
+      operativo_at, updated_at, created_at,
+      agpe_operador_red, agpe_estado, agpe_fecha_estimada,
+      garantia_marca, garantia_equipo, garantia_falla, garantia_estado, garantia_retorno_bodega,
+      client_name, code, title
+    `);
+  if (projErr) return NextResponse.json({ error: projErr.message }, { status: 500 });
+  const projects = (projRaw ?? []) as CrmProjectRow[];
+
+  // ─── CAPEX (facturación) ───
+  const { data: factRaw } = await supabaseAdmin
+    .from('facturacion_records')
+    .select('project_id, capex');
+  const capexByProj = new Map<string, number>();
+  ((factRaw ?? []) as FacturaRow[]).forEach((f) => {
+    if (f.capex != null) capexByProj.set(f.project_id, Number(f.capex));
+  });
+
+  // ─── CATEGORÍAS + INVENTARIO ───
+  const { data: catsRaw } = await supabaseAdmin
+    .from('inventory_categories')
+    .select('id, family, marca_fabricante, potencia_kw');
+  const cats = (catsRaw ?? []) as CategoryRow[];
+  const catById = new Map(cats.map((c) => [c.id, c]));
+
+  const { data: itemsRaw } = await supabaseAdmin
+    .from('inventory_items')
+    .select('category_id, status, warehouse_id');
+  const items = (itemsRaw ?? []) as InventoryItemRow[];
+
+  // Aproximar batería kWh: potencia_kw en categoría se usa como kWh nominal
+  // para categorías de familia 'battery' (típico en el catálogo actual).
+  const bateriaKwhByProj = new Map<string, number>();
+  projects.forEach((p) => {
+    if (p.diseno_bateria_categoria_id) {
+      const c = catById.get(p.diseno_bateria_categoria_id);
+      if (c?.potencia_kw != null) bateriaKwhByProj.set(p.id, Number(c.potencia_kw));
+    }
+  });
+  const getKwh = (p: CrmProjectRow) => bateriaKwhByProj.get(p.id) ?? 0;
+  const getKwp = (p: CrmProjectRow) => Number(p.diseno_kwp ?? 0);
+  const getCapexM = (p: CrmProjectRow) => (capexByProj.get(p.id) ?? 0) / MILLIONS;
+
+  const INSTALADAS = new Set(['operativo', 'logistica_inversa', 'legalizacion']);
+  const CERRADAS_OK = new Set(['sin_renovacion']);
+
+  const casasInstaladas = projects.filter((p) => INSTALADAS.has(p.operations_stage ?? '') || CERRADAS_OK.has(p.operations_stage ?? ''));
+
+  // ─── SLIDE 2: AVANCE GLOBAL ───
+  const casasAcum = casasInstaladas.length;
+  const kwpAcum = casasInstaladas.reduce((s, p) => s + getKwp(p), 0);
+  const kwhAcum = casasInstaladas.reduce((s, p) => s + getKwh(p), 0);
+  const capexAcumM = casasInstaladas.reduce((s, p) => s + getCapexM(p), 0);
+
+  // Serie por mes (últimos 6 meses)
+  const now = new Date();
+  const monthsBack = 6;
+  const monthLabels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const porMes: DashReport['global']['porMes'] = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const nextD = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+    const monthProjects = casasInstaladas.filter((p) => {
+      const ref = p.operativo_at ?? p.installation_date ?? p.updated_at;
+      if (!ref) return false;
+      const r = new Date(ref);
+      return r >= d && r < nextD;
+    });
+    const bucket = { sol1: 0, sol2: 0, sol3: 0, sol4: 0 };
+    monthProjects.forEach((p) => {
+      const cls = classifySolucion(p.diseno_paneles, umbrales);
+      if (cls) bucket[cls]++;
+    });
+    porMes.push({
+      mes: monthLabels[d.getMonth()],
+      casas: monthProjects.length,
+      kwp: monthProjects.reduce((s, p) => s + getKwp(p), 0),
+      kwh: monthProjects.reduce((s, p) => s + getKwh(p), 0),
+      capexM: monthProjects.reduce((s, p) => s + getCapexM(p), 0),
+      ...bucket,
+    });
+  }
+  const mesesActivos = porMes.filter((m) => m.casas > 0).length;
+
+  // ─── SLIDE 3: AVANCE SEMANAL ───
+  const instaladasSemana = casasInstaladas.filter((p) => inRange(p.operativo_at ?? p.installation_date, from, to));
+  const programadasSemana = projects.filter((p) =>
+    (p.operations_stage === 'instalacion' || p.operations_stage === 'alistamiento') &&
+    inRange(p.installation_date, from, to),
+  );
+
+  // Stand-by: proyectos con updated_at más viejo que el umbral para su etapa
+  const standByProjects = projects.filter((p) => {
+    const stage = p.operations_stage ?? '';
+    const threshold = standbyDias[stage];
+    if (!threshold) return false;
+    return daysSince(p.updated_at) > threshold;
+  });
+
+  // Agrupar stand-by por etapa para mostrar motivos
+  const standByByStage = new Map<string, number>();
+  standByProjects.forEach((p) => {
+    const s = p.operations_stage ?? 'desconocida';
+    standByByStage.set(s, (standByByStage.get(s) ?? 0) + 1);
+  });
+  const motivos: DashReport['semana']['motivos'] = Array.from(standByByStage.entries()).map(([stage, casas]) => ({
+    motivo: `Estancado en ${stage}`,
+    casas,
+    accion: `Revisar proyectos con > ${standbyDias[stage] ?? '?'} días sin avance`,
+  }));
+
+  const porIniciar = projects.filter((p) => {
+    if (p.operations_stage !== 'alistamiento') return false;
+    if (!p.installation_date) return false;
+    const d = new Date(p.installation_date);
+    const nextWeekStart = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+    const nextWeekEnd = new Date(to.getTime() + 8 * 24 * 60 * 60 * 1000);
+    return d >= nextWeekStart && d <= nextWeekEnd;
+  }).length;
+
+  // ─── SLIDE 4: DETALLE POR MARCA, ZONA, CONSTRUCTOR ───
+  const marcaGroup = new Map<string, { casas: number; kwp: number; kwh: number }>();
+  instaladasSemana.forEach((p) => {
+    const cat = p.diseno_bateria_categoria_id ? catById.get(p.diseno_bateria_categoria_id) : undefined;
+    const marca = cat?.marca_fabricante ?? 'Sin marca';
+    const cur = marcaGroup.get(marca) ?? { casas: 0, kwp: 0, kwh: 0 };
+    cur.casas++;
+    cur.kwp += getKwp(p);
+    cur.kwh += getKwh(p);
+    marcaGroup.set(marca, cur);
+  });
+  const marcas = Array.from(marcaGroup.entries())
+    .map(([marca, v]) => ({ marca, casas: v.casas, kwp: v.kwp, kwh: v.kwh }))
+    .sort((a, b) => b.casas - a.casas);
+
+  const zonaGroup = new Map<string, { casas: number; capex: number }>();
+  instaladasSemana.forEach((p) => {
+    const z = p.zona ?? 'Sin zona';
+    const cur = zonaGroup.get(z) ?? { casas: 0, capex: 0 };
+    cur.casas++;
+    cur.capex += (capexByProj.get(p.id) ?? 0);
+    zonaGroup.set(z, cur);
+  });
+  const zonas = Array.from(zonaGroup.entries()).map(([zona, v]) => ({
+    zona, casas: v.casas, capex: `$${Math.round(v.capex / MILLIONS)}M`,
+  }));
+
+  const contGroup = new Map<string, { asignadas: number; instaladas: number }>();
+  projects.forEach((p) => {
+    if (!p.contractor_name) return;
+    if (!(p.operations_stage === 'instalacion' || p.operations_stage === 'alistamiento' || INSTALADAS.has(p.operations_stage ?? ''))) return;
+    if (!inRange(p.installation_date, from, to)) return;
+    const cur = contGroup.get(p.contractor_name) ?? { asignadas: 0, instaladas: 0 };
+    cur.asignadas++;
+    if (INSTALADAS.has(p.operations_stage ?? '')) cur.instaladas++;
+    contGroup.set(p.contractor_name, cur);
+  });
+  const constructores = Array.from(contGroup.entries()).map(([constructor, v]) => ({
+    constructor, asignadas: v.asignadas, instaladas: v.instaladas,
+  }));
+
+  // ─── SLIDE 5: PLANEACIÓN (próxima semana) ───
+  const nextFrom = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+  const nextTo = new Date(to.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const proximaSemana = projects.filter((p) =>
+    (p.operations_stage === 'alistamiento' || p.operations_stage === 'instalacion') &&
+    inRange(p.installation_date, nextFrom, nextTo),
+  );
+  const kwpPlan = proximaSemana.reduce((s, p) => s + getKwp(p), 0);
+  const kwhPlan = proximaSemana.reduce((s, p) => s + getKwh(p), 0);
+  const capexPlanM = proximaSemana.reduce((s, p) => s + getCapexM(p), 0);
+
+  const constructoresProxSet = new Set(proximaSemana.map((p) => p.contractor_name).filter(Boolean) as string[]);
+  const zonasProxSet = new Set(proximaSemana.map((p) => p.zona).filter(Boolean) as string[]);
+
+  const distGroup = new Map<string, DashReport['planeacion']['distribucion'][number]>();
+  proximaSemana.forEach((p) => {
+    const key = `${p.zona ?? '?'}|${p.contractor_name ?? '?'}`;
+    const cur = distGroup.get(key) ?? {
+      zona: p.zona ?? 'Sin zona',
+      constructor: p.contractor_name ?? 'Sin asignar',
+      casas: 0,
+      marca: '',
+      fecha: p.installation_date ?? '[DD/MM]',
+    };
+    cur.casas++;
+    const cat = p.diseno_bateria_categoria_id ? catById.get(p.diseno_bateria_categoria_id) : undefined;
+    if (!cur.marca && cat?.marca_fabricante) cur.marca = cat.marca_fabricante;
+    distGroup.set(key, cur);
+  });
+
+  // ─── SLIDE 6: LEGALIZACIONES ───
+  const legalizProjects = projects.filter((p) => p.operations_stage === 'legalizacion' || p.agpe_estado);
+  const aprobadas = legalizProjects.filter((p) => p.agpe_estado === 'Aprobado').length;
+  const enRevision = legalizProjects.filter((p) => p.agpe_estado === 'En revisión' || p.agpe_estado === 'Radicado').length;
+  const legalDetalle = legalizProjects.slice(0, 20).map((p) => ({
+    casa: p.client_name ?? p.code ?? p.title ?? p.id.slice(0, 8),
+    zona: p.zona ?? '—',
+    operador: p.agpe_operador_red ?? '—',
+    estado: p.agpe_estado ?? '—',
+    fecha: p.agpe_fecha_estimada ?? '—',
+  }));
+
+  // ─── SLIDE 7: POSTVENTA ───
+  const postProjects = projects.filter((p) => p.operations_stage === 'logistica_inversa' || p.garantia_estado);
+  const abiertos = postProjects.filter((p) =>
+    p.garantia_estado && !['Resuelto en sitio', 'Cerrado'].includes(p.garantia_estado)).length;
+  const enTransito = postProjects.filter((p) =>
+    p.garantia_estado === 'Reemplazo aprobado' || (p.garantia_retorno_bodega && new Date(p.garantia_retorno_bodega) >= new Date())).length;
+  const resueltosSitio = postProjects.filter((p) => p.garantia_estado === 'Resuelto en sitio').length;
+  const postDetalle = postProjects.slice(0, 20).map((p) => ({
+    marca: p.garantia_marca ?? '—',
+    equipo: p.garantia_equipo ?? '—',
+    falla: p.garantia_falla ?? '—',
+    estado: p.garantia_estado ?? '—',
+    retorno: p.garantia_retorno_bodega ?? 'No aplica',
+  }));
+
+  // ─── SLIDE 8: LOGÍSTICA (inventario disponible por marca × family) ───
+  const stockGroup = new Map<string, DashReport['logistica']['stock'][number]>();
+  items.filter((i) => i.status === 'available').forEach((i) => {
+    const cat = catById.get(i.category_id);
+    if (!cat?.marca_fabricante) return;
+    const marca = cat.marca_fabricante;
+    const fam = cat.family ?? 'other';
+    const cur = stockGroup.get(marca) ?? { marca, paneles: 0, inversores: 0, baterias: 0, estructuras: 0, cobertura: 0 };
+    if (fam === 'panel') cur.paneles++;
+    else if (fam === 'inverter') cur.inversores++;
+    else if (fam === 'battery') cur.baterias++;
+    else if (fam === 'structure' || fam === 'estructura') cur.estructuras++;
+    stockGroup.set(marca, cur);
+  });
+  // Cobertura estimada = paneles / consumo semanal promedio
+  const consumoSemanal = Math.max(instaladasSemana.length, 1);
+  const stock = Array.from(stockGroup.values()).map((s) => ({
+    ...s,
+    cobertura: Math.round((s.paneles + s.inversores + s.baterias) / (consumoSemanal * 5)),
+  }));
+
+  const alertas: DashReport['logistica']['alertas'] = stock.map((s) => {
+    const total = s.paneles + s.inversores + s.baterias + s.estructuras;
+    let nivel: 'Bajo' | 'Medio' | 'Adecuado' = 'Adecuado';
+    if (total < 10) nivel = 'Bajo';
+    else if (total < 30) nivel = 'Medio';
+    return { componente: `Equipos ${s.marca}`, nivel };
+  });
+
+  const report: DashReport = {
+    periodo: {
+      desde: iso(from).slice(5).replace('-', '/'),
+      hasta: iso(to).slice(5).replace('-', '/'),
+      anio: String(to.getFullYear()),
+    },
+    global: {
+      casasAcum, kwpAcum, kwhAcum, capexAcumM,
+      avancePct: metaAnual > 0 ? Math.round((casasAcum / metaAnual) * 100) : 0,
+      metaCasas: metaAnual,
+      mesesActivos,
+      porMes,
+    },
+    semana: {
+      casasInstaladas: instaladasSemana.length,
+      programadas: programadasSemana.length,
+      standBy: standByProjects.length,
+      porIniciar,
+      kwpSemana: instaladasSemana.reduce((s, p) => s + getKwp(p), 0),
+      kwhSemana: instaladasSemana.reduce((s, p) => s + getKwh(p), 0),
+      capexSemanaM: instaladasSemana.reduce((s, p) => s + getCapexM(p), 0),
+      motivos,
+    },
+    detalle: { marcas, zonas, constructores },
+    planeacion: {
+      casasAsignadas: proximaSemana.length,
+      kwpPlan, kwhPlan, capexPlanM,
+      constructoresActivos: constructoresProxSet.size,
+      constructoresLista: Array.from(constructoresProxSet).join(' · ') || '—',
+      zonasActivas: zonasProxSet.size,
+      zonasLista: Array.from(zonasProxSet).join(' · ') || '—',
+      distribucion: Array.from(distGroup.values()),
+    },
+    legalizaciones: {
+      tramite: legalizProjects.length,
+      aprobadas,
+      enRevision,
+      detalle: legalDetalle,
+    },
+    postventa: {
+      abiertos, enTransito, resueltosSitio,
+      detalle: postDetalle,
+    },
+    logistica: { stock, alertas },
+  };
+
+  return NextResponse.json(report);
+}

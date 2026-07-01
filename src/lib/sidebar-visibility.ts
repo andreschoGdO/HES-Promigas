@@ -17,6 +17,7 @@
 
 export interface SidebarVisibility {
   dashboard?: boolean;
+  dash?: boolean;
   operaciones?: boolean;
   visitas?: boolean;
   inventario?: boolean;
@@ -37,6 +38,7 @@ export const ALWAYS_VISIBLE_IDS: ReadonlySet<string> = new Set();
 /** Catálogo completo de items que se pueden mostrar/ocultar */
 export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: string; group: 'general' | 'sistema' }> = [
   { id: 'dashboard',     label: 'Head End System',         group: 'general' },
+  { id: 'dash',          label: 'Dash · Construcción',     group: 'general' },
   { id: 'operaciones',   label: 'Construcción',            group: 'general' },
   { id: 'visitas',       label: 'Visitas en Campo',        group: 'general' },
   { id: 'inventario',    label: 'Inventario',              group: 'general' },

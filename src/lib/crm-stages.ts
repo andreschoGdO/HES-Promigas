@@ -12,6 +12,7 @@ export type OperationsStage =
   | 'dimensionado'
   | 'alistamiento'
   | 'instalacion'
+  | 'legalizacion'
   | 'operativo'
   | 'logistica_inversa'
   | 'desistido'
@@ -31,7 +32,8 @@ export const OPERATIONS_STAGES: StageMeta[] = [
   { key: 'dimensionado',     label: '1. Dimensionado',     shortLabel: 'Dimensionado',     color: '#94a3b8', description: 'Card con cliente, conjunto, dirección, dimensionamiento (paneles, inversor, batería) y responsable.' },
   { key: 'alistamiento',     label: '2. Alistamiento',     shortLabel: 'Alistamiento',     color: '#3b82f6', description: 'Reservar equipos en inventario con los SKUs del diseño y verificar disponibilidad física antes de despachar.' },
   { key: 'instalacion',      label: '3. Instalación',      shortLabel: 'Instalación',      color: '#8b5cf6', description: 'Contratista seleccionado, instalación en curso. Visita de instalación enlazada en /visitas.' },
-  { key: 'operativo',        label: '4. Operativo',        shortLabel: 'Operativo',        color: '#10b981', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum.' },
+  { key: 'legalizacion',     label: '4. Legalización',     shortLabel: 'Legalización',     color: '#0ea5e9', description: 'Trámite AGPE ante el operador de red para habilitar la venta de excedentes de energía.' },
+  { key: 'operativo',        label: '5. Operativo',        shortLabel: 'Operativo',        color: '#10b981', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum.' },
   { key: 'logistica_inversa',label: '5. Logística inversa', shortLabel: 'Garantía / cambio', color: '#ec4899', description: 'Reparación, garantía, cambio de equipos. El sistema sigue operativo pero hay tickets de servicio abiertos.' },
   { key: 'desistido',        label: '6. Desistido',        shortLabel: 'Desistido',        color: '#f97316', description: 'Cliente desistió del proyecto antes o durante. Equipos se recuperan a bodega.' },
   { key: 'sin_renovacion',   label: '7. Sin renovación',   shortLabel: 'No renovado',      color: '#64748b', description: 'Fin del contrato — cliente no renueva. Equipos se retiran y se devuelven a bodega para reuso.' },
@@ -100,14 +102,39 @@ export const TRANSITIONS: TransitionDef[] = [
     ],
   },
   {
-    action: 'operations_to_operativo',
+    action: 'operations_to_legalizacion',
+    label: 'Iniciar legalización (AGPE)',
+    buttonLabel: 'Legalizar →',
+    fromModule: 'operations', fromStage: 'instalacion', toModule: 'operations', toStage: 'legalizacion',
+    requiredFields: [
+      f('agpe_operador_red', 'Operador de red', 'select', true, { options: ['EPSA', 'EMCALI', 'AIR-E', 'AFINIA', 'ENEL', 'ELECTRICARIBE', 'Otro'] }),
+      f('agpe_estado', 'Estado del trámite', 'select', true, { options: ['Radicado', 'En revisión'] }),
+      f('agpe_fecha_estimada', 'Fecha estimada de aprobación', 'date', false),
+    ],
+    noteTemplate: 'Iniciado trámite AGPE.',
+  },
+  {
+    action: 'legalizacion_to_operativo',
     label: 'Marcar operativo',
     buttonLabel: 'Sistema generando →',
-    fromModule: 'operations', fromStage: 'instalacion', toModule: 'operations', toStage: 'operativo',
+    fromModule: 'operations', fromStage: 'legalizacion', toModule: 'operations', toStage: 'operativo',
     requiredFields: [
+      f('agpe_fecha_aprobacion', 'Fecha de aprobación AGPE', 'date'),
       f('lectura_inicial_kwh', 'Lectura inicial (kWh)', 'number'),
       f('visita_instalacion_id', 'ID visita instalación', 'text', false, { help: 'UUID del acta de instalación en /visitas.' }),
     ],
+    noteTemplate: 'AGPE aprobado. Sistema operativo.',
+  },
+  {
+    action: 'operations_to_operativo_directo',
+    label: 'Marcar operativo (sin AGPE)',
+    buttonLabel: 'Operativo directo →',
+    fromModule: 'operations', fromStage: 'instalacion', toModule: 'operations', toStage: 'operativo',
+    requiredFields: [
+      f('lectura_inicial_kwh', 'Lectura inicial (kWh)', 'number'),
+      f('visita_instalacion_id', 'ID visita instalación', 'text', false),
+    ],
+    noteTemplate: 'Operativo sin trámite AGPE (autoconsumo).',
   },
   // ─── NUEVAS ETAPAS POST-OPERATIVO ───
   // Nota: la transición Operativo → Cerrado se eliminó por diseño. Los

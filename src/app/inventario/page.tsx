@@ -3827,7 +3827,7 @@ const KIT_DEFS: KitDef[] = [
 
 // % de prioridad por tipo, por ciudad (bodega)
 const PRIORITY_BY_CITY: Record<string, { 2: number; 3: number; 4: number }> = {
-  'Cali':         { 2: 0.60, 3: 0.25, 4: 0.15 },
+  'Cali':         { 2: 0.60, 3: 0.35, 4: 0.05 },
   'Barranquilla': { 2: 0.15, 3: 0.425, 4: 0.425 },
   'Cartagena':    { 2: 0.15, 3: 0.425, 4: 0.425 },
 };
@@ -4042,7 +4042,7 @@ function KitsTab() {
           <strong> sin reutilizar equipos</strong>.
         </p>
         <ul style={{ margin: '10px 0 0', paddingLeft: 20, fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          <li>Cali prioriza <strong>Tipo 2</strong> (60% / 25% / 15%). Barranquilla y Cartagena priorizan <strong>Tipo 3 y 4</strong> (15% / 42.5% / 42.5%).</li>
+          <li>Cali prioriza <strong>Tipo 2</strong> (60% / 35% / 5%). Barranquilla y Cartagena priorizan <strong>Tipo 3 y 4</strong> (15% / 42.5% / 42.5%).</li>
           <li>Solo las soluciones <strong>Livoltek</strong> se pueden poner Top Cover para hacer paralelo con baterías, y solo en <strong>Tipo 4</strong>.</li>
           <li>Cada kit lleva: <strong>1 Inversor + 1 BMS + Baterías según categoría</strong>.</li>
         </ul>

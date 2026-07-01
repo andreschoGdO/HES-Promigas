@@ -3927,21 +3927,15 @@ function computeKits(city: string, warehouseName: string, initialStock: KitStock
     }
   }
 
-  // FASE 2 — Aprovechamiento final: si sobró stock y algún tipo con prio 0
-  // (o si el round-robin no logró terminar), armar lo que aún quepa.
-  // El orden respeta la prioridad de la ciudad.
-  const tiposOrdenados: Array<2 | 3 | 4> = ([2, 3, 4] as const)
-    .slice()
-    .sort((a, b) => prio[b] - prio[a]);
-  let progresoExtra = true;
-  while (progresoExtra) {
-    progresoExtra = false;
-    for (const tipo of tiposOrdenados) {
-      if (attempt(tipo)) {
-        progresoExtra = true;
-      }
-    }
-  }
+  // FASE 2 (deshabilitada): antes se aprovechaba el stock sobrante armando
+  // todo lo que aún cupiera, pero eso distorsionaba el ratio pedido — en Cali
+  // sobran ~10 Livoltek 15k y la fase 2 los volcaba a T4, subiendo su % a 50%+
+  // aunque el target era 5%.
+  //
+  // Ahora el algoritmo respeta ESTRICTAMENTE el ratio de la ciudad, aunque
+  // queden equipos sin asignar. Los equipos "sobrantes" siguen contando como
+  // stock disponible en la tabla de detalle (columna 'Restante') para que
+  // operaciones sepa cuánto queda.
 
   let totalKits = 0;
   for (const kit of KIT_DEFS) totalKits += kitsBuilt[kit.id] ?? 0;
@@ -4056,11 +4050,10 @@ function KitsTab() {
             ¿CÓMO SE ASIGNAN LOS KITS?
           </div>
           <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            <li><strong>Capacidad teórica.</strong> Por cada receta de kit (K2A, K2B, K3A…) se calcula cuántas unidades se podrían armar con el stock actual, ignorando conflictos entre kits. La suma da la capacidad máxima de la bodega.</li>
-            <li><strong>Presupuesto por tipo.</strong> Esa capacidad se reparte según el % de la ciudad. Ej: si en Cali caben 100 kits teóricos, el algoritmo intentará armar 60 de Tipo 2, 35 de Tipo 3 y 5 de Tipo 4.</li>
-            <li><strong>Asignación round-robin.</strong> Dentro de cada tipo, se rota entre sus sub-kits (K2A → K2B → K2C → K2A…) armando uno a la vez y descontando componentes del stock. Los <strong>equipos no se reutilizan</strong> — un panel usado en K2A ya no está disponible para K3B.</li>
-            <li><strong>Rebalse.</strong> Si un tipo agota su presupuesto antes de terminar (por falta de un componente clave), el excedente pasa al siguiente tipo en la lista.</li>
-            <li><strong>Aprovechamiento final.</strong> Al final se hace una pasada extra que arma lo que aún quepa con el stock sobrante, sin importar el %. Así no se desperdician equipos que por prioridad quedaron sin usarse.</li>
+            <li><strong>Ratio como brújula.</strong> En cada iteración se calcula qué tipo está más lejos de su target (ej: si el target es 60% para T2 pero llevas 40%, tiene un déficit alto). El algoritmo elige el tipo con mayor déficit.</li>
+            <li><strong>Round-robin dentro del tipo.</strong> Dentro del tipo elegido rota entre sus sub-kits (K2A → K2B → K2C → K2A…) armando el que menos veces se haya construido. Descuenta los componentes del stock. Los <strong>equipos no se reutilizan</strong>.</li>
+            <li><strong>Fallback si no hay stock.</strong> Si el tipo con más déficit no puede armar ningún kit (falta un inversor, batería o BMS), prueba con el siguiente tipo con déficit. Nunca se estanca mientras haya algún kit viable.</li>
+            <li><strong>Fin cuando ningún tipo puede armar.</strong> El algoritmo respeta <strong>estrictamente el % de la ciudad</strong>. Si tras terminar sobra stock (ej: 10 Livoltek 15k sin usar), se queda en stock — se ve en la columna "Restante" del detalle. No se fuerza a armar T4 solo para gastar equipos.</li>
           </ol>
         </div>
       </div>

@@ -2003,6 +2003,10 @@ const CSV_HEADERS_OPCIONALES = [
   'propuesta_kwp', 'propuesta_valor_cop', 'propuesta_url', 'contrato_url', 'oferta_url',
   'diseno_yield_estimado_kwh_mes', 'diseno_notes',
   'contractor_name', 'contractor_email', 'installation_date',
+  'lectura_inicial_kwh', 'operativo_at',
+  'zona',
+  'agpe_operador_red', 'agpe_estado', 'agpe_fecha_estimada', 'agpe_fecha_aprobacion',
+  'garantia_marca', 'garantia_equipo', 'garantia_falla', 'garantia_estado', 'garantia_retorno_bodega',
   'assigned_to', 'notes', 'stage',
 ] as const;
 

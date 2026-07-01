@@ -124,7 +124,7 @@ export function Sidebar() {
 
   const navItemsAll = [
     { id: 'dashboard',   label: 'Head End System', path: '/dashboard', icon: BarChart3 },
-    { id: 'dash',        label: 'Dash', path: '/dash', icon: LayoutDashboard },
+    { id: 'dash',        label: 'Dash Construcción', path: '/dash', icon: LayoutDashboard },
     { id: 'operaciones', label: 'Construcción', path: '/operaciones', icon: HardHat },
     { id: 'visitas',     label: 'Visitas en Campo', path: '/visitas', icon: ClipboardCheck },
     { id: 'inventario',  label: 'Inventario', path: '/inventario', icon: Package },

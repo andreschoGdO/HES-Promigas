@@ -8,7 +8,7 @@ import { createBrowserClient } from '@supabase/ssr';
 const TITLES: Record<string, string> = {
   '/': 'Head End System',
   '/dashboard': 'Head End System',
-  '/operaciones': 'Operaciones',
+  '/operaciones': 'Construcción',
   '/reportes': 'Reportes',
   '/configuracion': 'Configuración',
   '/usuarios': 'Usuarios',

@@ -38,7 +38,7 @@ export const OPERATIONS_STAGES: StageMeta[] = [
 ];
 
 export const MODULE_META: Record<CrmModule, { label: string; color: string; href: string }> = {
-  operations: { label: 'Operaciones', color: '#f59e0b', href: '/operaciones' },
+  operations: { label: 'Construcción', color: '#f59e0b', href: '/operaciones' },
   closed:     { label: 'Cerrado',     color: '#10b981', href: '/' },
 };
 

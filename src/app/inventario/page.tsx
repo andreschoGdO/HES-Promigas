@@ -130,12 +130,12 @@ function ItemDestination({ item }: { item: InvItem }) {
 }
 
 const FAMILY_ICONS: Record<string, typeof Cpu> = {
-  inverter: Cpu, battery: Battery, panel: Sun, gateway: Cpu, meter: Cpu, cable: Cable, breaker: Cable, tool: Package, other: Package,
+  inverter: Cpu, battery: Battery, bms: Cpu, panel: Sun, gateway: Cpu, meter: Cpu, cable: Cable, breaker: Cable, tool: Package, other: Package,
   mano_obra: Wrench, desmantelamiento: Wrench, puesta_en_marcha: Wrench, servicio: Wrench,
 };
 
 const FAMILY_LABELS: Record<string, string> = {
-  inverter: 'Inversores', battery: 'Baterías', panel: 'Paneles', gateway: 'Gateways',
+  inverter: 'Inversores', battery: 'Baterías', bms: 'BMS / Control Box', panel: 'Paneles', gateway: 'Gateways',
   meter: 'Medidores', cable: 'Cableado', breaker: 'Breakers', tool: 'Herramientas', other: 'Otros',
   mano_obra: 'Mano de obra', desmantelamiento: 'Desmantelamiento', puesta_en_marcha: 'Puesta en marcha', servicio: 'Servicios',
 };
@@ -290,6 +290,11 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
   const [items, setItems] = useState<InvItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterWarehouse, setFilterWarehouse] = useState<string>('all');
+  const [filterWarranty, setFilterWarranty] = useState<string>('all');
+  const [filterCategories, setFilterCategories] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [filterWarehouses, setFilterWarehouses] = useState<Array<{ id: string; name: string }>>([]);
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
@@ -312,13 +317,22 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
     setLoading(true);
     const params = new URLSearchParams({ limit: '500' });
     if (filterStatus !== 'all') params.set('status', filterStatus);
+    if (filterCategory !== 'all') params.set('category', filterCategory);
+    if (filterWarehouse !== 'all') params.set('warehouse', filterWarehouse);
+    if (filterWarranty !== 'all') params.set('warranty', filterWarranty);
     if (search) params.set('q', search);
     const r = await fetch(`/api/inventory/items?${params}`);
     const j = await r.json();
     setItems(j.items ?? []);
     setLoading(false);
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterStatus, search]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterStatus, filterCategory, filterWarehouse, filterWarranty, search]);
+
+  // Cargar catálogos de categorías y bodegas para los dropdowns (una sola vez)
+  useEffect(() => {
+    fetch('/api/inventory/categories').then((r) => r.json()).then((j) => setFilterCategories(j.categories ?? []));
+    fetch('/api/inventory/warehouses?active=true').then((r) => r.json()).then((j) => setFilterWarehouses(j.warehouses ?? []));
+  }, []);
 
   const removeItem = async (id: string) => {
     if (!confirm('¿Eliminar este equipo del inventario? Esta acción no se puede deshacer.')) return;
@@ -339,6 +353,33 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
               style={{ width: '100%', paddingLeft: 32 }} />
           </div>
         </div>
+        {/* Filtros dropdown: Categoría · Bodega · Garantía */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Categoría</div>
+            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} style={{ width: '100%' }}>
+              <option value="all">Todas</option>
+              {filterCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Bodega</div>
+            <select value={filterWarehouse} onChange={(e) => setFilterWarehouse(e.target.value)} style={{ width: '100%' }}>
+              <option value="all">Todas</option>
+              {filterWarehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Garantía</div>
+            <select value={filterWarranty} onChange={(e) => setFilterWarranty(e.target.value)} style={{ width: '100%' }}>
+              <option value="all">Todas</option>
+              <option value="active">Activa (&gt; 30 días)</option>
+              <option value="expiring">Por vencer (&lt; 30 días)</option>
+              <option value="expired">Vencida</option>
+            </select>
+          </div>
+        </div>
+
         <div style={{ fontSize: '0.74rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Filtrar por estado</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <button className={`chip ${filterStatus === 'all' ? 'active' : ''}`} onClick={() => setFilterStatus('all')}>Todos</button>
@@ -348,10 +389,19 @@ function EquiposTab({ userEmail }: { userEmail: string }) {
             </button>
           ))}
         </div>
+
         {!loading && items.length > 0 && (
-          <div style={{ marginTop: 10, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            Mostrando <strong style={{ color: 'var(--text-primary)' }}>{items.length}</strong> equipo{items.length === 1 ? '' : 's'}
-            {(filterStatus !== 'all' || search) && ' (con filtros aplicados)'}
+          <div style={{ marginTop: 10, fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>Mostrando <strong style={{ color: 'var(--text-primary)' }}>{items.length}</strong> equipo{items.length === 1 ? '' : 's'}</span>
+            {(filterStatus !== 'all' || filterCategory !== 'all' || filterWarehouse !== 'all' || filterWarranty !== 'all' || search) && (
+              <button
+                onClick={() => { setFilterStatus('all'); setFilterCategory('all'); setFilterWarehouse('all'); setFilterWarranty('all'); setSearch(''); }}
+                className="chip"
+                style={{ fontSize: '0.72rem', padding: '2px 8px' }}
+              >
+                Limpiar filtros
+              </button>
+            )}
           </div>
         )}
       </div>

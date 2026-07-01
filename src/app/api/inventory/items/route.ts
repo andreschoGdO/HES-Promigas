@@ -12,11 +12,16 @@ export async function GET(request: Request) {
   const house = url.searchParams.get('house');
   const serial = url.searchParams.get('serial');
   const q = url.searchParams.get('q');
+  const warehouse = url.searchParams.get('warehouse');
+  const warranty = url.searchParams.get('warranty'); // 'active' | 'expiring' | 'expired'
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 500), 2000);
 
   // Intentar con warehouses join (requiere migration 27). Si falla, fallback.
   const SELECT_WITH_WH = '*, inventory_categories(code, name, family), client_houses(casa), inventory_reservation_items(inventory_reservations(id, title, status)), warehouses(id, code, name)';
   const SELECT_LEGACY  = '*, inventory_categories(code, name, family), client_houses(casa), inventory_reservation_items(inventory_reservations(id, title, status))';
+
+  const today = new Date().toISOString().slice(0, 10);
+  const in30d = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
   const buildQuery = (selectStr: string) => {
     let q2 = supabaseAdmin
@@ -25,7 +30,11 @@ export async function GET(request: Request) {
     if (status) q2 = q2.eq('status', status);
     if (category) q2 = q2.eq('category_id', category);
     if (house) q2 = q2.eq('current_house_id', house);
+    if (warehouse) q2 = q2.eq('warehouse_id', warehouse);
     if (serial) q2 = q2.eq('serial_number', serial);
+    if (warranty === 'expired')  q2 = q2.lt('warranty_expires_at', today);
+    if (warranty === 'expiring') q2 = q2.gte('warranty_expires_at', today).lte('warranty_expires_at', in30d);
+    if (warranty === 'active')   q2 = q2.gt('warranty_expires_at', in30d);
     if (q) q2 = q2.or(`serial_number.ilike.%${q}%,brand.ilike.%${q}%,model.ilike.%${q}%,supplier.ilike.%${q}%`);
     return q2;
   };

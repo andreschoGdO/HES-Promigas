@@ -4046,6 +4046,18 @@ function KitsTab() {
           <li>Solo las soluciones <strong>Livoltek</strong> se pueden poner Top Cover para hacer paralelo con baterías, y solo en <strong>Tipo 4</strong>.</li>
           <li>Cada kit lleva: <strong>1 Inversor + 1 BMS + Baterías según categoría</strong>.</li>
         </ul>
+        <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, borderLeft: '3px solid var(--accent)' }}>
+          <div style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 6, letterSpacing: '0.03em' }}>
+            ¿CÓMO SE ASIGNAN LOS KITS?
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.78rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            <li><strong>Capacidad teórica.</strong> Por cada receta de kit (K2A, K2B, K3A…) se calcula cuántas unidades se podrían armar con el stock actual, ignorando conflictos entre kits. La suma da la capacidad máxima de la bodega.</li>
+            <li><strong>Presupuesto por tipo.</strong> Esa capacidad se reparte según el % de la ciudad. Ej: si en Cali caben 100 kits teóricos, el algoritmo intentará armar 60 de Tipo 2, 35 de Tipo 3 y 5 de Tipo 4.</li>
+            <li><strong>Asignación round-robin.</strong> Dentro de cada tipo, se rota entre sus sub-kits (K2A → K2B → K2C → K2A…) armando uno a la vez y descontando componentes del stock. Los <strong>equipos no se reutilizan</strong> — un panel usado en K2A ya no está disponible para K3B.</li>
+            <li><strong>Rebalse.</strong> Si un tipo agota su presupuesto antes de terminar (por falta de un componente clave), el excedente pasa al siguiente tipo en la lista.</li>
+            <li><strong>Aprovechamiento final.</strong> Al final se hace una pasada extra que arma lo que aún quepa con el stock sobrante, sin importar el %. Así no se desperdician equipos que por prioridad quedaron sin usarse.</li>
+          </ol>
+        </div>
       </div>
 
       {/* Definición de kits (referencia visual) */}

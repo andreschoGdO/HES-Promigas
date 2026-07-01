@@ -192,68 +192,30 @@ join crm_projects p on p.house_id = h.id
 on conflict (project_id) do nothing;
 
 -- ───────────────────────────────────────────────────────
--- 5. Inventory items (installed) — TABLA DE APOYO
--- Tabla regular (no temporary) porque Supabase SQL Editor corre cada
--- statement en sesión distinta y las TEMP se destruyen al terminar.
--- La dropeamos al final del script.
+-- 5. Inventory items (installed)
+-- Cada INSERT lee directo de crm_projects/client_houses/facturacion_records
+-- que ya se insertaron arriba. Sin tablas auxiliares intermedias.
+-- Suffix slug de casa se deriva quitando 'PEND-' al cliente_id.
 -- ───────────────────────────────────────────────────────
-drop table if exists _casa_inv;
-create table _casa_inv as
-with data(cliente_id, casa_slug, paneles, bat_cant, kwh_unit,
-          marca_inv, marca_bat, tiene_top, fecha, costo_bms,
-          -- costos unitarios de la fila:
-          costo_inv_u, costo_bat_u, costo_panel_u) as (values
-  ('PEND-RDP-2',   'RDP-2',   12, 4, 4.09, 'Deye 15k',     'Deye HV',   false, date '2025-10-18', 3943190, 13840910, 5523660, 280634),
-  ('PEND-RDP-56',  'RDP-56',   7, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-10-24', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-42',  'RDP-42',   7, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-10-30', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-104', 'RDP-104',  7, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-10-28', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-77',  'RDP-77',   7, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-11-04', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-30',  'RDP-30',   7, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-11-05', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-10',  'RDP-10',  12, 4, 4.09, 'Deye 15k',     'Deye HV',   false, date '2025-11-07', 3943190, 13840910, 5523660, 280634),
-  ('PEND-RDP-76',  'RDP-76',  12, 4, 5.10, 'Livoltek 15k', 'Livoltek',  false, date '2025-12-19', 1747478,  5567141, 4505104, 280634),
-  ('PEND-RDP-15',  'RDP-15',  15, 4, 5.10, 'Livoltek 15k', 'Livoltek',  false, date '2026-02-05', 1747478,  5567141, 4505104, 280634),
-  ('PEND-RDP-111', 'RDP-111', 15, 4, 4.09, 'Deye 15k',     'Deye HV',   false, date '2025-12-19', 3943190, 13840910, 5523660, 280634),
-  ('PEND-RDP-70',  'RDP-70',   9, 3, 4.09, 'Deye 15k',     'Deye HV',   false, date '2025-11-17', 3943190, 13840910, 5523660, 280634),
-  ('PEND-RDP-11',  'RDP-11',   7, 2, 5.10, 'Livoltek 15k', 'Livoltek',  false, date '2025-12-20', 1747478,  5567141, 4505104, 280634),
-  ('PEND-RDP-57',  'RDP-57',   7, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-12-16', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-23',  'RDP-23',  11, 3, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-12-03', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-63',  'RDP-63',   6, 3, 5.10, 'Deye 6k',      'Pylontech', false, date '2025-12-11', 2816695,  9363184, 5178690, 280634),
-  ('PEND-RDP-18',  'RDP-18',   7, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-12-18', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-74',  'RDP-74',   9, 4, 4.09, 'Deye 15k',     'Deye HV',   false, date '2025-12-11', 3943190, 13840910, 5523660, 280634),
-  ('PEND-RDP-99',  'RDP-99',   9, 3, 4.09, 'Deye 15k',     'Deye HV',   false, date '2025-12-09', 3943190, 13840910, 5523660, 280634),
-  ('PEND-RDP-108', 'RDP-108',  7, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-12-13', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-48',  'RDP-48',   6, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-12-18', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-29',  'RDP-29',   9, 3, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2025-12-12', 1747478,  4985849, 4505104, 280634),
-  ('PEND-RDP-35',  'RDP-35',   6, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2026-02-10', 1747478,  4985849, 4505104, 280634),
-  ('PEND-LAB-12',  'LAB-12',  22, 6, 5.10, 'Livoltek 15k', 'Livoltek',  true,  date '2026-02-26', 1747478,  5567141, 4505104, 280634),
-  ('PEND-TBK-24',  'TBK-24',  16, 6, 5.10, 'Livoltek 15k', 'Livoltek',  true,  date '2026-04-29', 1747478,  5567141, 4505104, 280634),
-  ('PEND-PRI-23',  'PRI-23',   5, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2026-05-15', 1747478,  4985849, 4505104, 280634),
-  ('PEND-PRI-18A', 'PRI-18A',  6, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2026-05-14', 1747478,  4985849, 4505104, 280634),
-  ('PEND-PRI-93',  'PRI-93',   8, 4, 4.09, 'Deye 15k',     'Deye HV',   false, date '2026-05-27', 3943190, 13840910, 5523660, 280634),
-  ('PEND-PRI-102', 'PRI-102',  5, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2026-05-29', 1747478,  4985849, 4505104, 280634),
-  ('PEND-PRI-55',  'PRI-55',   8, 4, 4.09, 'Deye 15k',     'Deye HV',   false, date '2026-06-02', 3943190, 13840910, 5523660, 280634),
-  ('PEND-PRI-435', 'PRI-435',  6, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2026-06-05', 1747478,  4985849, 4505104, 280634),
-  ('PEND-PRI-446', 'PRI-446',  7, 3, 4.09, 'Deye 15k',     'Deye HV',   false, date '2026-06-06', 3943190, 13840910, 5523660, 280634),
-  ('PEND-PRI-382', 'PRI-382',  8, 3, 4.09, 'Deye 15k',     'Deye HV',   false, date '2026-06-27', 3943190, 13840910, 5523660, 280634),
-  ('PEND-TBK-287', 'TBK-287',  5, 2, 5.10, 'Livoltek 10k', 'Livoltek',  false, date '2026-06-25', 1747478,  4985849, 4505104, 280634)
-)
-select d.*, h.id as house_id, h.location as conjunto, h.casa
-from data d
-join client_houses h on h.cliente_id = d.cliente_id;
 
 -- 5a. Panels (JA Solar 595w — 290 total)
+-- Costo unitario = costo_panel_solar / diseno_paneles
 insert into inventory_items (category_id, serial_number, brand, model, capacity_value, capacity_unit,
                              status, current_location, current_house_id,
                              acquired_at, acquired_cost_cop, warranty_months, warranty_expires_at, notes, created_by)
 select
   (select id from inventory_categories where code = 'JASOLAR_PANEL_595W'),
-  'INST-' || c.casa_slug || '-PAN-' || lpad(n::text, 2, '0'),
+  'INST-' || replace(h.cliente_id, 'PEND-', '') || '-PAN-' || lpad(n::text, 2, '0'),
   'JA Solar', 'JAM72D40-595/MB', 595, 'Wp',
-  'installed', 'casa:' || c.conjunto || ' - ' || c.casa, c.house_id,
-  c.fecha, c.costo_panel_u, 120, (c.fecha + interval '120 months')::date,
-  'Instalado en ' || c.conjunto || ' ' || c.casa, 'seed-mig-40'
-from _casa_inv c
-cross join lateral generate_series(1, c.paneles) as n;
+  'installed', 'casa:' || h.location || ' - ' || h.casa, h.id,
+  p.installation_date, (f.costo_panel_solar / nullif(p.diseno_paneles, 0))::numeric,
+  120, (p.installation_date + interval '120 months')::date,
+  'Instalado en ' || h.location || ' ' || h.casa, 'seed-mig-40'
+from crm_projects p
+join client_houses h on h.id = p.house_id
+join facturacion_records f on f.project_id = p.id
+cross join lateral generate_series(1, p.diseno_paneles) as n
+where f.created_by = 'seed-mig-40';
 
 -- 5b. Inversores (33) — mapeo marca → category code
 insert into inventory_items (category_id, serial_number, brand, model, capacity_value, capacity_unit,
@@ -261,37 +223,45 @@ insert into inventory_items (category_id, serial_number, brand, model, capacity_
                              acquired_at, acquired_cost_cop, warranty_months, warranty_expires_at, notes, created_by)
 select
   cat.id,
-  'INST-' || c.casa_slug || '-INV',
+  'INST-' || replace(h.cliente_id, 'PEND-', '') || '-INV',
   cat.default_brand, cat.default_model, cat.default_capacity_value, cat.default_capacity_unit,
-  'installed', 'casa:' || c.conjunto || ' - ' || c.casa, c.house_id,
-  c.fecha, c.costo_inv_u, 120, (c.fecha + interval '120 months')::date,
-  'Inversor ' || c.marca_inv, 'seed-mig-40'
-from _casa_inv c
-join inventory_categories cat on cat.code = case c.marca_inv
+  'installed', 'casa:' || h.location || ' - ' || h.casa, h.id,
+  p.installation_date, f.costo_inversor, 120, (p.installation_date + interval '120 months')::date,
+  'Inversor ' || p.diseno_inversor_marca, 'seed-mig-40'
+from crm_projects p
+join client_houses h on h.id = p.house_id
+join facturacion_records f on f.project_id = p.id
+join inventory_categories cat on cat.code = case p.diseno_inversor_marca
     when 'Deye 15k'     then 'DEYE_INV_15KW_HV'
     when 'Deye 6k'      then 'DEYE_INV_6KW_LV'
     when 'Livoltek 10k' then 'LIVOLTEK_INV_10KW'
     when 'Livoltek 15k' then 'LIVOLTEK_INV_15KW'
-  end;
+  end
+where f.created_by = 'seed-mig-40';
 
 -- 5c. Baterías (97 total) — expandir por cantidad
+-- Costo unitario = costo_bateria / diseno_baterias_cantidad
 insert into inventory_items (category_id, serial_number, brand, model, capacity_value, capacity_unit,
                              status, current_location, current_house_id,
                              acquired_at, acquired_cost_cop, warranty_months, warranty_expires_at, notes, created_by)
 select
   cat.id,
-  'INST-' || c.casa_slug || '-BAT-' || lpad(n::text, 2, '0'),
-  cat.default_brand, cat.default_model, c.kwh_unit, 'kWh',
-  'installed', 'casa:' || c.conjunto || ' - ' || c.casa, c.house_id,
-  c.fecha, (c.costo_bat_u), 120, (c.fecha + interval '120 months')::date,
-  'Batería ' || c.marca_bat || ' (' || c.kwh_unit || ' kWh)', 'seed-mig-40'
-from _casa_inv c
-join inventory_categories cat on cat.code = case c.marca_bat
+  'INST-' || replace(h.cliente_id, 'PEND-', '') || '-BAT-' || lpad(n::text, 2, '0'),
+  cat.default_brand, cat.default_model, p.diseno_bateria_capacidad_kwh, 'kWh',
+  'installed', 'casa:' || h.location || ' - ' || h.casa, h.id,
+  p.installation_date, (f.costo_bateria / nullif(p.diseno_baterias_cantidad, 0))::numeric,
+  120, (p.installation_date + interval '120 months')::date,
+  'Batería ' || p.diseno_bateria_marca || ' (' || p.diseno_bateria_capacidad_kwh || ' kWh)', 'seed-mig-40'
+from crm_projects p
+join client_houses h on h.id = p.house_id
+join facturacion_records f on f.project_id = p.id
+join inventory_categories cat on cat.code = case p.diseno_bateria_marca
     when 'Deye HV'   then 'DEYE_BAT_HV_4KWH'
     when 'Livoltek'  then 'LIVOLTEK_BAT_HV'
     when 'Pylontech' then 'PYLONTECH_BAT_LV'
   end
-cross join lateral generate_series(1, c.bat_cant) as n;
+cross join lateral generate_series(1, p.diseno_baterias_cantidad) as n
+where f.created_by = 'seed-mig-40';
 
 -- 5d. BMS (33) — uno por casa, marca según batería
 insert into inventory_items (category_id, serial_number, brand, model,
@@ -299,31 +269,37 @@ insert into inventory_items (category_id, serial_number, brand, model,
                              acquired_at, acquired_cost_cop, warranty_months, warranty_expires_at, notes, created_by)
 select
   cat.id,
-  'INST-' || c.casa_slug || '-BMS',
+  'INST-' || replace(h.cliente_id, 'PEND-', '') || '-BMS',
   cat.default_brand, cat.default_model,
-  'installed', 'casa:' || c.conjunto || ' - ' || c.casa, c.house_id,
-  c.fecha, c.costo_bms, 120, (c.fecha + interval '120 months')::date,
-  'BMS ' || c.marca_bat, 'seed-mig-40'
-from _casa_inv c
-join inventory_categories cat on cat.code = case c.marca_bat
+  'installed', 'casa:' || h.location || ' - ' || h.casa, h.id,
+  p.installation_date, f.costo_control_box, 120, (p.installation_date + interval '120 months')::date,
+  'BMS ' || p.diseno_bateria_marca, 'seed-mig-40'
+from crm_projects p
+join client_houses h on h.id = p.house_id
+join facturacion_records f on f.project_id = p.id
+join inventory_categories cat on cat.code = case p.diseno_bateria_marca
     when 'Deye HV'   then 'DEYE_BMS'
     when 'Livoltek'  then 'LIVOLTEK_BMS'
     when 'Pylontech' then 'PYLONTECH_BMS'
-  end;
+  end
+where f.created_by = 'seed-mig-40';
 
--- 5e. Top Covers (solo LAB-12 y TBK-24)
+-- 5e. Top Covers (solo casas con costo_top_cover > 0 → LAB-12 y TBK-24)
 insert into inventory_items (category_id, serial_number, brand, model,
                              status, current_location, current_house_id,
                              acquired_at, acquired_cost_cop, warranty_months, warranty_expires_at, notes, created_by)
 select
   (select id from inventory_categories where code = 'LIVOLTEK_TOP_COVER'),
-  'INST-' || c.casa_slug || '-TOP',
+  'INST-' || replace(h.cliente_id, 'PEND-', '') || '-TOP',
   'Livoltek', 'BHO-20500N',
-  'installed', 'casa:' || c.conjunto || ' - ' || c.casa, c.house_id,
-  c.fecha, 1747478, 120, (c.fecha + interval '120 months')::date,
+  'installed', 'casa:' || h.location || ' - ' || h.casa, h.id,
+  p.installation_date, f.costo_top_cover, 120, (p.installation_date + interval '120 months')::date,
   'Top Cover Livoltek', 'seed-mig-40'
-from _casa_inv c
-where c.tiene_top;
+from crm_projects p
+join client_houses h on h.id = p.house_id
+join facturacion_records f on f.project_id = p.id
+where f.created_by = 'seed-mig-40'
+  and coalesce(f.costo_top_cover, 0) > 0;
 
 -- 5f. Medidores solares (33)
 insert into inventory_items (category_id, serial_number,
@@ -331,11 +307,14 @@ insert into inventory_items (category_id, serial_number,
                              acquired_at, acquired_cost_cop, warranty_months, warranty_expires_at, notes, created_by)
 select
   (select id from inventory_categories where code = 'METER_SOLAR'),
-  'INST-' || c.casa_slug || '-MDS',
-  'installed', 'casa:' || c.conjunto || ' - ' || c.casa, c.house_id,
-  c.fecha, 504000, 60, (c.fecha + interval '60 months')::date,
+  'INST-' || replace(h.cliente_id, 'PEND-', '') || '-MDS',
+  'installed', 'casa:' || h.location || ' - ' || h.casa, h.id,
+  p.installation_date, f.costo_medidor_solar, 60, (p.installation_date + interval '60 months')::date,
   'Medidor Solar', 'seed-mig-40'
-from _casa_inv c;
+from crm_projects p
+join client_houses h on h.id = p.house_id
+join facturacion_records f on f.project_id = p.id
+where f.created_by = 'seed-mig-40';
 
 -- 5g. Medidores de generación (33)
 insert into inventory_items (category_id, serial_number,
@@ -343,11 +322,14 @@ insert into inventory_items (category_id, serial_number,
                              acquired_at, acquired_cost_cop, warranty_months, warranty_expires_at, notes, created_by)
 select
   (select id from inventory_categories where code = 'METER_GEN'),
-  'INST-' || c.casa_slug || '-MDG',
-  'installed', 'casa:' || c.conjunto || ' - ' || c.casa, c.house_id,
-  c.fecha, 504000, 60, (c.fecha + interval '60 months')::date,
+  'INST-' || replace(h.cliente_id, 'PEND-', '') || '-MDG',
+  'installed', 'casa:' || h.location || ' - ' || h.casa, h.id,
+  p.installation_date, f.costo_medidor_generacion, 60, (p.installation_date + interval '60 months')::date,
   'Medidor Generación', 'seed-mig-40'
-from _casa_inv c;
+from crm_projects p
+join client_houses h on h.id = p.house_id
+join facturacion_records f on f.project_id = p.id
+where f.created_by = 'seed-mig-40';
 
 -- 5h. Módems (33)
 insert into inventory_items (category_id, serial_number,
@@ -355,11 +337,14 @@ insert into inventory_items (category_id, serial_number,
                              acquired_at, acquired_cost_cop, warranty_months, warranty_expires_at, notes, created_by)
 select
   (select id from inventory_categories where code = 'MODEM'),
-  'INST-' || c.casa_slug || '-MOD',
-  'installed', 'casa:' || c.conjunto || ' - ' || c.casa, c.house_id,
-  c.fecha, 972000, 24, (c.fecha + interval '24 months')::date,
+  'INST-' || replace(h.cliente_id, 'PEND-', '') || '-MOD',
+  'installed', 'casa:' || h.location || ' - ' || h.casa, h.id,
+  p.installation_date, f.costo_modem, 24, (p.installation_date + interval '24 months')::date,
   'Módem de conectividad', 'seed-mig-40'
-from _casa_inv c;
+from crm_projects p
+join client_houses h on h.id = p.house_id
+join facturacion_records f on f.project_id = p.id
+where f.created_by = 'seed-mig-40';
 
 -- ───────────────────────────────────────────────────────
 -- 6. Audit trail: evento 'created' por cada proyecto insertado
@@ -368,9 +353,6 @@ insert into crm_project_events (project_id, event_type, to_module, to_stage, act
 select p.id, 'created', 'operations', 'operativo', 'seed-mig-40', 'Seed masivo (mig 40) — 33 casas operativas'
 from crm_projects p
 where p.created_by is null and p.notes like '%JA Solar 595w%';
-
--- 7. Limpiar tabla auxiliar
-drop table if exists _casa_inv;
 
 commit;
 

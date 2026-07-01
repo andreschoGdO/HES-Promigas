@@ -211,7 +211,7 @@ export async function POST(request: Request, context: Ctx) {
       // 3. Crear la reserva ANTES de cambiar la etapa
       const { data: projForReserve } = await supabaseAdmin
         .from('crm_projects')
-        .select('id, code, title, house_id, diseno_inversor_categoria_id, diseno_bateria_categoria_id, diseno_panel_categoria_id, diseno_paneles, diseno_baterias_cantidad, reservation_id')
+        .select('id, code, title, house_id, client_city, diseno_inversor_categoria_id, diseno_bateria_categoria_id, diseno_panel_categoria_id, diseno_paneles, diseno_baterias_cantidad, reservation_id')
         .eq('id', id)
         .single();
       if (!projForReserve) {
@@ -538,7 +538,7 @@ async function removeProjectTag(projectId: string, tag: string): Promise<void> {
 async function checkStockForAlistamiento(projectId: string): Promise<{ ok: true } | { ok: false; message: string; shortages: Array<{ family: string; family_label: string; needed: number; available: number }> }> {
   const { data: p } = await supabaseAdmin
     .from('crm_projects')
-    .select('reservation_id, diseno_inversor_categoria_id, diseno_bateria_categoria_id, diseno_panel_categoria_id, diseno_paneles, diseno_baterias_cantidad')
+    .select('reservation_id, client_city, diseno_inversor_categoria_id, diseno_bateria_categoria_id, diseno_panel_categoria_id, diseno_paneles, diseno_baterias_cantidad')
     .eq('id', projectId)
     .single();
   if (!p) return { ok: true };
@@ -550,13 +550,29 @@ async function checkStockForAlistamiento(projectId: string): Promise<{ ok: true 
     { family: 'panel',    categoryId: p.diseno_panel_categoria_id,    qty: p.diseno_panel_categoria_id ? (Number(p.diseno_paneles ?? 0) || 0) : 0 },
   ].filter((r) => r.categoryId && r.qty > 0);
 
+  // Determinar bodega según ciudad — el preflight verifica stock SOLO en esa bodega.
+  const warehouseCode = warehouseCodeForCity(p.client_city);
+  let warehouseId: string | null = null;
+  let bodegaLabel = 'bodega';
+  if (warehouseCode) {
+    const { data: wh } = await supabaseAdmin
+      .from('warehouses')
+      .select('id, name')
+      .eq('code', warehouseCode)
+      .maybeSingle();
+    warehouseId = wh?.id ?? null;
+    if (wh?.name) bodegaLabel = wh.name;
+  }
+
   const shortages: Array<{ family: string; family_label: string; needed: number; available: number }> = [];
   for (const req of requirements) {
-    const { count } = await supabaseAdmin
+    let q = supabaseAdmin
       .from('inventory_items')
       .select('id', { count: 'exact', head: true })
       .eq('category_id', req.categoryId!)
       .eq('status', 'in_stock');
+    if (warehouseId) q = q.eq('warehouse_id', warehouseId);
+    const { count } = await q;
     const available = count ?? 0;
     if (available < req.qty) {
       shortages.push({ family: req.family, family_label: FAMILY_LABEL[req.family] ?? req.family, needed: req.qty, available });
@@ -564,10 +580,10 @@ async function checkStockForAlistamiento(projectId: string): Promise<{ ok: true 
   }
 
   if (shortages.length === 0) return { ok: true };
-  const summary = shortages.map((s) => `${s.family_label}: necesitas ${s.needed}, hay ${s.available} en bodega`).join(' · ');
+  const summary = shortages.map((s) => `${s.family_label}: necesitas ${s.needed}, hay ${s.available} en ${bodegaLabel}`).join(' · ');
   return {
     ok: false,
-    message: `No hay stock suficiente para reservar — ${summary}. Recibe más equipos en Inventario antes de alistar.`,
+    message: `No hay stock suficiente en ${bodegaLabel} para reservar — ${summary}. Recibe más equipos en Inventario antes de alistar, o transfiere desde otra bodega.`,
     shortages,
   };
 }
@@ -575,6 +591,7 @@ async function checkStockForAlistamiento(projectId: string): Promise<{ ok: true 
 
 type ProjRow = {
   id: string; code: string | null; title: string; house_id: string | null;
+  client_city: string | null;
   diseno_inversor_categoria_id: string | null;
   diseno_bateria_categoria_id: string | null;
   diseno_panel_categoria_id: string | null;
@@ -582,6 +599,26 @@ type ProjRow = {
   diseno_baterias_cantidad: number | null;
   reservation_id: string | null;
 };
+
+/**
+ * Ciudad del proyecto → código de bodega (mig 36).
+ * Turbaco, Arjona, Magangué, etc. → Cartagena (regional Bolívar).
+ * Soledad, Malambo, etc. → Barranquilla (regional Atlántico).
+ * Todo el Valle → Cali.
+ * Devuelve null si no matchea → la reserva NO filtra por bodega (fallback
+ * al comportamiento viejo) y agrega tag `bodega no identificada` al proyecto.
+ */
+function warehouseCodeForCity(city: string | null | undefined): string | null {
+  if (!city) return null;
+  const c = city.trim().toLowerCase();
+  const cali = ['cali', 'jamundí', 'jamundi', 'yumbo', 'palmira', 'valle', 'buenaventura'];
+  const barranquilla = ['barranquilla', 'soledad', 'malambo', 'puerto colombia', 'sabanagrande', 'galapa'];
+  const cartagena = ['cartagena', 'turbaco', 'arjona', 'magangué', 'magangue', 'bolívar', 'bolivar', 'sincelejo', 'monteria', 'montería'];
+  if (cali.some((x) => c.includes(x))) return 'BODEGA_CALI';
+  if (barranquilla.some((x) => c.includes(x))) return 'BODEGA_BARRANQUILLA';
+  if (cartagena.some((x) => c.includes(x))) return 'BODEGA_CARTAGENA';
+  return null;
+}
 
 /**
  * Al pasar de Dimensionado → Alistamiento: crear reserva automática con los
@@ -685,18 +722,37 @@ async function autoReserveInventoryForProject(
 
   if (requirements.length === 0) return null;
 
-  // Buscar items disponibles por categoría
+  // Determinar la bodega de origen según la ciudad de instalación.
+  // La reserva SOLO puede tomar equipos de esa bodega — no se mezclan orígenes.
+  const warehouseCode = warehouseCodeForCity(project.client_city);
+  let warehouseId: string | null = null;
+  if (warehouseCode) {
+    const { data: wh } = await supabaseAdmin
+      .from('warehouses')
+      .select('id')
+      .eq('code', warehouseCode)
+      .maybeSingle();
+    warehouseId = wh?.id ?? null;
+  }
+
+  // Buscar items disponibles por categoría, restringido a la bodega de la ciudad
   const reservedItems: Array<{ id: string; serial_number: string; family: string }> = [];
   const shortages: Array<{ family: string; needed: number; available: number }> = [];
 
   for (const req of requirements) {
-    const { data: stockItems } = await supabaseAdmin
+    let q = supabaseAdmin
       .from('inventory_items')
       .select('id, serial_number')
       .eq('category_id', req.categoryId!)
       .eq('status', 'in_stock')
       .order('acquired_at', { ascending: true, nullsFirst: false })
       .limit(req.qty);
+    // Solo restringimos por bodega si pudimos mapear la ciudad. Si no,
+    // conservamos el comportamiento viejo (cualquier bodega) para no dejar
+    // al proyecto sin reserva por un typo en la ciudad — pero registramos
+    // un tag para que operaciones lo revise.
+    if (warehouseId) q = q.eq('warehouse_id', warehouseId);
+    const { data: stockItems } = await q;
     const available = (stockItems ?? []).length;
     if (available < req.qty) {
       shortages.push({ family: req.family, needed: req.qty, available });
@@ -704,6 +760,11 @@ async function autoReserveInventoryForProject(
     for (const it of stockItems ?? []) {
       reservedItems.push({ id: it.id, serial_number: it.serial_number, family: req.family });
     }
+  }
+
+  // Aviso operativo: si no se pudo resolver la ciudad → bodega, taguear.
+  if (!warehouseId) {
+    await addProjectTag(project.id, 'bodega no identificada');
   }
 
   if (reservedItems.length === 0) {

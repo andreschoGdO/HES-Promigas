@@ -249,7 +249,10 @@ export default function DashPage() {
                     nameKey="name"
                     innerRadius={50}
                     outerRadius={80}
-                    label={(e: { pct?: number }) => e.pct !== undefined ? `${e.pct}%` : ''}
+                    label={(props: unknown) => {
+                      const p = props as { payload?: { pct?: number } };
+                      return p.payload?.pct !== undefined ? `${p.payload.pct}%` : '';
+                    }}
                   >
                     {marcaPie.map((_, i) => (
                       <Cell key={i} fill={MARCA_COLORS[i % MARCA_COLORS.length]} />

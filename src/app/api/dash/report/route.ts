@@ -107,11 +107,12 @@ export async function GET(request: Request) {
     .select('key, value')
     .in('key', ['dash_meta_anual_casas', 'dash_standby_dias', 'dash_solucion_umbrales']);
   const sMap = new Map((settings ?? []).map((s: { key: string; value: Record<string, unknown> }) => [s.key, s.value]));
-  const metaAnual = Number((sMap.get('dash_meta_anual_casas') as { value?: number })?.value ?? 230);
-  const standbyDias = (sMap.get('dash_standby_dias') as StandbyDias) ?? {
+  const metaAnualRaw = sMap.get('dash_meta_anual_casas') as unknown as { value?: number } | undefined;
+  const metaAnual = Number(metaAnualRaw?.value ?? 230);
+  const standbyDias = (sMap.get('dash_standby_dias') as unknown as StandbyDias | undefined) ?? {
     dimensionado: 14, alistamiento: 10, instalacion: 7, legalizacion: 21, logistica_inversa: 30,
   };
-  const umbrales = (sMap.get('dash_solucion_umbrales') as Umbrales) ?? {
+  const umbrales = (sMap.get('dash_solucion_umbrales') as unknown as Umbrales | undefined) ?? {
     sol1_max_paneles: 5, sol2_max_paneles: 10, sol3_max_paneles: 16, sol4_max_paneles: 19,
   };
 

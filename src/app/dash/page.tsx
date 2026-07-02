@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Download, Sun, RefreshCw } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, Legend, LabelList,
 } from 'recharts';
 import { generateDashPDF } from '@/lib/dash-pdf';
 import { DEFAULT_REPORT, type DashReport } from '@/lib/dash-report-data';
@@ -15,15 +15,35 @@ const MARCA_COLORS = ['#07c5a8', '#3b82f6', '#f59e0b', '#8b5cf6'];
 const fmtInt = (n: number) => n.toLocaleString('es-CO');
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-function StatCard({ label, value, hint }: { label: string; value: string; hint: string }) {
+function StatCard({ label, value, hint, tag }: { label: string; value: string; hint: string; tag?: string }) {
   return (
     <div className="stat-card">
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
       <div style={{ fontSize: '0.72rem', color: ACCENT, fontWeight: 600 }}>{hint}</div>
+      {tag && (
+        <div style={{
+          marginTop: 4,
+          display: 'inline-flex',
+          alignSelf: 'flex-start',
+          padding: '2px 8px',
+          background: 'var(--bg-elevated)',
+          color: 'var(--text-secondary)',
+          borderRadius: 999,
+          fontSize: '0.68rem',
+          fontWeight: 600,
+          border: '1px solid var(--border)',
+        }}>
+          {tag}
+        </div>
+      )}
     </div>
   );
 }
+
+/** Watt-peak por panel para calcular cuántos paneles equivalen a un kWp acumulado. */
+const PANEL_WP = 595;
+const KWH_POR_BATERIA = 5.1;  // Livoltek HV promedio
 
 function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
@@ -56,8 +76,18 @@ export default function DashPage() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const today = () => new Date().toISOString().slice(0, 10);
-  const weekAgo = () => new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const [from, setFrom] = useState<string>(weekAgo());
+  /**
+   * Ventana por defecto: semana anterior completa + lo que va de la semana
+   * actual. Ej: si hoy es martes semana N, arranca lunes semana N-1.
+   */
+  const prevWeekMonday = () => {
+    const d = new Date();
+    const dow = d.getDay();               // 0=dom, 1=lun, ..., 6=sáb
+    const daysSinceMonday = (dow + 6) % 7; // lunes=0, domingo=6
+    d.setDate(d.getDate() - daysSinceMonday - 7);
+    return d.toISOString().slice(0, 10);
+  };
+  const [from, setFrom] = useState<string>(prevWeekMonday());
   const [to, setTo] = useState<string>(today());
 
   const load = async (f: string, t: string) => {
@@ -166,12 +196,42 @@ export default function DashPage() {
       <section className="card">
         <SectionHeader eyebrow="Avance global" title="Total instalado hasta la fecha" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard label="Casas instaladas (acum.)" value={fmtInt(report.global.casasAcum)} hint="desde inicio de operación" />
-          <StatCard label="kWp solar (acum.)"        value={`${fmt1(report.global.kwpAcum)} kWp`} hint="instalados a la fecha" />
-          <StatCard label="kWh batería (acum.)"      value={`${fmtInt(report.global.kwhAcum)} kWh`} hint="instalados a la fecha" />
-          <StatCard label="CAPEX ejecutado (acum.)"  value={`$${fmtInt(report.global.capexAcumM)}M COP`} hint="desde inicio de operación" />
-          <StatCard label="Avance vs. meta anual"    value={`${report.global.avancePct}%`} hint={`${report.global.casasAcum} de ${report.global.metaCasas} casas meta`} />
-          <StatCard label="Meses activos"            value={`${report.global.mesesActivos}`} hint={`${report.global.porMes[0]?.mes} - ${report.global.porMes.at(-1)?.mes}`} />
+          <StatCard
+            label="Casas instaladas (acum.)"
+            value={fmtInt(report.global.casasAcum)}
+            hint="desde inicio de operación"
+            tag={report.global.mesesActivos > 0 ? `~${fmt1(report.global.casasAcum / report.global.mesesActivos)} casas/mes` : undefined}
+          />
+          <StatCard
+            label="kWp solar (acum.)"
+            value={`${fmt1(report.global.kwpAcum)} kWp`}
+            hint="instalados a la fecha"
+            tag={`~${fmtInt(Math.round(report.global.kwpAcum * 1000 / PANEL_WP))} paneles ${PANEL_WP}W`}
+          />
+          <StatCard
+            label="kWh batería (acum.)"
+            value={`${fmtInt(report.global.kwhAcum)} kWh`}
+            hint="instalados a la fecha"
+            tag={`~${fmtInt(Math.round(report.global.kwhAcum / KWH_POR_BATERIA))} baterías`}
+          />
+          <StatCard
+            label="CAPEX ejecutado (acum.)"
+            value={`$${fmtInt(report.global.capexAcumM)}M COP`}
+            hint="desde inicio de operación"
+            tag={report.global.casasAcum > 0 ? `~$${fmt1(report.global.capexAcumM / report.global.casasAcum)}M / casa` : undefined}
+          />
+          <StatCard
+            label="Avance vs. meta anual"
+            value={`${report.global.avancePct}%`}
+            hint={`${report.global.casasAcum} de ${report.global.metaCasas} casas meta`}
+            tag={`Faltan ${Math.max(0, report.global.metaCasas - report.global.casasAcum)} casas`}
+          />
+          <StatCard
+            label="Meses activos"
+            value={`${report.global.mesesActivos}`}
+            hint={`${report.global.porMes[0]?.mes} - ${report.global.porMes.at(-1)?.mes}`}
+            tag={`${report.global.porMes.length} meses de ventana`}
+          />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
@@ -179,17 +239,32 @@ export default function DashPage() {
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
               CASAS POR MES, POR SOLUCIÓN
             </div>
-            <div style={{ height: 240 }}>
+            <div style={{ height: 260 }}>
               <ResponsiveContainer>
-                <BarChart data={report.global.porMes}>
+                <BarChart
+                  data={report.global.porMes.map((m) => ({
+                    ...m,
+                    total: m.sol1 + m.sol2 + m.sol3 + m.sol4,
+                  }))}
+                  margin={{ top: 22, right: 8, left: -12, bottom: 0 }}
+                >
                   <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="sol1" stackId="a" fill="#07c5a8" name="Solución 1" />
-                  <Bar dataKey="sol2" stackId="a" fill="#3b82f6" name="Solución 2" />
-                  <Bar dataKey="sol3" stackId="a" fill="#94a3b8" name="Solución 3" />
-                  <Bar dataKey="sol4" stackId="a" fill="#1f2937" name="Solución 4" />
+                  <Bar dataKey="sol1" stackId="a" fill="#07c5a8" name="Solución 1">
+                    <LabelList dataKey="sol1" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
+                  </Bar>
+                  <Bar dataKey="sol2" stackId="a" fill="#3b82f6" name="Solución 2">
+                    <LabelList dataKey="sol2" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
+                  </Bar>
+                  <Bar dataKey="sol3" stackId="a" fill="#94a3b8" name="Solución 3">
+                    <LabelList dataKey="sol3" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
+                  </Bar>
+                  <Bar dataKey="sol4" stackId="a" fill="#1f2937" name="Solución 4">
+                    <LabelList dataKey="sol4" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
+                    <LabelList dataKey="total" position="top" style={{ fill: 'var(--text-primary)', fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -220,10 +295,25 @@ export default function DashPage() {
       <section className="card">
         <SectionHeader eyebrow="Planeación" title="Lo asignado para ejecutar la próxima semana" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard label="Casas asignadas"      value={fmtInt(report.planeacion.casasAsignadas)} hint="para la próxima semana" />
-          <StatCard label="kWp planificados"     value={`${fmt1(report.planeacion.kwpPlan)} kWp`} hint="estimado" />
-          <StatCard label="kWh batería planif."  value={`${fmtInt(report.planeacion.kwhPlan)} kWh`} hint="estimado" />
-          <StatCard label="CAPEX estimado"        value={`$${fmtInt(report.planeacion.capexPlanM)}M COP`} hint="próxima semana" />
+          <StatCard label="Casas asignadas"      value={fmtInt(report.planeacion.casasAsignadas)} hint="para la próxima semana" tag={report.planeacion.casasAsignadas > 0 ? `${report.planeacion.distribucion.length} grupos` : undefined} />
+          <StatCard
+            label="kWp planificados"
+            value={`${fmt1(report.planeacion.kwpPlan)} kWp`}
+            hint="estimado"
+            tag={report.planeacion.kwpPlan > 0 ? `~${fmtInt(Math.round(report.planeacion.kwpPlan * 1000 / PANEL_WP))} paneles` : undefined}
+          />
+          <StatCard
+            label="kWh batería planif."
+            value={`${fmtInt(report.planeacion.kwhPlan)} kWh`}
+            hint="estimado"
+            tag={report.planeacion.kwhPlan > 0 ? `~${fmtInt(Math.round(report.planeacion.kwhPlan / KWH_POR_BATERIA))} baterías` : undefined}
+          />
+          <StatCard
+            label="CAPEX estimado"
+            value={`$${fmtInt(report.planeacion.capexPlanM)}M COP`}
+            hint="próxima semana"
+            tag={report.planeacion.casasAsignadas > 0 ? `~$${fmt1(report.planeacion.capexPlanM / report.planeacion.casasAsignadas)}M / casa` : undefined}
+          />
           <StatCard label="Constructores activos" value={`${report.planeacion.constructoresActivos}`} hint={report.planeacion.constructoresLista} />
           <StatCard label="Zonas con actividad"   value={`${report.planeacion.zonasActivas}`} hint={report.planeacion.zonasLista} />
         </div>
@@ -240,12 +330,32 @@ export default function DashPage() {
       <section className="card">
         <SectionHeader eyebrow="Avance semanal" title="Resultados de construcción de esta semana" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard label="Casas instaladas"       value={fmtInt(report.semana.casasInstaladas)} hint={`de ${report.semana.programadas} programadas`} />
-          <StatCard label="En stand by"            value={fmtInt(report.semana.standBy)}          hint="ver motivos abajo" />
+          <StatCard
+            label="Casas instaladas"
+            value={fmtInt(report.semana.casasInstaladas)}
+            hint={`de ${report.semana.programadas} programadas`}
+            tag={report.semana.programadas > 0 ? `${Math.round((report.semana.casasInstaladas / report.semana.programadas) * 100)}% cumplimiento` : undefined}
+          />
+          <StatCard label="En stand by"            value={fmtInt(report.semana.standBy)}          hint="ver motivos abajo" tag={report.semana.standBy > 0 ? 'requiere acción' : undefined} />
           <StatCard label="Por iniciar próxima"    value={fmtInt(report.semana.porIniciar)}       hint="ya asignadas" />
-          <StatCard label="kWp solar instalados"   value={`${fmt1(report.semana.kwpSemana)} kWp`} hint="esta semana" />
-          <StatCard label="kWh batería instalados" value={`${fmtInt(report.semana.kwhSemana)} kWh`} hint="esta semana" />
-          <StatCard label="CAPEX ejecutado"        value={`$${fmtInt(report.semana.capexSemanaM)}M COP`} hint="acumulado semana" />
+          <StatCard
+            label="kWp solar instalados"
+            value={`${fmt1(report.semana.kwpSemana)} kWp`}
+            hint="esta semana"
+            tag={report.semana.kwpSemana > 0 ? `~${fmtInt(Math.round(report.semana.kwpSemana * 1000 / PANEL_WP))} paneles` : undefined}
+          />
+          <StatCard
+            label="kWh batería instalados"
+            value={`${fmtInt(report.semana.kwhSemana)} kWh`}
+            hint="esta semana"
+            tag={report.semana.kwhSemana > 0 ? `~${fmtInt(Math.round(report.semana.kwhSemana / KWH_POR_BATERIA))} baterías` : undefined}
+          />
+          <StatCard
+            label="CAPEX ejecutado"
+            value={`$${fmtInt(report.semana.capexSemanaM)}M COP`}
+            hint="acumulado semana"
+            tag={report.semana.casasInstaladas > 0 ? `~$${fmt1(report.semana.capexSemanaM / report.semana.casasInstaladas)}M / casa` : undefined}
+          />
         </div>
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
           MOTIVOS DE STAND BY ({report.semana.standBy} CASAS)

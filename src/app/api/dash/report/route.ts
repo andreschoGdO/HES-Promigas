@@ -109,10 +109,13 @@ export async function GET(request: Request) {
   const { data: settings } = await supabaseAdmin
     .from('app_settings')
     .select('key, value')
-    .in('key', ['dash_meta_anual_casas', 'dash_standby_dias', 'dash_solucion_umbrales']);
+    .in('key', ['dash_meta_anual_casas', 'dash_standby_dias', 'dash_solucion_umbrales', 'dash_project_start']);
   const sMap = new Map((settings ?? []).map((s: { key: string; value: Record<string, unknown> }) => [s.key, s.value]));
   const metaAnualRaw = sMap.get('dash_meta_anual_casas') as unknown as { value?: number } | undefined;
-  const metaAnual = Number(metaAnualRaw?.value ?? 230);
+  const metaAnual = Number(metaAnualRaw?.value ?? 150);
+  const projectStartRaw = sMap.get('dash_project_start') as unknown as { value?: string } | undefined;
+  const projectStartStr = projectStartRaw?.value ?? '2025-10-01';
+  const projectStart = new Date(projectStartStr);
   const standbyDias = (sMap.get('dash_standby_dias') as unknown as StandbyDias | undefined) ?? {
     dimensionado: 14, alistamiento: 10, instalacion: 7, legalizacion: 21, logistica_inversa: 30,
   };
@@ -187,14 +190,21 @@ export async function GET(request: Request) {
   const kwhAcum = casasInstaladas.reduce((s, p) => s + getKwh(p), 0);
   const capexAcumM = casasInstaladas.reduce((s, p) => s + getCapexM(p), 0);
 
-  // Serie por mes (últimos 6 meses)
-  const now = new Date();
-  const monthsBack = 6;
+  // Serie por mes: arranca en projectStart (dash_project_start = 2025-10-01 por
+  // default) y llega hasta el mes actual (`to`). Etiqueta con "MMM YY" si la
+  // ventana cruza más de un año para evitar ambigüedad.
   const monthLabels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const startMonth = new Date(projectStart.getFullYear(), projectStart.getMonth(), 1);
+  const endMonth = new Date(to.getFullYear(), to.getMonth(), 1);
+  const totalMonths = Math.max(1,
+    (endMonth.getFullYear() - startMonth.getFullYear()) * 12 +
+    (endMonth.getMonth() - startMonth.getMonth()) + 1
+  );
+  const spansMultipleYears = startMonth.getFullYear() !== endMonth.getFullYear();
   const porMes: DashReport['global']['porMes'] = [];
-  for (let i = monthsBack - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const nextD = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+  for (let i = 0; i < totalMonths; i++) {
+    const d = new Date(startMonth.getFullYear(), startMonth.getMonth() + i, 1);
+    const nextD = new Date(startMonth.getFullYear(), startMonth.getMonth() + i + 1, 1);
     const monthProjects = casasInstaladas.filter((p) => {
       const ref = p.operativo_at ?? p.installation_date ?? p.updated_at;
       if (!ref) return false;
@@ -206,8 +216,10 @@ export async function GET(request: Request) {
       const cls = classifySolucion(p.diseno_paneles, umbrales);
       if (cls) bucket[cls]++;
     });
+    const yy = String(d.getFullYear()).slice(-2);
+    const mes = spansMultipleYears ? `${monthLabels[d.getMonth()]} ${yy}` : monthLabels[d.getMonth()];
     porMes.push({
-      mes: monthLabels[d.getMonth()],
+      mes,
       casas: monthProjects.length,
       kwp: monthProjects.reduce((s, p) => s + getKwp(p), 0),
       kwh: monthProjects.reduce((s, p) => s + getKwh(p), 0),

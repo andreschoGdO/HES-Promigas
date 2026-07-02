@@ -55,6 +55,11 @@ export interface DashReport {
     zonas: ZonaRow[];
     constructores: ConstRow[];
   };
+  detalleGlobal: {
+    marcas: MarcaRow[];
+    zonas: ZonaRow[];
+    constructores: ConstRow[];
+  };
   planeacion: {
     casasAsignadas: number; kwpPlan: number; kwhPlan: number; capexPlanM: number;
     constructoresActivos: number; constructoresLista: string;
@@ -114,6 +119,24 @@ export const DEFAULT_REPORT: DashReport = {
       { constructor: 'Estruccon', asignadas: 7, instaladas: 7 },
       { constructor: 'Shuman',    asignadas: 6, instaladas: 6 },
       { constructor: 'Hybrytec',  asignadas: 5, instaladas: 5 },
+    ],
+  },
+  detalleGlobal: {
+    marcas: [
+      { marca: 'Livoltek', casas: 68, kwp: 402.0, kwh: 512 },
+      { marca: 'Deye',     casas: 42, kwp: 268.0, kwh: 340 },
+      { marca: 'Huawei',   casas: 22, kwp: 132.0, kwh: 168 },
+      { marca: 'Tesla',    casas: 10, kwp: 48.0,  kwh: 60  },
+    ],
+    zonas: [
+      { zona: 'Norte',    casas: 54, capex: '$2,300M' },
+      { zona: 'Interior', casas: 51, capex: '$2,150M' },
+      { zona: 'Sur',      casas: 37, capex: '$1,750M' },
+    ],
+    constructores: [
+      { constructor: 'Estruccon', asignadas: 62, instaladas: 60 },
+      { constructor: 'Shuman',    asignadas: 44, instaladas: 42 },
+      { constructor: 'Hybrytec',  asignadas: 40, instaladas: 40 },
     ],
   },
   planeacion: {

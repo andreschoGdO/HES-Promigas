@@ -86,13 +86,6 @@ export default function DashPage() {
     }
   };
 
-  const marcaTotal = report.detalle.marcas.reduce((s, m) => s + m.casas, 0);
-  const marcaPie = report.detalle.marcas.map((m) => ({
-    name: m.marca,
-    value: m.casas,
-    pct: marcaTotal ? Math.round((m.casas / marcaTotal) * 100) : 0,
-  }));
-
   return (
     <div className="page-content" style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
       {/* ─── PORTADA ─── */}
@@ -214,6 +207,15 @@ export default function DashPage() {
         </div>
       </section>
 
+      {/* ─── SLIDE 3 (NUEVA): DETALLE GLOBAL POR MARCA, ZONA Y CONSTRUCTOR ─── */}
+      <DetalleMarcaZonaConstructor
+        eyebrow="Avance global"
+        title="Detalle por marca, zona y constructor"
+        marcas={report.detalleGlobal?.marcas ?? report.detalle.marcas}
+        zonas={report.detalleGlobal?.zonas ?? report.detalle.zonas}
+        constructores={report.detalleGlobal?.constructores ?? report.detalle.constructores}
+      />
+
       {/* ─── SLIDE 3: AVANCE SEMANAL ─── */}
       <section className="card">
         <SectionHeader eyebrow="Avance semanal" title="Resultados de construcción de esta semana" />
@@ -234,64 +236,14 @@ export default function DashPage() {
         />
       </section>
 
-      {/* ─── SLIDE 4: DETALLE POR MARCA, ZONA Y CONSTRUCTOR ─── */}
-      <section className="card">
-        <SectionHeader eyebrow="Avance semanal" title="Detalle por marca, zona y constructor" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-              CASAS INSTALADAS POR MARCA
-            </div>
-            <SimpleTable
-              head={['Marca', 'Casas', 'kWp', 'kWh']}
-              rows={report.detalle.marcas.map((m) => [m.marca, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh)])}
-            />
-            <div style={{ height: 220, marginTop: 16 }}>
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie
-                    data={marcaPie}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={50}
-                    outerRadius={80}
-                    label={(props: unknown) => {
-                      const p = props as { payload?: { pct?: number } };
-                      return p.payload?.pct !== undefined ? `${p.payload.pct}%` : '';
-                    }}
-                  >
-                    {marcaPie.map((_, i) => (
-                      <Cell key={i} fill={MARCA_COLORS[i % MARCA_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-                CASAS Y CAPEX POR ZONA
-              </div>
-              <SimpleTable
-                head={['Zona', 'Casas', 'CAPEX (COP)']}
-                rows={report.detalle.zonas.map((z) => [z.zona, fmtInt(z.casas), z.capex])}
-              />
-            </div>
-            <div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-                CASAS ASIGNADAS POR CONSTRUCTOR
-              </div>
-              <SimpleTable
-                head={['Constructor', 'Asignadas', 'Instaladas']}
-                rows={report.detalle.constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)])}
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ─── SLIDE 4: DETALLE SEMANAL POR MARCA, ZONA Y CONSTRUCTOR ─── */}
+      <DetalleMarcaZonaConstructor
+        eyebrow="Avance semanal"
+        title="Detalle por marca, zona y constructor"
+        marcas={report.detalle.marcas}
+        zonas={report.detalle.zonas}
+        constructores={report.detalle.constructores}
+      />
 
       {/* ─── SLIDE 5: PLANEACIÓN ─── */}
       <section className="card">
@@ -421,6 +373,86 @@ export default function DashPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+/**
+ * Bloque reutilizable "Detalle por marca, zona y constructor".
+ * Se usa dos veces en la página: una para el acumulado global y otra para
+ * los datos de la semana. Recibe eyebrow/title para diferenciar.
+ */
+function DetalleMarcaZonaConstructor({
+  eyebrow, title, marcas, zonas, constructores,
+}: {
+  eyebrow: string; title: string;
+  marcas: DashReport['detalle']['marcas'];
+  zonas: DashReport['detalle']['zonas'];
+  constructores: DashReport['detalle']['constructores'];
+}) {
+  const total = marcas.reduce((s, m) => s + m.casas, 0);
+  const pie = marcas.map((m) => ({
+    name: m.marca,
+    value: m.casas,
+    pct: total ? Math.round((m.casas / total) * 100) : 0,
+  }));
+  return (
+    <section className="card">
+      <SectionHeader eyebrow={eyebrow} title={title} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+            CASAS INSTALADAS POR MARCA
+          </div>
+          <SimpleTable
+            head={['Marca', 'Casas', 'kWp', 'kWh']}
+            rows={marcas.map((m) => [m.marca, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh)])}
+          />
+          <div style={{ height: 220, marginTop: 16 }}>
+            <ResponsiveContainer>
+              <PieChart>
+                <Pie
+                  data={pie}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={50}
+                  outerRadius={80}
+                  label={(props: unknown) => {
+                    const p = props as { payload?: { pct?: number } };
+                    return p.payload?.pct !== undefined ? `${p.payload.pct}%` : '';
+                  }}
+                >
+                  {pie.map((_, i) => (
+                    <Cell key={i} fill={MARCA_COLORS[i % MARCA_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+              CASAS Y CAPEX POR ZONA
+            </div>
+            <SimpleTable
+              head={['Zona', 'Casas', 'CAPEX (COP)']}
+              rows={zonas.map((z) => [z.zona, fmtInt(z.casas), z.capex])}
+            />
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+              CASAS ASIGNADAS POR CONSTRUCTOR
+            </div>
+            <SimpleTable
+              head={['Constructor', 'Asignadas', 'Instaladas']}
+              rows={constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)])}
+            />
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

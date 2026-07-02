@@ -294,6 +294,47 @@ export async function GET(request: Request) {
     constructor, asignadas: v.asignadas, instaladas: v.instaladas,
   }));
 
+  // ─── SLIDE 3 (nueva): DETALLE GLOBAL POR MARCA, ZONA, CONSTRUCTOR ───
+  // Misma lógica que la semanal pero sobre TODAS las casas ya instaladas.
+  const marcaGroupG = new Map<string, { casas: number; kwp: number; kwh: number }>();
+  casasInstaladas.forEach((p) => {
+    const cat = p.diseno_bateria_categoria_id ? catById.get(p.diseno_bateria_categoria_id) : undefined;
+    // Fallback al texto libre del proyecto si no hay categoría vinculada
+    const marca = cat?.default_brand ?? p.diseno_bateria_marca ?? p.diseno_inversor_marca ?? 'Sin marca';
+    const cur = marcaGroupG.get(marca) ?? { casas: 0, kwp: 0, kwh: 0 };
+    cur.casas++;
+    cur.kwp += getKwp(p);
+    cur.kwh += getKwh(p);
+    marcaGroupG.set(marca, cur);
+  });
+  const marcasG = Array.from(marcaGroupG.entries())
+    .map(([marca, v]) => ({ marca, casas: v.casas, kwp: v.kwp, kwh: v.kwh }))
+    .sort((a, b) => b.casas - a.casas);
+
+  const zonaGroupG = new Map<string, { casas: number; capex: number }>();
+  casasInstaladas.forEach((p) => {
+    const z = p.zona ?? 'Sin zona';
+    const cur = zonaGroupG.get(z) ?? { casas: 0, capex: 0 };
+    cur.casas++;
+    cur.capex += (capexByProj.get(p.id) ?? 0);
+    zonaGroupG.set(z, cur);
+  });
+  const zonasG = Array.from(zonaGroupG.entries()).map(([zona, v]) => ({
+    zona, casas: v.casas, capex: `$${Math.round(v.capex / MILLIONS)}M`,
+  }));
+
+  const contGroupG = new Map<string, { asignadas: number; instaladas: number }>();
+  projects.forEach((p) => {
+    if (!p.contractor_name) return;
+    const cur = contGroupG.get(p.contractor_name) ?? { asignadas: 0, instaladas: 0 };
+    cur.asignadas++;
+    if (INSTALADAS.has(p.operations_stage ?? '') || CERRADAS_OK.has(p.operations_stage ?? '')) cur.instaladas++;
+    contGroupG.set(p.contractor_name, cur);
+  });
+  const constructoresG = Array.from(contGroupG.entries())
+    .map(([constructor, v]) => ({ constructor, asignadas: v.asignadas, instaladas: v.instaladas }))
+    .sort((a, b) => b.instaladas - a.instaladas);
+
   // ─── SLIDE 5: PLANEACIÓN (próxima semana) ───
   const nextFrom = new Date(to.getTime() + 24 * 60 * 60 * 1000);
   const nextTo = new Date(to.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -404,6 +445,7 @@ export async function GET(request: Request) {
       motivos,
     },
     detalle: { marcas, zonas, constructores },
+    detalleGlobal: { marcas: marcasG, zonas: zonasG, constructores: constructoresG },
     planeacion: {
       casasAsignadas: proximaSemana.length,
       kwpPlan, kwhPlan, capexPlanM,

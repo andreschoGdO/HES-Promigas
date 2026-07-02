@@ -107,6 +107,60 @@ function tableHeaderStyles() {
   };
 }
 
+/**
+ * Slide con las 3 tablas (Marca | Zona | Constructor) — layout de 2 columnas.
+ * Se usa una vez para el acumulado global y otra para la semana.
+ */
+function drawDetalleSlide(
+  doc: jsPDF,
+  section: string,
+  title: string,
+  marcas: Array<{ marca: string; casas: number; kwp: number; kwh: number }>,
+  zonas: Array<{ zona: string; casas: number; capex: string }>,
+  constructores: Array<{ constructor: string; asignadas: number; instaladas: number }>,
+) {
+  doc.addPage();
+  drawHeader(doc, section, title);
+  const pageW = doc.internal.pageSize.getWidth();
+  const y = 44;
+  const colW = (pageW - 20 * 2 - 8) / 2;
+  autoTable(doc, {
+    startY: y,
+    head: [['Marca', 'Casas', 'kWp', 'kWh']],
+    body: marcas.map((m) => [m.marca, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh)]),
+    headStyles: tableHeaderStyles(),
+    bodyStyles: { fontSize: 9, textColor: TEXT },
+    alternateRowStyles: { fillColor: HEAD_BG },
+    margin: { left: 20, right: pageW - 20 - colW },
+    theme: 'grid',
+    styles: { lineColor: BORDER, lineWidth: 0.1 },
+  });
+  autoTable(doc, {
+    startY: y,
+    head: [['Zona', 'Casas', 'CAPEX (COP)']],
+    body: zonas.map((z) => [z.zona, fmtInt(z.casas), z.capex]),
+    headStyles: tableHeaderStyles(),
+    bodyStyles: { fontSize: 9, textColor: TEXT },
+    alternateRowStyles: { fillColor: HEAD_BG },
+    margin: { left: 20 + colW + 8, right: 20 },
+    theme: 'grid',
+    styles: { lineColor: BORDER, lineWidth: 0.1 },
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const y2 = (doc as any).lastAutoTable.finalY + 10;
+  autoTable(doc, {
+    startY: y2,
+    head: [['Constructor', 'Asignadas', 'Instaladas']],
+    body: constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)]),
+    headStyles: tableHeaderStyles(),
+    bodyStyles: { fontSize: 9, textColor: TEXT },
+    alternateRowStyles: { fillColor: HEAD_BG },
+    margin: { left: 20 + colW + 8, right: 20 },
+    theme: 'grid',
+    styles: { lineColor: BORDER, lineWidth: 0.1 },
+  });
+}
+
 export function generateDashPDF(r: DashReport): void {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
@@ -168,7 +222,13 @@ export function generateDashPDF(r: DashReport): void {
   });
   drawFooter(doc, '* Indicadores editables: actualice los valores acumulados y la serie mensual según el cierre real de cada mes.');
 
-  // ─── SLIDE 3: AVANCE SEMANAL ───
+  // ─── SLIDE 3 (NUEVA): DETALLE GLOBAL POR MARCA, ZONA Y CONSTRUCTOR ───
+  const dg = r.detalleGlobal ?? r.detalle;
+  drawDetalleSlide(doc, 'Avance global', 'Detalle por marca, zona y constructor',
+    dg.marcas, dg.zonas, dg.constructores);
+  drawFooter(doc, '* Detalle acumulado: incluye todas las casas ya instaladas desde inicio de operación.');
+
+  // ─── SLIDE 4: AVANCE SEMANAL ───
   doc.addPage();
   drawHeader(doc, 'Avance semanal', 'Resultados de construcción de esta semana');
   y = 44;
@@ -195,46 +255,9 @@ export function generateDashPDF(r: DashReport): void {
   });
   drawFooter(doc, '* Indicadores editables: actualice los valores directamente desde la vista Dash.');
 
-  // ─── SLIDE 4: DETALLE POR MARCA, ZONA Y CONSTRUCTOR ───
-  doc.addPage();
-  drawHeader(doc, 'Avance semanal', 'Detalle por marca, zona y constructor');
-  y = 44;
-  const colW = (pageW - 20 * 2 - 8) / 2;
-  autoTable(doc, {
-    startY: y,
-    head: [['Marca', 'Casas', 'kWp', 'kWh']],
-    body: r.detalle.marcas.map((m) => [m.marca, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh)]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20, right: pageW - 20 - colW },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
-  autoTable(doc, {
-    startY: y,
-    head: [['Zona', 'Casas', 'CAPEX (COP)']],
-    body: r.detalle.zonas.map((z) => [z.zona, fmtInt(z.casas), z.capex]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20 + colW + 8, right: 20 },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const y2 = (doc as any).lastAutoTable.finalY + 10;
-  autoTable(doc, {
-    startY: y2,
-    head: [['Constructor', 'Asignadas', 'Instaladas']],
-    body: r.detalle.constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20 + colW + 8, right: 20 },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
+  // ─── SLIDE 5: DETALLE SEMANAL POR MARCA, ZONA Y CONSTRUCTOR ───
+  drawDetalleSlide(doc, 'Avance semanal', 'Detalle por marca, zona y constructor',
+    r.detalle.marcas, r.detalle.zonas, r.detalle.constructores);
   drawFooter(doc, '* Tabla y gráfico nativos: edite los valores en la vista Dash y el reporte se actualiza.');
 
   // ─── SLIDE 5: PLANEACIÓN ───

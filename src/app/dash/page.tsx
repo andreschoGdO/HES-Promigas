@@ -216,36 +216,7 @@ export default function DashPage() {
         constructores={report.detalleGlobal?.constructores ?? report.detalle.constructores}
       />
 
-      {/* ─── SLIDE 3: AVANCE SEMANAL ─── */}
-      <section className="card">
-        <SectionHeader eyebrow="Avance semanal" title="Resultados de construcción de esta semana" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard label="Casas instaladas"       value={fmtInt(report.semana.casasInstaladas)} hint={`de ${report.semana.programadas} programadas`} />
-          <StatCard label="En stand by"            value={fmtInt(report.semana.standBy)}          hint="ver motivos abajo" />
-          <StatCard label="Por iniciar próxima"    value={fmtInt(report.semana.porIniciar)}       hint="ya asignadas" />
-          <StatCard label="kWp solar instalados"   value={`${fmt1(report.semana.kwpSemana)} kWp`} hint="esta semana" />
-          <StatCard label="kWh batería instalados" value={`${fmtInt(report.semana.kwhSemana)} kWh`} hint="esta semana" />
-          <StatCard label="CAPEX ejecutado"        value={`$${fmtInt(report.semana.capexSemanaM)}M COP`} hint="acumulado semana" />
-        </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-          MOTIVOS DE STAND BY ({report.semana.standBy} CASAS)
-        </div>
-        <SimpleTable
-          head={['Motivo', 'Casas', 'Acción en curso']}
-          rows={report.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion])}
-        />
-      </section>
-
-      {/* ─── SLIDE 4: DETALLE SEMANAL POR MARCA, ZONA Y CONSTRUCTOR ─── */}
-      <DetalleMarcaZonaConstructor
-        eyebrow="Avance semanal"
-        title="Detalle por marca, zona y constructor"
-        marcas={report.detalle.marcas}
-        zonas={report.detalle.zonas}
-        constructores={report.detalle.constructores}
-      />
-
-      {/* ─── SLIDE 5: PLANEACIÓN ─── */}
+      {/* ─── SLIDE 4: PLANEACIÓN (movido antes del avance semanal) ─── */}
       <section className="card">
         <SectionHeader eyebrow="Planeación" title="Lo asignado para ejecutar la próxima semana" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
@@ -265,7 +236,36 @@ export default function DashPage() {
         />
       </section>
 
-      {/* ─── SLIDE 6: LEGALIZACIONES ─── */}
+      {/* ─── SLIDE 5: AVANCE SEMANAL ─── */}
+      <section className="card">
+        <SectionHeader eyebrow="Avance semanal" title="Resultados de construcción de esta semana" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+          <StatCard label="Casas instaladas"       value={fmtInt(report.semana.casasInstaladas)} hint={`de ${report.semana.programadas} programadas`} />
+          <StatCard label="En stand by"            value={fmtInt(report.semana.standBy)}          hint="ver motivos abajo" />
+          <StatCard label="Por iniciar próxima"    value={fmtInt(report.semana.porIniciar)}       hint="ya asignadas" />
+          <StatCard label="kWp solar instalados"   value={`${fmt1(report.semana.kwpSemana)} kWp`} hint="esta semana" />
+          <StatCard label="kWh batería instalados" value={`${fmtInt(report.semana.kwhSemana)} kWh`} hint="esta semana" />
+          <StatCard label="CAPEX ejecutado"        value={`$${fmtInt(report.semana.capexSemanaM)}M COP`} hint="acumulado semana" />
+        </div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+          MOTIVOS DE STAND BY ({report.semana.standBy} CASAS)
+        </div>
+        <SimpleTable
+          head={['Motivo', 'Casas', 'Acción en curso']}
+          rows={report.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion])}
+        />
+      </section>
+
+      {/* ─── SLIDE 6: DETALLE SEMANAL POR MARCA, ZONA Y CONSTRUCTOR ─── */}
+      <DetalleMarcaZonaConstructor
+        eyebrow="Avance semanal"
+        title="Detalle por marca, zona y constructor"
+        marcas={report.detalle.marcas}
+        zonas={report.detalle.zonas}
+        constructores={report.detalle.constructores}
+      />
+
+      {/* ─── SLIDE 7: LEGALIZACIONES ─── */}
       <section className="card">
         <SectionHeader eyebrow="Legalizaciones" title="Trámites para venta de excedentes (AGPE)" />
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: -8, marginBottom: 16 }}>

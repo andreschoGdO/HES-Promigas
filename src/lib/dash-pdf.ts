@@ -228,39 +228,7 @@ export function generateDashPDF(r: DashReport): void {
     dg.marcas, dg.zonas, dg.constructores);
   drawFooter(doc, '* Detalle acumulado: incluye todas las casas ya instaladas desde inicio de operación.');
 
-  // ─── SLIDE 4: AVANCE SEMANAL ───
-  doc.addPage();
-  drawHeader(doc, 'Avance semanal', 'Resultados de construcción de esta semana');
-  y = 44;
-  y = drawStatRow(doc, y, [
-    { label: 'Casas instaladas', value: fmtInt(r.semana.casasInstaladas), hint: `de ${r.semana.programadas} programadas` },
-    { label: 'En stand by',      value: fmtInt(r.semana.standBy),          hint: 'ver motivos abajo' },
-    { label: 'Por iniciar',      value: fmtInt(r.semana.porIniciar),       hint: 'ya asignadas' },
-  ]);
-  y = drawStatRow(doc, y, [
-    { label: 'kWp solar instalados',    value: `${fmt1(r.semana.kwpSemana)} kWp`, hint: 'esta semana' },
-    { label: 'kWh batería instalados', value: `${fmtInt(r.semana.kwhSemana)} kWh`, hint: 'esta semana' },
-    { label: 'CAPEX ejecutado',        value: fmtCOP(r.semana.capexSemanaM),      hint: 'acumulado semana' },
-  ]);
-  autoTable(doc, {
-    startY: y,
-    head: [['Motivo', 'Casas', 'Acción en curso']],
-    body: r.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20, right: 20 },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
-  drawFooter(doc, '* Indicadores editables: actualice los valores directamente desde la vista Dash.');
-
-  // ─── SLIDE 5: DETALLE SEMANAL POR MARCA, ZONA Y CONSTRUCTOR ───
-  drawDetalleSlide(doc, 'Avance semanal', 'Detalle por marca, zona y constructor',
-    r.detalle.marcas, r.detalle.zonas, r.detalle.constructores);
-  drawFooter(doc, '* Tabla y gráfico nativos: edite los valores en la vista Dash y el reporte se actualiza.');
-
-  // ─── SLIDE 5: PLANEACIÓN ───
+  // ─── SLIDE 4: PLANEACIÓN (movido antes del avance semanal) ───
   doc.addPage();
   drawHeader(doc, 'Planeación', 'Lo asignado para ejecutar la próxima semana');
   y = 44;
@@ -287,7 +255,39 @@ export function generateDashPDF(r: DashReport): void {
   });
   drawFooter(doc, '* Indicadores editables. Ajuste fechas, zonas y cantidades según la planificación real de la semana.');
 
-  // ─── SLIDE 6: LEGALIZACIONES ───
+  // ─── SLIDE 5: AVANCE SEMANAL ───
+  doc.addPage();
+  drawHeader(doc, 'Avance semanal', 'Resultados de construcción de esta semana');
+  y = 44;
+  y = drawStatRow(doc, y, [
+    { label: 'Casas instaladas', value: fmtInt(r.semana.casasInstaladas), hint: `de ${r.semana.programadas} programadas` },
+    { label: 'En stand by',      value: fmtInt(r.semana.standBy),          hint: 'ver motivos abajo' },
+    { label: 'Por iniciar',      value: fmtInt(r.semana.porIniciar),       hint: 'ya asignadas' },
+  ]);
+  y = drawStatRow(doc, y, [
+    { label: 'kWp solar instalados',    value: `${fmt1(r.semana.kwpSemana)} kWp`, hint: 'esta semana' },
+    { label: 'kWh batería instalados', value: `${fmtInt(r.semana.kwhSemana)} kWh`, hint: 'esta semana' },
+    { label: 'CAPEX ejecutado',        value: fmtCOP(r.semana.capexSemanaM),      hint: 'acumulado semana' },
+  ]);
+  autoTable(doc, {
+    startY: y,
+    head: [['Motivo', 'Casas', 'Acción en curso']],
+    body: r.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion]),
+    headStyles: tableHeaderStyles(),
+    bodyStyles: { fontSize: 9, textColor: TEXT },
+    alternateRowStyles: { fillColor: HEAD_BG },
+    margin: { left: 20, right: 20 },
+    theme: 'grid',
+    styles: { lineColor: BORDER, lineWidth: 0.1 },
+  });
+  drawFooter(doc, '* Indicadores editables: actualice los valores directamente desde la vista Dash.');
+
+  // ─── SLIDE 6: DETALLE SEMANAL POR MARCA, ZONA Y CONSTRUCTOR ───
+  drawDetalleSlide(doc, 'Avance semanal', 'Detalle por marca, zona y constructor',
+    r.detalle.marcas, r.detalle.zonas, r.detalle.constructores);
+  drawFooter(doc, '* Tabla y gráfico nativos: edite los valores en la vista Dash y el reporte se actualiza.');
+
+  // ─── SLIDE 7: LEGALIZACIONES ───
   doc.addPage();
   drawHeader(doc, 'Legalizaciones', 'Trámites para venta de excedentes (AGPE)');
   doc.setFontSize(10);

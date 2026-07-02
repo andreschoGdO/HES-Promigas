@@ -45,6 +45,16 @@ function StatCard({ label, value, hint, tag }: { label: string; value: string; h
 const PANEL_WP = 595;
 const KWH_POR_BATERIA = 5.1;  // Livoltek HV promedio
 
+/**
+ * Formatter para <LabelList> de Recharts. Acepta el tipo ancho (RenderableText,
+ * puede venir undefined/string/number) y devuelve string vacío para ceros o
+ * valores no numéricos — así no aparecen "0" ni "NaN" en la gráfica.
+ */
+const fmtLabel = (v: unknown): string => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) && n > 0 ? String(n) : '';
+};
+
 function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div style={{ marginBottom: 16 }}>
@@ -253,17 +263,17 @@ export default function DashPage() {
                   <Tooltip />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar dataKey="sol1" stackId="a" fill="#07c5a8" name="Solución 1">
-                    <LabelList dataKey="sol1" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
+                    <LabelList dataKey="sol1" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={fmtLabel} />
                   </Bar>
                   <Bar dataKey="sol2" stackId="a" fill="#3b82f6" name="Solución 2">
-                    <LabelList dataKey="sol2" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
+                    <LabelList dataKey="sol2" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={fmtLabel} />
                   </Bar>
                   <Bar dataKey="sol3" stackId="a" fill="#94a3b8" name="Solución 3">
-                    <LabelList dataKey="sol3" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
+                    <LabelList dataKey="sol3" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={fmtLabel} />
                   </Bar>
                   <Bar dataKey="sol4" stackId="a" fill="#1f2937" name="Solución 4">
-                    <LabelList dataKey="sol4" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
-                    <LabelList dataKey="total" position="top" style={{ fill: 'var(--text-primary)', fontSize: 11, fontWeight: 700 }} formatter={(v: number) => (v > 0 ? String(v) : '')} />
+                    <LabelList dataKey="sol4" position="center" style={{ fill: '#fff', fontSize: 10, fontWeight: 700 }} formatter={fmtLabel} />
+                    <LabelList dataKey="total" position="top" style={{ fill: 'var(--text-primary)', fontSize: 11, fontWeight: 700 }} formatter={fmtLabel} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

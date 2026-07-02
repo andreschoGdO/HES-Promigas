@@ -338,6 +338,7 @@ export function generateDashPDF(r: DashReport): void {
   doc.addPage();
   drawHeader(doc, 'Logística', 'Estado de inventario en bodega');
   y = 44;
+  const logColW = (pageW - 20 * 2 - 8) / 2;
   autoTable(doc, {
     startY: y,
     head: [['Marca', 'Paneles', 'Inversores', 'Baterías', 'Estructuras']],
@@ -345,7 +346,7 @@ export function generateDashPDF(r: DashReport): void {
     headStyles: tableHeaderStyles(),
     bodyStyles: { fontSize: 9, textColor: TEXT },
     alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20, right: pageW - 20 - colW },
+    margin: { left: 20, right: pageW - 20 - logColW },
     theme: 'grid',
     styles: { lineColor: BORDER, lineWidth: 0.1 },
   });
@@ -356,7 +357,7 @@ export function generateDashPDF(r: DashReport): void {
     headStyles: tableHeaderStyles(),
     bodyStyles: { fontSize: 9, textColor: TEXT },
     alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20 + colW + 8, right: 20 },
+    margin: { left: 20 + logColW + 8, right: 20 },
     theme: 'grid',
     styles: { lineColor: BORDER, lineWidth: 0.1 },
   });

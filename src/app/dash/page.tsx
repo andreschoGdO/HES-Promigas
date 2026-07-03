@@ -15,17 +15,25 @@ const MARCA_COLORS = ['#07c5a8', '#3b82f6', '#f59e0b', '#8b5cf6'];
 const fmtInt = (n: number) => n.toLocaleString('es-CO');
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-function StatCard({ label, value, hint, tag, detalle }: {
+function StatCard({ label, value, hint, tag, detalle, detalleSecundario }: {
   label: string; value: string; hint: string;
   tag?: string;
   /** Lista de casas que componen esta métrica; se muestra al hover. */
   detalle?: string[];
+  /** Lista secundaria (ej: para mostrar 'programadas' al lado de 'instaladas'). */
+  detalleSecundario?: { label: string; items: string[] };
 }) {
   const hasDetalle = detalle && detalle.length > 0;
-  // title del native tooltip — se muestra al pasar el mouse sobre el card
-  const nativeTitle = hasDetalle
-    ? `${label}:\n${detalle!.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`
-    : undefined;
+  const hasSecundario = detalleSecundario && detalleSecundario.items.length > 0;
+  const parts: string[] = [];
+  if (hasDetalle) {
+    parts.push(`${label}:\n${detalle!.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`);
+  }
+  if (hasSecundario) {
+    parts.push(`${detalleSecundario!.label}:\n${detalleSecundario!.items.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`);
+  }
+  const nativeTitle = parts.length > 0 ? parts.join('\n\n') : undefined;
+  const showHint = hasDetalle || hasSecundario;
   return (
     <div className="stat-card" title={nativeTitle} style={{ position: 'relative' }}>
       <div className="stat-label">{label}</div>
@@ -47,7 +55,7 @@ function StatCard({ label, value, hint, tag, detalle }: {
           {tag}
         </div>
       )}
-      {hasDetalle && (
+      {showHint && (
         <div style={{
           marginTop: 6,
           fontSize: '0.68rem',
@@ -360,6 +368,9 @@ export default function DashPage() {
             hint={`de ${report.semana.programadas} programadas`}
             tag={report.semana.programadas > 0 ? `${Math.round((report.semana.casasInstaladas / report.semana.programadas) * 100)}% cumplimiento` : undefined}
             detalle={report.semana.detalle?.instaladas}
+            detalleSecundario={report.semana.detalle?.programadas
+              ? { label: 'Programadas (todas)', items: report.semana.detalle.programadas }
+              : undefined}
           />
           <StatCard
             label="En stand by"

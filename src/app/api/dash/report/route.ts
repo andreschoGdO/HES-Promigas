@@ -305,7 +305,10 @@ export async function GET(request: Request) {
   const marcaGroup = new Map<string, { casas: number; kwp: number; kwh: number }>();
   instaladasSemana.forEach((p) => {
     const cat = p.diseno_bateria_categoria_id ? catById.get(p.diseno_bateria_categoria_id) : undefined;
-    const marca = cat?.default_brand ?? 'Sin marca';
+    // Fallback en cascada: categoría del catálogo → texto libre de batería del
+    // proyecto → texto libre de inversor → "Sin marca". Las casas de mig 40
+    // (33 operativas) usan texto libre, sin categoría vinculada.
+    const marca = cat?.default_brand ?? p.diseno_bateria_marca ?? p.diseno_inversor_marca ?? 'Sin marca';
     const cur = marcaGroup.get(marca) ?? { casas: 0, kwp: 0, kwh: 0 };
     cur.casas++;
     cur.kwp += getKwp(p);

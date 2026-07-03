@@ -176,36 +176,26 @@ export default function InventarioPage() {
     supa().auth.getUser().then(({ data }) => { if (data.user?.email) setUserEmail(data.user.email); });
   }, []);
 
-  // Fetch resumen stats al cargar la página, persisten arriba sin importar el tab
+  // Fetch resumen stats al cargar la página, persisten arriba sin importar el tab.
+  // Usa /api/inventory/stats (COUNT queries) en vez de fetchear todos los items —
+  // así evitamos el cap de 1000 filas de PostgREST que truncaba los in_stock.
   useEffect(() => {
     (async () => {
       try {
-        const [r1, r2] = await Promise.all([
-          fetch('/api/inventory/items?limit=2000').then((r) => r.json()),
-          fetch('/api/inventory/consumables').then((r) => r.json()),
-        ]);
-        const items: InvItem[] = r1.items ?? [];
-        const consumables: Consumable[] = r2.consumables ?? [];
-        const byStatus: Record<string, number> = {};
-        let warrantyExpiring = 0;
-        const nowPlus60 = new Date(Date.now() + 60 * 86400000);
-        for (const it of items) {
-          byStatus[it.status] = (byStatus[it.status] ?? 0) + 1;
-          if (it.warranty_expires_at && new Date(it.warranty_expires_at) < nowPlus60) warrantyExpiring++;
-        }
-        const lowStock = consumables.filter((c) => c.stock_quantity <= c.min_threshold);
+        const r = await fetch('/api/inventory/stats');
+        if (!r.ok) throw new Error('stats fetch fallo');
+        const j = await r.json();
         setHeaderStats({
-          totalItems: items.length,
-          totalConsumables: consumables.length,
-          inStock: byStatus.in_stock ?? 0,
-          reserved: byStatus.reserved ?? 0,
-          installed: byStatus.installed ?? 0,
-          inRepair: (byStatus.in_repair ?? 0) + (byStatus.rma ?? 0),
-          lowStockCount: lowStock.length,
-          warrantyExpiring,
+          totalItems: j.totalItems ?? 0,
+          totalConsumables: j.totalConsumables ?? 0,
+          inStock: j.inStock ?? 0,
+          reserved: j.reserved ?? 0,
+          installed: j.installed ?? 0,
+          inRepair: j.inRepair ?? 0,
+          lowStockCount: j.lowStockCount ?? 0,
+          warrantyExpiring: j.warrantyExpiring ?? 0,
         });
       } catch {
-        // Si falla, mostramos los cards con cero pero la página sigue operando
         setHeaderStats({ totalItems: 0, totalConsumables: 0, inStock: 0, reserved: 0, installed: 0, inRepair: 0, lowStockCount: 0, warrantyExpiring: 0 });
       }
     })();

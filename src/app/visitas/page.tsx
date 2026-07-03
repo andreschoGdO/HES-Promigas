@@ -747,26 +747,18 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
         open={openSections.__ident ?? true}
         onToggle={() => toggleSection('__ident')}>
         <FieldsGrid>
-          {/* Casa: texto libre para PREVIA, dropdown para los demás */}
-          {schema.casaIsFreeText ? (
-            <FieldWrapper label="Nombre del conjunto o casa" required>
-              <input type="text"
-                placeholder="Ej: Reservas de Pance · Casa 30"
-                value={visit.casa ?? ''}
-                onChange={(e) => setVisit((v) => v ? { ...v, casa: e.target.value, house_id: null } : v)}
-                style={{ minHeight: 44 }} />
-            </FieldWrapper>
-          ) : (
-            <FieldWrapper label="Casa" required>
-              <select value={visit.house_id ?? ''} onChange={(e) => {
-                const h = houses.find((x) => x.id === e.target.value);
-                setVisit((v) => v ? { ...v, house_id: h?.id ?? null, casa: h?.casa ?? null } : v);
-              }}>
-                <option value="">— Selecciona —</option>
-                {houses.map((h) => <option key={h.id} value={h.id}>{h.casa}{h.location ? ` · ${h.location}` : ''}</option>)}
-              </select>
-            </FieldWrapper>
-          )}
+          {/* Casa — texto libre para TODOS los tipos de acta.
+              Antes: Previa usaba texto libre y los demás tipos usaban un dropdown
+              de client_houses. Ahora todos son input de texto para que el técnico
+              pueda escribir libremente el nombre completo (ej: "Casa 108 - Reserva
+              de Pance") sin depender de que la casa esté cargada previamente. */}
+          <FieldWrapper label="Casa" required>
+            <input type="text"
+              placeholder="Casa 108 - Reserva de Pance"
+              value={visit.casa ?? ''}
+              onChange={(e) => setVisit((v) => v ? { ...v, casa: e.target.value, house_id: null } : v)}
+              style={{ minHeight: 44 }} />
+          </FieldWrapper>
 
           <FieldWrapper label="Técnico que realiza la visita" required>
             <input type="text" value={visit.technician_name ?? ''}

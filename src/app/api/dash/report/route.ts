@@ -112,7 +112,17 @@ export async function GET(request: Request) {
     .in('key', ['dash_meta_anual_casas', 'dash_standby_dias', 'dash_solucion_umbrales', 'dash_project_start']);
   const sMap = new Map((settings ?? []).map((s: { key: string; value: Record<string, unknown> }) => [s.key, s.value]));
   const metaAnualRaw = sMap.get('dash_meta_anual_casas') as unknown as { value?: number } | undefined;
-  const metaAnual = Number(metaAnualRaw?.value ?? 150);
+  let metaAnual = Number(metaAnualRaw?.value ?? 150);
+  // Auto-migración: la mig 39 sembró 230 como default histórico. La 41 lo
+  // actualiza a 150 pero requiere correr SQL a mano. Si detectamos el 230
+  // legacy, lo migramos on-read a 150 — así se sincroniza solo la primera
+  // vez que alguien abre el Dash, sin depender de correr la migración.
+  if (metaAnual === 230) {
+    await supabaseAdmin
+      .from('app_settings')
+      .upsert({ key: 'dash_meta_anual_casas', value: { value: 150 } }, { onConflict: 'key' });
+    metaAnual = 150;
+  }
   const projectStartRaw = sMap.get('dash_project_start') as unknown as { value?: string } | undefined;
   const projectStartStr = projectStartRaw?.value ?? '2025-10-01';
   const projectStart = new Date(projectStartStr);

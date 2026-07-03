@@ -380,9 +380,9 @@ export default function DashPage() {
             detalle={report.semana.detalle?.standBy}
           />
           <StatCard
-            label="Por iniciar próxima"
+            label="En curso"
             value={fmtInt(report.semana.porIniciar)}
-            hint="ya asignadas"
+            hint="alistamiento o instalación"
             detalle={report.semana.detalle?.porIniciar}
           />
           <StatCard

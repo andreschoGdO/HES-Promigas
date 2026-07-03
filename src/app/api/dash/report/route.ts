@@ -287,14 +287,13 @@ export async function GET(request: Request) {
     accion: `Revisar proyectos con > ${standbyDias[stage] ?? '?'} días sin avance`,
   }));
 
-  const porIniciarProjects = projects.filter((p) => {
-    if (p.operations_stage !== 'alistamiento') return false;
-    if (!p.installation_date) return false;
-    const d = new Date(p.installation_date);
-    const nextWeekStart = new Date(to.getTime() + 24 * 60 * 60 * 1000);
-    const nextWeekEnd = new Date(to.getTime() + 8 * 24 * 60 * 60 * 1000);
-    return d >= nextWeekStart && d <= nextWeekEnd;
-  });
+  // Pipeline activo: TODAS las casas que están en alistamiento o instalación,
+  // sin filtro de fecha. Refleja "cuántas obras tenés en curso ahora mismo".
+  // Antes filtrábamos solo por alistamiento con installation_date en la próxima
+  // semana, dejando afuera las que ya arrancaron o las que no tienen fecha.
+  const porIniciarProjects = projects.filter((p) =>
+    p.operations_stage === 'alistamiento' || p.operations_stage === 'instalacion',
+  );
   const porIniciar = porIniciarProjects.length;
 
   // Etiqueta legible para tooltip: preferir client_name, sino título del proyecto

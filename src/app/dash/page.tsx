@@ -236,12 +236,6 @@ export default function DashPage() {
             hint={`${report.global.casasAcum} de ${report.global.metaCasas} casas meta`}
             tag={`Faltan ${Math.max(0, report.global.metaCasas - report.global.casasAcum)} casas`}
           />
-          <StatCard
-            label="Meses activos"
-            value={`${report.global.mesesActivos}`}
-            hint={`${report.global.porMes[0]?.mes} - ${report.global.porMes.at(-1)?.mes}`}
-            tag={`${report.global.porMes.length} meses de ventana`}
-          />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>

@@ -207,7 +207,6 @@ export function generateDashPDF(r: DashReport): void {
   y = drawStatRow(doc, y, [
     { label: 'CAPEX ejecutado (acum.)', value: fmtCOP(r.global.capexAcumM), hint: 'desde inicio de operación' },
     { label: 'Avance vs. meta anual',   value: `${r.global.avancePct}%`,     hint: `${r.global.casasAcum} de ${r.global.metaCasas} casas meta` },
-    { label: 'Meses con instalación',   value: `${r.global.mesesActivos}`,   hint: `${r.global.porMes[0]?.mes} - ${r.global.porMes.at(-1)?.mes}` },
   ]);
   autoTable(doc, {
     startY: y,

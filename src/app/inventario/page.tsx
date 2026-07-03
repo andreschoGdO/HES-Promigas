@@ -1446,69 +1446,22 @@ function PanoramaTab() {
     (async () => {
       setLoading(true);
       try {
-        const [itemsR, consR] = await Promise.all([
-          fetch('/api/inventory/items?limit=2000').then((r) => r.json()),
-          fetch('/api/inventory/consumables').then((r) => r.json()).catch(() => ({ consumables: [] })),
-        ]);
-        const items = (itemsR.items ?? []) as Array<InvItem & { acquired_cost_cop: number | null; client_houses?: { casa: string } | null }>;
-
-        // Agrupar por familia
-        const byFamily = new Map<string, FamilyStats>();
-        for (const it of items) {
-          const family = it.inventory_categories?.family ?? 'sin_familia';
-          const cur = byFamily.get(family) ?? { family, total: 0, byStatus: {}, totalCostCop: 0, avgCostCop: null };
-          cur.total++;
-          cur.byStatus[it.status] = (cur.byStatus[it.status] ?? 0) + 1;
-          if (it.acquired_cost_cop != null) cur.totalCostCop += Number(it.acquired_cost_cop);
-          byFamily.set(family, cur);
-        }
-        for (const fs of byFamily.values()) {
-          const withCost = items.filter((it) => (it.inventory_categories?.family ?? 'sin_familia') === fs.family && it.acquired_cost_cop != null);
-          fs.avgCostCop = withCost.length > 0 ? fs.totalCostCop / withCost.length : null;
-        }
-        const families = Array.from(byFamily.values()).sort((a, b) => b.total - a.total);
-        setFamilyStats(families);
-
-        // Agrupar por marca
-        const byBrand = new Map<string, BrandStat>();
-        for (const it of items) {
-          const brand = it.brand?.trim() || '(Sin marca)';
-          const cur = byBrand.get(brand) ?? { brand, total: 0, byStatus: {}, byFamily: {}, installed: 0, totalCostCop: 0 };
-          cur.total++;
-          cur.byStatus[it.status] = (cur.byStatus[it.status] ?? 0) + 1;
-          const family = it.inventory_categories?.family ?? 'sin_familia';
-          cur.byFamily[family] = (cur.byFamily[family] ?? 0) + 1;
-          if (it.status === 'installed') cur.installed++;
-          if (it.acquired_cost_cop != null) cur.totalCostCop += Number(it.acquired_cost_cop);
-          byBrand.set(brand, cur);
-        }
-        setBrandStats(Array.from(byBrand.values()).sort((a, b) => b.total - a.total));
-
-        // Top casas por cantidad de equipos instalados
-        const byHouse = new Map<string, HouseStat>();
-        for (const it of items) {
-          if (it.status !== 'installed' || !it.current_house_id) continue;
-          const cur = byHouse.get(it.current_house_id) ?? { house_id: it.current_house_id, casa: it.client_houses?.casa ?? '—', count: 0, brands: new Set<string>() };
-          cur.count++;
-          if (it.brand) cur.brands.add(it.brand);
-          byHouse.set(it.current_house_id, cur);
-        }
-        setTopHouses(Array.from(byHouse.values()).sort((a, b) => b.count - a.count).slice(0, 15));
-
-        // Items recientemente adquiridos
-        const sorted = [...items]
-          .filter((it) => it.acquired_at)
-          .sort((a, b) => (b.acquired_at ?? '').localeCompare(a.acquired_at ?? ''))
-          .slice(0, 10);
-        setRecentItems(sorted as RecentItem[]);
-
-        // Costo total acumulado en consumibles
-        const cons = (consR.consumables ?? []) as Array<{ stock_quantity: number; cost_per_unit_cop: number | null }>;
-        const consCost = cons.reduce((acc, c) => acc + (Number(c.stock_quantity) * Number(c.cost_per_unit_cop ?? 0)), 0);
-        setConsumiblesValue(consCost);
-
-        const itemsCost = items.reduce((acc, it) => acc + Number(it.acquired_cost_cop ?? 0), 0);
-        setGrandTotal(itemsCost + consCost);
+        // Endpoint dedicado que agrega en el server paginando los items —
+        // así no sufre el cap default de 1000 filas de PostgREST que hacía
+        // que Panorama subestimara familias, marcas y costos.
+        const r = await fetch('/api/inventory/panorama');
+        if (!r.ok) throw new Error('panorama fetch fallo');
+        const j = await r.json();
+        setFamilyStats(j.familyStats ?? []);
+        setBrandStats(j.brandStats ?? []);
+        // El endpoint devuelve brands como array; convertir a Set para la UI
+        setTopHouses(((j.topHouses ?? []) as Array<{ house_id: string; casa: string; count: number; brands: string[] }>)
+          .map((h) => ({ ...h, brands: new Set(h.brands ?? []) })));
+        setRecentItems(j.recentItems ?? []);
+        setConsumiblesValue(j.consumablesValue ?? 0);
+        setGrandTotal(j.grandTotal ?? 0);
+      } catch (err) {
+        console.error('[panorama] fetch fallo', err);
       } finally {
         setLoading(false);
       }

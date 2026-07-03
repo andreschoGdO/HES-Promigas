@@ -23,17 +23,15 @@ function StatCard({ label, value, hint, tag, detalle, detalleSecundario }: {
   /** Lista secundaria (ej: para mostrar 'programadas' al lado de 'instaladas'). */
   detalleSecundario?: { label: string; items: string[] };
 }) {
-  const hasDetalle = detalle && detalle.length > 0;
-  const hasSecundario = detalleSecundario && detalleSecundario.items.length > 0;
   const parts: string[] = [];
-  if (hasDetalle) {
-    parts.push(`${label}:\n${detalle!.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`);
+  if (detalle && detalle.length > 0) {
+    parts.push(`${label}:\n${detalle.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`);
   }
-  if (hasSecundario) {
-    parts.push(`${detalleSecundario!.label}:\n${detalleSecundario!.items.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`);
+  if (detalleSecundario && detalleSecundario.items.length > 0) {
+    parts.push(`${detalleSecundario.label}:\n${detalleSecundario.items.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`);
   }
   const nativeTitle = parts.length > 0 ? parts.join('\n\n') : undefined;
-  const showHint = hasDetalle || hasSecundario;
+  const showHint = parts.length > 0;
   return (
     <div className="stat-card" title={nativeTitle} style={{ position: 'relative' }}>
       <div className="stat-label">{label}</div>

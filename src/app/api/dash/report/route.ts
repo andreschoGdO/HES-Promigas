@@ -129,15 +129,16 @@ export async function GET(request: Request) {
   // Umbrales de stand-by por etapa. Auto-migran si detectamos los valores
   // legacy sembrados por mig 39 (14/10/7/21/30) → los nuevos más estrictos
   // (5/5/4/10/30). Mismo patrón self-healing que meta anual.
-  const STANDBY_DEFAULT_NEW = {
+  const STANDBY_DEFAULT_NEW: StandbyDias = {
     dimensionado: 5, alistamiento: 5, instalacion: 4, legalizacion: 10, logistica_inversa: 30,
   };
-  const STANDBY_LEGACY = {
+  const STANDBY_LEGACY: StandbyDias = {
     dimensionado: 14, alistamiento: 10, instalacion: 7, legalizacion: 21, logistica_inversa: 30,
   };
-  let standbyDias = (sMap.get('dash_standby_dias') as unknown as StandbyDias | undefined) ?? STANDBY_DEFAULT_NEW;
-  const isLegacy = ['dimensionado','alistamiento','instalacion','legalizacion','logistica_inversa']
-    .every((k) => standbyDias[k] === (STANDBY_LEGACY as StandbyDias)[k]);
+  const standbyFromDb = sMap.get('dash_standby_dias') as unknown as StandbyDias | undefined;
+  let standbyDias: StandbyDias = standbyFromDb ?? STANDBY_DEFAULT_NEW;
+  const LEGACY_KEYS: readonly string[] = ['dimensionado','alistamiento','instalacion','legalizacion','logistica_inversa'];
+  const isLegacy = LEGACY_KEYS.every((k) => standbyDias[k] === STANDBY_LEGACY[k]);
   if (isLegacy) {
     await supabaseAdmin
       .from('app_settings')

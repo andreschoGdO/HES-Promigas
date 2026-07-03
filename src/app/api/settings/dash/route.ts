@@ -24,7 +24,7 @@ export async function GET() {
   return NextResponse.json({
     meta_anual_casas: (map.get('dash_meta_anual_casas') as { value?: number })?.value ?? 230,
     standby_dias: map.get('dash_standby_dias') ?? {
-      dimensionado: 14, alistamiento: 10, instalacion: 7, legalizacion: 21, logistica_inversa: 30,
+      dimensionado: 5, alistamiento: 5, instalacion: 4, legalizacion: 10, logistica_inversa: 30,
     },
     solucion_umbrales: map.get('dash_solucion_umbrales') ?? {
       sol1_max_paneles: 5, sol2_max_paneles: 10, sol3_max_paneles: 16, sol4_max_paneles: 19,

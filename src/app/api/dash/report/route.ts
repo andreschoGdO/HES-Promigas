@@ -126,9 +126,24 @@ export async function GET(request: Request) {
   const projectStartRaw = sMap.get('dash_project_start') as unknown as { value?: string } | undefined;
   const projectStartStr = projectStartRaw?.value ?? '2025-10-01';
   const projectStart = new Date(projectStartStr);
-  const standbyDias = (sMap.get('dash_standby_dias') as unknown as StandbyDias | undefined) ?? {
+  // Umbrales de stand-by por etapa. Auto-migran si detectamos los valores
+  // legacy sembrados por mig 39 (14/10/7/21/30) → los nuevos más estrictos
+  // (5/5/4/10/30). Mismo patrón self-healing que meta anual.
+  const STANDBY_DEFAULT_NEW = {
+    dimensionado: 5, alistamiento: 5, instalacion: 4, legalizacion: 10, logistica_inversa: 30,
+  };
+  const STANDBY_LEGACY = {
     dimensionado: 14, alistamiento: 10, instalacion: 7, legalizacion: 21, logistica_inversa: 30,
   };
+  let standbyDias = (sMap.get('dash_standby_dias') as unknown as StandbyDias | undefined) ?? STANDBY_DEFAULT_NEW;
+  const isLegacy = ['dimensionado','alistamiento','instalacion','legalizacion','logistica_inversa']
+    .every((k) => standbyDias[k] === (STANDBY_LEGACY as StandbyDias)[k]);
+  if (isLegacy) {
+    await supabaseAdmin
+      .from('app_settings')
+      .upsert({ key: 'dash_standby_dias', value: STANDBY_DEFAULT_NEW }, { onConflict: 'key' });
+    standbyDias = STANDBY_DEFAULT_NEW;
+  }
   const umbrales = (sMap.get('dash_solucion_umbrales') as unknown as Umbrales | undefined) ?? {
     sol1_max_paneles: 5, sol2_max_paneles: 10, sol3_max_paneles: 16, sol4_max_paneles: 19,
   };

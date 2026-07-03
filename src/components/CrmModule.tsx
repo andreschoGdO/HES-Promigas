@@ -674,6 +674,29 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
                 <Trash2 size={12} /> Cancelar
               </button>
             )}
+            <button
+              onClick={async () => {
+                // Doble confirmación por ser destructivo
+                if (!confirm(`¿ELIMINAR permanentemente el proyecto ${project.code ?? project.title}?\n\nEsta acción NO se puede deshacer. Borra el proyecto, su historial de eventos y liberaciones asociadas. Los equipos instalados en la casa quedarán huérfanos.\n\nPara solo cerrarlo preservando el historial, usá "Cancelar" en su lugar.`)) return;
+                if (!confirm('Última confirmación: ¿procedés con la eliminación permanente?')) return;
+                try {
+                  const r = await fetch(`/api/crm/projects?id=${project.id}`, { method: 'DELETE' });
+                  if (!r.ok) {
+                    const j = await r.json().catch(() => ({}));
+                    alert('No se pudo eliminar: ' + (j.error ?? `HTTP ${r.status}`));
+                    return;
+                  }
+                  onChanged();
+                } catch (e) {
+                  alert('Error al eliminar: ' + (e instanceof Error ? e.message : 'desconocido'));
+                }
+              }}
+              className="secondary-btn"
+              title="Eliminar permanentemente (destructivo)"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: '0.82rem', borderColor: '#b91c1c', color: '#b91c1c', background: '#fef2f2' }}
+            >
+              <Trash2 size={12} /> Eliminar
+            </button>
             <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '1.4rem', padding: 0, lineHeight: 1 }}>×</button>
           </div>
         </div>

@@ -327,7 +327,7 @@ export default function DashPage() {
       <section className="card">
         <SectionHeader eyebrow="Planeación" title="Lo asignado para ejecutar la próxima semana" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard label="Casas asignadas"      value={fmtInt(report.planeacion.casasAsignadas)} hint="para la próxima semana" tag={report.planeacion.casasAsignadas > 0 ? `${report.planeacion.distribucion.length} grupos` : undefined} />
+          <StatCard label="Casas asignadas"      value={fmtInt(report.planeacion.casasAsignadas)} hint="en gestión + próxima semana" tag={report.planeacion.casasAsignadas > 0 ? `${report.planeacion.distribucion.length} grupos` : undefined} />
           <StatCard
             label="kWp planificados"
             value={`${fmt1(report.planeacion.kwpPlan)} kWp`}

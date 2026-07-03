@@ -385,13 +385,19 @@ export async function GET(request: Request) {
     .map(([constructor, v]) => ({ constructor, asignadas: v.asignadas, instaladas: v.instaladas }))
     .sort((a, b) => b.instaladas - a.instaladas);
 
-  // ─── SLIDE 5: PLANEACIÓN (próxima semana) ───
-  const nextFrom = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+  // ─── SLIDE 5: PLANEACIÓN (próxima semana + rezagos) ───
+  // "Casas asignadas" = obras en alistamiento o instalación con
+  // installation_date <= fin de la próxima semana. Incluye:
+  //   • Rezagos: casas cuya fecha ya pasó pero siguen sin operativizar
+  //   • Actuales: casas con fecha hoy (aún en gestión)
+  //   • Futuras: casas planeadas para los próximos 7 días
+  // Antes solo contaba las futuras — dejaba afuera lo que sigue en gestión.
   const nextTo = new Date(to.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const proximaSemana = projects.filter((p) =>
-    (p.operations_stage === 'alistamiento' || p.operations_stage === 'instalacion') &&
-    inRange(p.installation_date, nextFrom, nextTo),
-  );
+  const proximaSemana = projects.filter((p) => {
+    if (p.operations_stage !== 'alistamiento' && p.operations_stage !== 'instalacion') return false;
+    if (!p.installation_date) return false;
+    return new Date(p.installation_date) <= nextTo;
+  });
   const kwpPlan = proximaSemana.reduce((s, p) => s + getKwp(p), 0);
   const kwhPlan = proximaSemana.reduce((s, p) => s + getKwh(p), 0);
   const capexPlanM = proximaSemana.reduce((s, p) => s + getCapexM(p), 0);

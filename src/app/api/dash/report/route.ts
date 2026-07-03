@@ -155,9 +155,14 @@ export async function GET(request: Request) {
   const cats = (catsRaw ?? []) as CategoryRow[];
   const catById = new Map(cats.map((c) => [c.id, c]));
 
+  // Filtrar por status='in_stock' desde la BD y usar range() para bypassear
+  // el cap default de 1000 filas de PostgREST. Sin esto, con 1200+ items
+  // en la tabla, la sección de Logística mostraría números incompletos.
   const { data: itemsRaw } = await supabaseAdmin
     .from('inventory_items')
-    .select('category_id, status, warehouse_id');
+    .select('category_id, status, warehouse_id')
+    .eq('status', 'in_stock')
+    .range(0, 9999);
   const items = (itemsRaw ?? []) as InventoryItemRow[];
 
   // kWh total de batería por proyecto:
@@ -405,8 +410,10 @@ export async function GET(request: Request) {
   }));
 
   // ─── SLIDE 8: LOGÍSTICA (inventario disponible por marca × family) ───
+  // Status 'in_stock' es el correcto (mig 07). El bug anterior filtraba por
+  // 'available' que nunca existió en la BD, por eso la sección salía vacía.
   const stockGroup = new Map<string, DashReport['logistica']['stock'][number]>();
-  items.filter((i) => i.status === 'available').forEach((i) => {
+  items.filter((i) => i.status === 'in_stock').forEach((i) => {
     const cat = catById.get(i.category_id);
     if (!cat?.default_brand) return;
     const marca = cat.default_brand;

@@ -235,11 +235,12 @@ export async function GET(request: Request) {
   const mesesActivos = porMes.filter((m) => m.casas > 0).length;
 
   // ─── SLIDE 3: AVANCE SEMANAL ───
+  // "Instaladas" = casas que llegaron a operativo con operativo_at en el rango
+  // "Programadas" = casas cuyo installation_date cae en el rango,
+  // INCLUYENDO las que ya se instalaron (así el ratio "X de Y" tiene sentido:
+  // instaladas ≤ programadas si la planificación estaba correcta).
   const instaladasSemana = casasInstaladas.filter((p) => inRange(p.operativo_at ?? p.installation_date, from, to));
-  const programadasSemana = projects.filter((p) =>
-    (p.operations_stage === 'instalacion' || p.operations_stage === 'alistamiento') &&
-    inRange(p.installation_date, from, to),
-  );
+  const programadasSemana = projects.filter((p) => inRange(p.installation_date, from, to));
 
   // Stand-by: proyectos con updated_at más viejo que el umbral para su etapa
   const standByProjects = projects.filter((p) => {
@@ -261,14 +262,19 @@ export async function GET(request: Request) {
     accion: `Revisar proyectos con > ${standbyDias[stage] ?? '?'} días sin avance`,
   }));
 
-  const porIniciar = projects.filter((p) => {
+  const porIniciarProjects = projects.filter((p) => {
     if (p.operations_stage !== 'alistamiento') return false;
     if (!p.installation_date) return false;
     const d = new Date(p.installation_date);
     const nextWeekStart = new Date(to.getTime() + 24 * 60 * 60 * 1000);
     const nextWeekEnd = new Date(to.getTime() + 8 * 24 * 60 * 60 * 1000);
     return d >= nextWeekStart && d <= nextWeekEnd;
-  }).length;
+  });
+  const porIniciar = porIniciarProjects.length;
+
+  // Etiqueta legible para tooltip: preferir client_name, sino título del proyecto
+  const casaLabel = (p: CrmProjectRow): string =>
+    p.client_name ?? p.title ?? p.code ?? p.id.slice(0, 8);
 
   // ─── SLIDE 4: DETALLE POR MARCA, ZONA, CONSTRUCTOR ───
   const marcaGroup = new Map<string, { casas: number; kwp: number; kwh: number }>();
@@ -462,6 +468,12 @@ export async function GET(request: Request) {
       kwhSemana: instaladasSemana.reduce((s, p) => s + getKwh(p), 0),
       capexSemanaM: instaladasSemana.reduce((s, p) => s + getCapexM(p), 0),
       motivos,
+      detalle: {
+        instaladas:  instaladasSemana.map(casaLabel),
+        programadas: programadasSemana.map(casaLabel),
+        standBy:     standByProjects.map(casaLabel),
+        porIniciar:  porIniciarProjects.map(casaLabel),
+      },
     },
     detalle: { marcas, zonas, constructores },
     detalleGlobal: { marcas: marcasG, zonas: zonasG, constructores: constructoresG },

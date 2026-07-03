@@ -15,9 +15,19 @@ const MARCA_COLORS = ['#07c5a8', '#3b82f6', '#f59e0b', '#8b5cf6'];
 const fmtInt = (n: number) => n.toLocaleString('es-CO');
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-function StatCard({ label, value, hint, tag }: { label: string; value: string; hint: string; tag?: string }) {
+function StatCard({ label, value, hint, tag, detalle }: {
+  label: string; value: string; hint: string;
+  tag?: string;
+  /** Lista de casas que componen esta métrica; se muestra al hover. */
+  detalle?: string[];
+}) {
+  const hasDetalle = detalle && detalle.length > 0;
+  // title del native tooltip — se muestra al pasar el mouse sobre el card
+  const nativeTitle = hasDetalle
+    ? `${label}:\n${detalle!.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`
+    : undefined;
   return (
-    <div className="stat-card">
+    <div className="stat-card" title={nativeTitle} style={{ position: 'relative' }}>
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
       <div style={{ fontSize: '0.72rem', color: ACCENT, fontWeight: 600 }}>{hint}</div>
@@ -35,6 +45,16 @@ function StatCard({ label, value, hint, tag }: { label: string; value: string; h
           border: '1px solid var(--border)',
         }}>
           {tag}
+        </div>
+      )}
+      {hasDetalle && (
+        <div style={{
+          marginTop: 6,
+          fontSize: '0.68rem',
+          color: 'var(--text-muted)',
+          fontStyle: 'italic',
+        }}>
+          Ver casas ↗
         </div>
       )}
     </div>
@@ -339,9 +359,21 @@ export default function DashPage() {
             value={fmtInt(report.semana.casasInstaladas)}
             hint={`de ${report.semana.programadas} programadas`}
             tag={report.semana.programadas > 0 ? `${Math.round((report.semana.casasInstaladas / report.semana.programadas) * 100)}% cumplimiento` : undefined}
+            detalle={report.semana.detalle?.instaladas}
           />
-          <StatCard label="En stand by"            value={fmtInt(report.semana.standBy)}          hint="ver motivos abajo" tag={report.semana.standBy > 0 ? 'requiere acción' : undefined} />
-          <StatCard label="Por iniciar próxima"    value={fmtInt(report.semana.porIniciar)}       hint="ya asignadas" />
+          <StatCard
+            label="En stand by"
+            value={fmtInt(report.semana.standBy)}
+            hint="ver motivos abajo"
+            tag={report.semana.standBy > 0 ? 'requiere acción' : undefined}
+            detalle={report.semana.detalle?.standBy}
+          />
+          <StatCard
+            label="Por iniciar próxima"
+            value={fmtInt(report.semana.porIniciar)}
+            hint="ya asignadas"
+            detalle={report.semana.detalle?.porIniciar}
+          />
           <StatCard
             label="kWp solar instalados"
             value={`${fmt1(report.semana.kwpSemana)} kWp`}

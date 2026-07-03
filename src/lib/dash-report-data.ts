@@ -49,6 +49,13 @@ export interface DashReport {
     standBy: number; porIniciar: number;
     kwpSemana: number; kwhSemana: number; capexSemanaM: number;
     motivos: StandByRow[];
+    /** Listas de casas por KPI — usadas como tooltip al hover. */
+    detalle?: {
+      instaladas: string[];
+      programadas: string[];
+      standBy: string[];
+      porIniciar: string[];
+    };
   };
   detalle: {
     marcas: MarcaRow[];

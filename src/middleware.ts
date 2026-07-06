@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { getRoleFromEmail, isPathAllowedForUser } from '@/lib/user-role';
+import { getRoleFromEmail, isPathAllowedForRole } from '@/lib/user-role';
 import { canAccess, registerPending } from '@/lib/user-allowlist';
 
 // Middleware corre en Node runtime para poder usar supabase-admin
@@ -75,7 +75,13 @@ export async function middleware(request: NextRequest) {
     if (user && pathname === '/login') {
       const role = getRoleFromEmail(user.email);
       const url = request.nextUrl.clone();
-      url.pathname = role === 'admin' ? '/dashboard' : '/visitas';
+      // Landing por rol:
+      //   admin      → dashboard técnico
+      //   operativo  → /operaciones (Construcción)
+      //   user       → /visitas
+      url.pathname = role === 'admin'
+        ? '/dashboard'
+        : role === 'operativo' ? '/operaciones' : '/visitas';
       return NextResponse.redirect(url);
     }
     return response;
@@ -89,14 +95,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Autorización por rol: admins (gdo/promigas) pasan; users (contratistas)
-  // requieren estar en la allowlist con enabled=true.
+  // Autorización por rol:
+  //   admin      → pasa a cualquier ruta
+  //   operativo  → solo Construcción/Inventario/Visitas (verifica prefijos)
+  //   user       → solo Visitas + requiere estar en allowlist con enabled=true
   const role = getRoleFromEmail(user.email);
+
   if (role === 'user') {
     const access = await canAccess(user.email ?? '');
     if (!access.ok) {
-      // Si el email aún no aparece en la tabla, lo registramos como pending
-      // para que el admin lo vea en /usuarios y lo habilite.
       if (access.reason === 'not_listed') {
         await registerPending(user.email ?? '');
       }
@@ -106,12 +113,14 @@ export async function middleware(request: NextRequest) {
       url.searchParams.set('error', access.reason === 'disabled' ? 'disabled' : 'pending');
       return NextResponse.redirect(url);
     }
-    // User autorizado: solo puede ir a /visitas y /cuenta
-    if (!isPathAllowedForUser(pathname)) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/visitas';
-      return NextResponse.redirect(url);
-    }
+  }
+
+  // Verificar que el path esté permitido para el rol. Si no, redirect a la
+  // ruta principal del rol.
+  if (!isPathAllowedForRole(pathname, role)) {
+    const url = request.nextUrl.clone();
+    url.pathname = role === 'operativo' ? '/operaciones' : '/visitas';
+    return NextResponse.redirect(url);
   }
 
   return response;

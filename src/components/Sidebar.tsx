@@ -141,12 +141,18 @@ export function Sidebar() {
   // de items que el contratista no debería ver.
   const userLoaded = user !== null;
   const isUser = user?.role === 'user';
+  const isOperativo = user?.role === 'operativo';
+  // Rol operativo: solo Construcción, Inventario y Visitas.
+  const OPERATIVO_NAV_IDS = new Set(['operaciones', 'inventario', 'visitas']);
   const navItems = !userLoaded
     ? []
     : isUser
       ? navItemsAll.filter((i) => i.id === 'visitas')
-      : navItemsAll.filter((i) => isItemVisible(i.id, visibility));
-  const adminItems = !userLoaded || isUser
+      : isOperativo
+        ? navItemsAll.filter((i) => OPERATIVO_NAV_IDS.has(i.id))
+        : navItemsAll.filter((i) => isItemVisible(i.id, visibility));
+  // Sistema (Usuarios, Configuración) solo para admin.
+  const adminItems = !userLoaded || isUser || isOperativo
     ? []
     : adminItemsAll.filter((i) => isItemVisible(i.id, visibility));
 

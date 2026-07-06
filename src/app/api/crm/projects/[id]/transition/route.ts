@@ -303,8 +303,13 @@ export async function POST(request: Request, context: Ctx) {
           error: 'El proyecto no tiene reserva activa. Debió haberse creado en Alistamiento — vuelve a esa etapa.',
         }, { status: 409 });
       }
-      // Intentar instalar los items
-      preInstallation = await fulfillReservationOnOperativo(projOp as ProjRow, body.actor_email ?? null);
+      // Intentar instalar los items. `body.serials` (opcional) es un mapeo
+      // { [category_id]: string[] } con los seriales que el técnico ingresó
+      // en el acta. Se usa solo para reservas del modelo nuevo (mig 44).
+      const serialsFromBody = (body.serials && typeof body.serials === 'object')
+        ? body.serials as Record<string, string[]>
+        : null;
+      preInstallation = await fulfillReservationOnOperativo(projOp as ProjRow, body.actor_email ?? null, serialsFromBody);
       if (!preInstallation) {
         return NextResponse.json({
           error: 'No se pudo procesar la instalación de los items reservados.',
@@ -450,13 +455,28 @@ async function cancelActiveReservation(project: ProjRow, actorEmail: string | nu
     return null;
   }
 
-  // Liberar items reservados de esta reserva
-  const { data: lines } = await supabaseAdmin
+  let released = 0;
+
+  // Modelo NUEVO (mig 44): borrar líneas por cantidad. No hay items que liberar
+  // porque el modelo nuevo no cambia el status de inventory_items al reservar.
+  const { data: lineRows } = await supabaseAdmin
+    .from('inventory_reservation_lines')
+    .select('id, qty_reserved')
+    .eq('reservation_id', resv.id);
+  if ((lineRows ?? []).length > 0) {
+    released = (lineRows ?? []).reduce((acc, l) => acc + Number(l.qty_reserved ?? 0), 0);
+    await supabaseAdmin
+      .from('inventory_reservation_lines')
+      .delete()
+      .eq('reservation_id', resv.id);
+  }
+
+  // Modelo VIEJO (pre-mig 44): liberar items reservados (status reserved → in_stock)
+  const { data: itemLines } = await supabaseAdmin
     .from('inventory_reservation_items')
     .select('item_id')
     .eq('reservation_id', resv.id);
-  const itemIds = (lines ?? []).map((l) => l.item_id);
-  let released = 0;
+  const itemIds = (itemLines ?? []).map((l) => l.item_id);
   if (itemIds.length > 0 && resv.status === 'confirmed') {
     const { data: updated } = await supabaseAdmin
       .from('inventory_items')
@@ -464,8 +484,8 @@ async function cancelActiveReservation(project: ProjRow, actorEmail: string | nu
       .in('id', itemIds)
       .eq('status', 'reserved')
       .select('id');
-    released = updated?.length ?? 0;
-    if (released > 0) {
+    released += updated?.length ?? 0;
+    if ((updated ?? []).length > 0) {
       await supabaseAdmin.from('inventory_movements').insert(
         (updated ?? []).map((u) => ({
           item_id: u.id, type: 'unreserve',
@@ -566,14 +586,36 @@ async function checkStockForAlistamiento(projectId: string): Promise<{ ok: true 
 
   const shortages: Array<{ family: string; family_label: string; needed: number; available: number }> = [];
   for (const req of requirements) {
-    let q = supabaseAdmin
+    // Stock físico in_stock en la bodega
+    let stockQ = supabaseAdmin
       .from('inventory_items')
       .select('id', { count: 'exact', head: true })
       .eq('category_id', req.categoryId!)
       .eq('status', 'in_stock');
-    if (warehouseId) q = q.eq('warehouse_id', warehouseId);
-    const { count } = await q;
-    const available = count ?? 0;
+    if (warehouseId) stockQ = stockQ.eq('warehouse_id', warehouseId);
+    const { count: stockCount } = await stockQ;
+
+    // Cantidad ya reservada por otras reservas activas para
+    // (categoría × bodega) — se descuenta del físico para el "disponible real"
+    let pending = 0;
+    if (warehouseId) {
+      const { data: activeLines } = await supabaseAdmin
+        .from('inventory_reservation_lines')
+        .select('qty_reserved, qty_delivered, inventory_reservations!inner(status)')
+        .eq('category_id', req.categoryId!)
+        .eq('warehouse_id', warehouseId);
+      type ActiveLine = { qty_reserved: number; qty_delivered: number; inventory_reservations: { status: string } | { status: string }[] | null };
+      pending = ((activeLines ?? []) as unknown as ActiveLine[]).reduce((acc, l) => {
+        const resv = Array.isArray(l.inventory_reservations) ? l.inventory_reservations[0] : l.inventory_reservations;
+        if (!resv) return acc;
+        if (resv.status === 'confirmed' || resv.status === 'draft') {
+          return acc + Math.max(0, Number(l.qty_reserved) - Number(l.qty_delivered));
+        }
+        return acc;
+      }, 0);
+    }
+
+    const available = Math.max(0, (stockCount ?? 0) - pending);
     if (available < req.qty) {
       shortages.push({ family: req.family, family_label: FAMILY_LABEL[req.family] ?? req.family, needed: req.qty, available });
     }
@@ -630,88 +672,65 @@ function warehouseCodeForCity(city: string | null | undefined): string | null {
  * (diseno_baterias_cantidad). Si una categoría está vacía o no hay stock
  * suficiente, se omite silenciosamente y se reporta en la respuesta.
  */
+/**
+ * Reserva por CANTIDADES (mig 44+). Ya no aparta items específicos.
+ *
+ * Flujo nuevo:
+ *   1. Verifica que haya stock suficiente por categoría en la bodega
+ *      de la ciudad (in_stock − reservado en otras líneas activas).
+ *   2. Crea la reserva en status='confirmed' + inserta 3 líneas:
+ *      inversor (1), batería (N), panel (M).
+ *   3. NO toca inventory_items — el UI de /inventario ahora debe mostrar
+ *      "reservado" como métrica derivada de las lines.
+ *   4. Los items reales se marcan como installed solo cuando el acta de
+ *      instalación aporta los seriales (fulfillReservationOnOperativo).
+ *
+ * Reservas existentes con `inventory_reservation_items` (modelo viejo)
+ * siguen funcionando por compatibilidad — este código solo crea nuevas
+ * en el modelo por líneas.
+ */
 async function autoReserveInventoryForProject(
   project: ProjRow,
   actorEmail: string | null,
 ): Promise<null | {
   reservation_id: string;
-  reserved: Array<{ family: string; serial: string }>;
+  reserved: Array<{ family: string; qty: number; category_id: string }>;
   shortages: Array<{ family: string; needed: number; available: number }>;
   reused?: boolean;
 }> {
-  // Si ya tiene reservation_id, revisar la reserva existente.
-  // Casos:
-  //   - confirmed + items realmente en 'reserved' → reuse limpio.
-  //   - confirmed pero items con drift (no están reserved) → CONFIRMAR de nuevo
-  //     (reaplicar UPDATE para corregir el drift).
-  //   - draft → CONFIRMAR (mover items a 'reserved' + insertar movimientos).
-  //   - fulfilled/cancelled/no-existe → cancelar la vieja y crear una nueva.
+  // Si ya tiene reservation_id, verificar si hay líneas del modelo nuevo o
+  // items del viejo. Si el modelo viejo, cancelamos y creamos una nueva
+  // porque no podemos convertir automáticamente.
   if (project.reservation_id) {
-    type LineItem = { id?: string; serial_number?: string | null; status?: string | null; inventory_categories?: { family?: string } | { family?: string }[] | null };
-    type Line = { item_id: string; inventory_items?: LineItem | LineItem[] | null };
-    const { data: existingRaw } = await supabaseAdmin
+    const { data: existingResv } = await supabaseAdmin
       .from('inventory_reservations')
-      .select('id, status, title, inventory_reservation_items(item_id, inventory_items(id, serial_number, status, inventory_categories(family)))')
+      .select('id, status')
       .eq('id', project.reservation_id)
       .maybeSingle();
-    const existing = existingRaw as unknown as { id: string; status: string; title: string; inventory_reservation_items?: Line[] } | null;
-
-    if (existing && (existing.status === 'draft' || existing.status === 'confirmed')) {
-      const lines = existing.inventory_reservation_items ?? [];
-      if (lines.length === 0) {
-        // Reserva sin líneas — inservible. Cancelar y crear nueva.
-        await supabaseAdmin.from('inventory_reservations')
-          .update({ status: 'cancelled', cancelled_at: new Date().toISOString() }).eq('id', existing.id);
-        await supabaseAdmin.from('crm_projects').update({ reservation_id: null }).eq('id', project.id);
-      } else {
-        // Items que NO están en 'reserved' — aplicar UPDATE para corregirlos.
-        const needsReserve: string[] = [];
-        const summary: Array<{ family: string; serial: string }> = [];
-        for (const l of lines) {
-          const itRaw = l.inventory_items;
-          const it = Array.isArray(itRaw) ? itRaw[0] : itRaw;
-          if (!it) continue;
-          const catRaw = it.inventory_categories;
-          const cat = Array.isArray(catRaw) ? catRaw[0] : catRaw;
-          summary.push({ family: cat?.family ?? 'unknown', serial: it.serial_number ?? '' });
-          // Solo intentamos volver a marcar como reserved si está en in_stock
-          // (si está installed/in_repair/etc., NO tocamos — se reportará como drift).
-          if (it.status === 'in_stock') needsReserve.push(l.item_id);
-        }
-        if (needsReserve.length > 0) {
-          const { data: updated } = await supabaseAdmin
-            .from('inventory_items')
-            .update({ status: 'reserved' })
-            .in('id', needsReserve)
-            .eq('status', 'in_stock')
-            .select('id');
-          const updatedIds = (updated ?? []).map((u) => u.id);
-          if (updatedIds.length > 0) {
-            await supabaseAdmin.from('inventory_movements').insert(
-              updatedIds.map((itemId) => ({
-                item_id: itemId, type: 'reserve',
-                from_status: 'in_stock', to_status: 'reserved',
-                responsible_email: actorEmail,
-                notes: `Auto-reserva (reuso ${existing.title}) — corrigiendo drift`,
-              })),
-            );
-          }
-        }
-        // Asegurar que la reserva esté en confirmed
-        if (existing.status === 'draft') {
-          await supabaseAdmin.from('inventory_reservations')
-            .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
-            .eq('id', existing.id);
-        }
-        return { reservation_id: existing.id, reserved: summary, shortages: [], reused: true };
+    if (existingResv && (existingResv.status === 'confirmed' || existingResv.status === 'draft')) {
+      // Ya tiene reserva activa — verificar que tenga líneas del modelo nuevo
+      const { data: lines, count: linesCount } = await supabaseAdmin
+        .from('inventory_reservation_lines')
+        .select('category_id, warehouse_id, qty_reserved, inventory_categories(family)', { count: 'exact' })
+        .eq('reservation_id', existingResv.id);
+      if ((linesCount ?? 0) > 0) {
+        type LineRow = { category_id: string; warehouse_id: string; qty_reserved: number; inventory_categories: { family?: string } | { family?: string }[] | null };
+        return {
+          reservation_id: existingResv.id,
+          reserved: ((lines ?? []) as unknown as LineRow[]).map((l) => {
+            const cat = Array.isArray(l.inventory_categories) ? l.inventory_categories[0] : l.inventory_categories;
+            return { family: cat?.family ?? 'unknown', qty: Number(l.qty_reserved), category_id: l.category_id };
+          }),
+          shortages: [],
+          reused: true,
+        };
       }
-    } else if (existing) {
-      // Reserva en fulfilled/cancelled → solo limpiar la referencia.
-      await supabaseAdmin.from('crm_projects').update({ reservation_id: null }).eq('id', project.id);
-    } else {
-      // reservation_id apunta a una reserva que ya no existe.
-      await supabaseAdmin.from('crm_projects').update({ reservation_id: null }).eq('id', project.id);
+      // Sin líneas ni items → reserva inservible, cancelarla y crear nueva
+      await supabaseAdmin.from('inventory_reservations')
+        .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+        .eq('id', existingResv.id);
     }
+    await supabaseAdmin.from('crm_projects').update({ reservation_id: null }).eq('id', project.id);
   }
 
   const requirements: Array<{ family: string; categoryId: string | null; qty: number }> = [
@@ -722,114 +741,86 @@ async function autoReserveInventoryForProject(
 
   if (requirements.length === 0) return null;
 
-  // Determinar la bodega de origen según la ciudad de instalación.
-  // La reserva SOLO puede tomar equipos de esa bodega — no se mezclan orígenes.
+  // Bodega según ciudad
   const warehouseCode = warehouseCodeForCity(project.client_city);
   let warehouseId: string | null = null;
   if (warehouseCode) {
     const { data: wh } = await supabaseAdmin
-      .from('warehouses')
-      .select('id')
-      .eq('code', warehouseCode)
-      .maybeSingle();
+      .from('warehouses').select('id').eq('code', warehouseCode).maybeSingle();
     warehouseId = wh?.id ?? null;
   }
+  if (!warehouseId) {
+    await addProjectTag(project.id, 'bodega no identificada');
+    return null;
+  }
 
-  // Buscar items disponibles por categoría, restringido a la bodega de la ciudad
-  const reservedItems: Array<{ id: string; serial_number: string; family: string }> = [];
+  // Verificar stock efectivo (in_stock − reservado en líneas activas de otras reservas)
   const shortages: Array<{ family: string; needed: number; available: number }> = [];
-
   for (const req of requirements) {
-    let q = supabaseAdmin
+    const { count: stockCount } = await supabaseAdmin
       .from('inventory_items')
-      .select('id, serial_number')
+      .select('id', { count: 'exact', head: true })
       .eq('category_id', req.categoryId!)
       .eq('status', 'in_stock')
-      .order('acquired_at', { ascending: true, nullsFirst: false })
-      .limit(req.qty);
-    // Solo restringimos por bodega si pudimos mapear la ciudad. Si no,
-    // conservamos el comportamiento viejo (cualquier bodega) para no dejar
-    // al proyecto sin reserva por un typo en la ciudad — pero registramos
-    // un tag para que operaciones lo revise.
-    if (warehouseId) q = q.eq('warehouse_id', warehouseId);
-    const { data: stockItems } = await q;
-    const available = (stockItems ?? []).length;
+      .eq('warehouse_id', warehouseId);
+    // Sum qty pendiente (reserved − delivered) en reservas activas para
+    // esa (categoría × bodega)
+    const { data: activeLines } = await supabaseAdmin
+      .from('inventory_reservation_lines')
+      .select('qty_reserved, qty_delivered, inventory_reservations!inner(status)')
+      .eq('category_id', req.categoryId!)
+      .eq('warehouse_id', warehouseId);
+    type ActiveLine = { qty_reserved: number; qty_delivered: number; inventory_reservations: { status: string } | { status: string }[] | null };
+    const pending = ((activeLines ?? []) as unknown as ActiveLine[]).reduce((acc, l) => {
+      const resv = Array.isArray(l.inventory_reservations) ? l.inventory_reservations[0] : l.inventory_reservations;
+      if (!resv) return acc;
+      if (resv.status === 'confirmed' || resv.status === 'draft') {
+        return acc + Math.max(0, Number(l.qty_reserved) - Number(l.qty_delivered));
+      }
+      return acc;
+    }, 0);
+    const available = Math.max(0, (stockCount ?? 0) - pending);
     if (available < req.qty) {
       shortages.push({ family: req.family, needed: req.qty, available });
     }
-    for (const it of stockItems ?? []) {
-      reservedItems.push({ id: it.id, serial_number: it.serial_number, family: req.family });
-    }
   }
 
-  // Aviso operativo: si no se pudo resolver la ciudad → bodega, taguear.
-  if (!warehouseId) {
-    await addProjectTag(project.id, 'bodega no identificada');
-  }
-
-  if (reservedItems.length === 0) {
-    // Nada que reservar — pero sí reportar shortages
+  if (shortages.length > 0) {
     return { reservation_id: '', reserved: [], shortages };
   }
 
-  // Crear la reserva en draft
+  // Crear la reserva confirmada
   const { data: resv, error: resvErr } = await supabaseAdmin
     .from('inventory_reservations')
     .insert({
       title: `${project.code ?? 'PROY'} · ${project.title}`.slice(0, 200),
-      status: 'draft',
+      status: 'confirmed',
       requested_by: actorEmail,
-      notes: 'Auto-reservado al pasar a Alistamiento',
+      confirmed_at: new Date().toISOString(),
+      notes: 'Auto-reserva por cantidades (Alistamiento) — seriales se aportan en el acta',
     })
     .select('id')
     .single();
   if (resvErr || !resv) return null;
 
-  // Líneas de la reserva
-  await supabaseAdmin
-    .from('inventory_reservation_items')
-    .insert(reservedItems.map((it) => ({ reservation_id: resv.id, item_id: it.id })));
-
-  // Confirmar: items pasan a reserved + movimientos.
-  // Verificamos que el UPDATE haya afectado todos los items esperados.
-  const itemIdsToReserve = reservedItems.map((it) => it.id);
-  const { data: updatedReserved } = await supabaseAdmin
-    .from('inventory_items')
-    .update({ status: 'reserved' })
-    .in('id', itemIdsToReserve)
-    .eq('status', 'in_stock')
-    .select('id');
-  const actuallyReservedIds = new Set((updatedReserved ?? []).map((u) => u.id));
-
-  // Si no se pudo reservar nada (drift entre SELECT y UPDATE), abortar.
-  if (actuallyReservedIds.size === 0) {
-    // Roll back: cancelar la reserva recién creada y sus líneas.
-    await supabaseAdmin.from('inventory_reservation_items').delete().eq('reservation_id', resv.id);
+  // Insertar líneas por categoría
+  const linesToInsert = requirements.map((req) => ({
+    reservation_id: resv.id,
+    category_id: req.categoryId!,
+    warehouse_id: warehouseId!,
+    qty_reserved: req.qty,
+    qty_delivered: 0,
+  }));
+  const { error: linesErr } = await supabaseAdmin
+    .from('inventory_reservation_lines')
+    .insert(linesToInsert);
+  if (linesErr) {
+    // Rollback: borrar la reserva recién creada
     await supabaseAdmin.from('inventory_reservations').delete().eq('id', resv.id);
     return null;
   }
 
-  // Solo registrar movimientos para los items que realmente quedaron reservados
-  const movementRows = reservedItems
-    .filter((it) => actuallyReservedIds.has(it.id))
-    .map((it) => ({
-      item_id: it.id,
-      type: 'reserve',
-      from_status: 'in_stock',
-      to_status: 'reserved',
-      responsible_email: actorEmail,
-      notes: `Auto-reserva para ${project.code ?? project.title}`,
-    }));
-  if (movementRows.length > 0) {
-    await supabaseAdmin.from('inventory_movements').insert(movementRows);
-  }
-
-  await supabaseAdmin
-    .from('inventory_reservations')
-    .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
-    .eq('id', resv.id);
-
-  // Vincular reservation_id al proyecto
+  // Vincular al proyecto
   await supabaseAdmin
     .from('crm_projects')
     .update({ reservation_id: resv.id })
@@ -837,10 +828,11 @@ async function autoReserveInventoryForProject(
 
   return {
     reservation_id: resv.id,
-    reserved: reservedItems.map((it) => ({ family: it.family, serial: it.serial_number })),
-    shortages,
+    reserved: requirements.map((req) => ({ family: req.family, qty: req.qty, category_id: req.categoryId! })),
+    shortages: [],
   };
 }
+
 
 /**
  * Auto-crea una tarea en planner_tasks para una instalación.
@@ -990,6 +982,7 @@ async function checkReadyForClose(projectId: string): Promise<string[]> {
 async function fulfillReservationOnOperativo(
   project: ProjRow,
   actorEmail: string | null,
+  serialsByCategory: Record<string, string[]> | null = null,
 ): Promise<null | { installed: string[]; already_installed: string[]; skipped: string[]; reservation_fulfilled: boolean }> {
   if (!project.reservation_id) {
     return { installed: [], already_installed: [], skipped: ['Proyecto sin reservation_id — nada que instalar'], reservation_fulfilled: false };
@@ -998,16 +991,12 @@ async function fulfillReservationOnOperativo(
     return { installed: [], already_installed: [], skipped: ['Proyecto sin house_id — asigna la casa antes de marcar Operativo'], reservation_fulfilled: false };
   }
 
-  // Cargar reserva con sus líneas
-  const { data: resvRaw } = await supabaseAdmin
+  // 1. Cargar la reserva base
+  const { data: resv } = await supabaseAdmin
     .from('inventory_reservations')
-    .select('id, title, status, inventory_reservation_items(item_id, inventory_items(id, serial_number, status, current_house_id))')
+    .select('id, title, status')
     .eq('id', project.reservation_id)
     .maybeSingle();
-  type LineItem = { id?: string; serial_number?: string | null; status?: string | null; current_house_id?: string | null };
-  type Line = { item_id: string; inventory_items?: LineItem | LineItem[] | null };
-  const resv = resvRaw as unknown as { id: string; title: string; status: string; inventory_reservation_items?: Line[] } | null;
-
   if (!resv) {
     return { installed: [], already_installed: [], skipped: ['Reserva del proyecto no existe'], reservation_fulfilled: false };
   }
@@ -1015,13 +1004,149 @@ async function fulfillReservationOnOperativo(
     return { installed: [], already_installed: [], skipped: ['Reserva está cancelada'], reservation_fulfilled: false };
   }
 
-  const lines = resv.inventory_reservation_items ?? [];
+  // 2. Detectar modelo de reserva (líneas por qty o items específicos)
+  const { data: newLines } = await supabaseAdmin
+    .from('inventory_reservation_lines')
+    .select('id, category_id, warehouse_id, qty_reserved, qty_delivered')
+    .eq('reservation_id', resv.id);
+  const hasNewModel = (newLines ?? []).length > 0;
+
+  if (hasNewModel) {
+    return fulfillByQuantityModel(project, resv, newLines ?? [], serialsByCategory, actorEmail);
+  }
+  return fulfillByLegacyItemsModel(project, resv, actorEmail);
+}
+
+/**
+ * Modelo NUEVO (mig 44): la reserva tiene líneas por qty. El técnico aportó
+ * los seriales reales en el acta de instalación. Verificamos que:
+ *   - Por cada categoría, se enviaron exactamente `qty_reserved` seriales
+ *   - Cada serial existe en inventory_items con status='in_stock' + bodega correcta
+ *   - Ningún serial duplicado
+ * Si todo OK: marcamos esos items como installed y qty_delivered = qty_reserved.
+ */
+async function fulfillByQuantityModel(
+  project: ProjRow,
+  resv: { id: string; title: string; status: string },
+  lines: Array<{ id: string; category_id: string; warehouse_id: string; qty_reserved: number; qty_delivered: number }>,
+  serialsByCategory: Record<string, string[]> | null,
+  actorEmail: string | null,
+): Promise<{ installed: string[]; already_installed: string[]; skipped: string[]; reservation_fulfilled: boolean }> {
+  const installed: string[] = [];
+  const skipped: string[] = [];
+
+  if (!serialsByCategory) {
+    return {
+      installed: [], already_installed: [],
+      skipped: ['El acta de instalación no aportó seriales. Completa el acta con los seriales escaneados por el técnico antes de marcar Operativo.'],
+      reservation_fulfilled: false,
+    };
+  }
+
+  // Validar por línea
+  for (const line of lines) {
+    if (line.qty_delivered >= line.qty_reserved) continue; // ya cumplida
+    const serials = (serialsByCategory[line.category_id] ?? []).map((s) => s.trim()).filter(Boolean);
+    const need = line.qty_reserved - line.qty_delivered;
+    if (serials.length !== need) {
+      skipped.push(`Categoría ${line.category_id}: se esperan ${need} seriales, se recibieron ${serials.length}. Solicita al equipo CRM ajustar la qty del diseño si no coincide.`);
+      continue;
+    }
+
+    // Verificar que TODOS los seriales existan in_stock en la bodega correcta
+    const { data: items } = await supabaseAdmin
+      .from('inventory_items')
+      .select('id, serial_number, status, warehouse_id')
+      .in('serial_number', serials);
+    const foundBySerial = new Map((items ?? []).map((it) => [it.serial_number, it] as const));
+    const errors: string[] = [];
+    for (const s of serials) {
+      const it = foundBySerial.get(s);
+      if (!it) errors.push(`serial "${s}" no existe en inventario`);
+      else if (it.status !== 'in_stock') errors.push(`serial "${s}" no está in_stock (status: ${it.status})`);
+      else if (it.warehouse_id !== line.warehouse_id) errors.push(`serial "${s}" está en otra bodega`);
+    }
+    if (errors.length > 0) {
+      skipped.push(`Categoría ${line.category_id}: ${errors.join(' · ')}`);
+      continue;
+    }
+
+    // Marcar como installed
+    const ids = serials.map((s) => foundBySerial.get(s)!.id);
+    const { data: updated } = await supabaseAdmin
+      .from('inventory_items')
+      .update({
+        status: 'installed',
+        current_location: 'house',
+        current_house_id: project.house_id,
+      })
+      .in('id', ids)
+      .eq('status', 'in_stock')
+      .select('id, serial_number');
+    for (const u of updated ?? []) installed.push(u.serial_number);
+
+    // Registrar movimientos
+    if ((updated ?? []).length > 0) {
+      await supabaseAdmin.from('inventory_movements').insert(
+        (updated ?? []).map((u) => ({
+          item_id: u.id, type: 'install',
+          from_status: 'in_stock', to_status: 'installed',
+          to_location: 'house', to_house_id: project.house_id,
+          responsible_email: actorEmail,
+          notes: `Instalado al marcar Operativo (reserva ${resv.title}) — serial aportado por acta`,
+        })),
+      );
+    }
+
+    // Actualizar qty_delivered en la línea
+    await supabaseAdmin
+      .from('inventory_reservation_lines')
+      .update({ qty_delivered: line.qty_delivered + (updated?.length ?? 0) })
+      .eq('id', line.id);
+  }
+
+  // Si todas las líneas están cumplidas, marcar reserva como fulfilled
+  const { data: lineCheck } = await supabaseAdmin
+    .from('inventory_reservation_lines')
+    .select('qty_reserved, qty_delivered')
+    .eq('reservation_id', resv.id);
+  const allFulfilled = (lineCheck ?? []).every((l) => Number(l.qty_delivered) >= Number(l.qty_reserved));
+  let fulfilled = false;
+  if (allFulfilled && installed.length > 0 && resv.status === 'confirmed') {
+    await supabaseAdmin
+      .from('inventory_reservations')
+      .update({ status: 'fulfilled', fulfilled_at: new Date().toISOString() })
+      .eq('id', resv.id);
+    fulfilled = true;
+  }
+
+  return { installed, already_installed: [], skipped, reservation_fulfilled: fulfilled };
+}
+
+/**
+ * Modelo VIEJO (pre-mig 44): la reserva tiene items específicos apartados
+ * (status='reserved'). El endpoint simplemente los transiciona a installed.
+ * Se mantiene para compatibilidad con reservas existentes.
+ */
+async function fulfillByLegacyItemsModel(
+  project: ProjRow,
+  resv: { id: string; title: string; status: string },
+  actorEmail: string | null,
+): Promise<{ installed: string[]; already_installed: string[]; skipped: string[]; reservation_fulfilled: boolean }> {
+  type LineItem = { id?: string; serial_number?: string | null; status?: string | null; current_house_id?: string | null };
+  type Line = { item_id: string; inventory_items?: LineItem | LineItem[] | null };
+  const { data: full } = await supabaseAdmin
+    .from('inventory_reservations')
+    .select('inventory_reservation_items(item_id, inventory_items(id, serial_number, status, current_house_id))')
+    .eq('id', resv.id)
+    .maybeSingle();
+  const lines = ((full as unknown as { inventory_reservation_items?: Line[] } | null)?.inventory_reservation_items) ?? [];
+
   const installed: string[] = [];
   const already: string[] = [];
   const skipped: string[] = [];
-
-  // Items a marcar como installed: los que están en 'reserved'
   const toInstall: Array<{ id: string; serial: string }> = [];
+
   for (const l of lines) {
     const itRaw = l.inventory_items;
     const it = Array.isArray(itRaw) ? itRaw[0] : itRaw;
@@ -1038,44 +1163,31 @@ async function fulfillReservationOnOperativo(
     skipped.push(`${serial} (estado: ${it.status ?? 'unknown'})`);
   }
 
-  // Aplicar UPDATE con guard para no pisar items que cambiaron entre SELECT y UPDATE
   if (toInstall.length > 0) {
     const { data: updated } = await supabaseAdmin
       .from('inventory_items')
-      .update({
-        status: 'installed',
-        current_location: 'house',
-        current_house_id: project.house_id,
-      })
+      .update({ status: 'installed', current_location: 'house', current_house_id: project.house_id })
       .in('id', toInstall.map((it) => it.id))
       .eq('status', 'reserved')
       .select('id, serial_number');
     const updatedIds = new Set((updated ?? []).map((u) => u.id));
-
     if (updatedIds.size > 0) {
       await supabaseAdmin.from('inventory_movements').insert(
-        toInstall
-          .filter((it) => updatedIds.has(it.id))
-          .map((it) => ({
-            item_id: it.id,
-            type: 'install',
-            from_status: 'reserved',
-            to_status: 'installed',
-            to_location: 'house',
-            to_house_id: project.house_id,
-            responsible_email: actorEmail,
-            notes: `Instalado al marcar Operativo (reserva ${resv.title})`,
-          })),
+        toInstall.filter((it) => updatedIds.has(it.id)).map((it) => ({
+          item_id: it.id, type: 'install',
+          from_status: 'reserved', to_status: 'installed',
+          to_location: 'house', to_house_id: project.house_id,
+          responsible_email: actorEmail,
+          notes: `Instalado al marcar Operativo (reserva ${resv.title}) — modelo legacy`,
+        })),
       );
     }
-
     for (const it of toInstall) {
       if (updatedIds.has(it.id)) installed.push(it.serial);
       else skipped.push(`${it.serial} (cambió de estado mientras se procesaba)`);
     }
   }
 
-  // Marcar la reserva como fulfilled (solo si pudimos instalar al menos uno)
   let fulfilled = false;
   if (installed.length > 0 && resv.status === 'confirmed') {
     await supabaseAdmin
@@ -1084,7 +1196,6 @@ async function fulfillReservationOnOperativo(
       .eq('id', resv.id);
     fulfilled = true;
   }
-
   return { installed, already_installed: already, skipped, reservation_fulfilled: fulfilled };
 }
 

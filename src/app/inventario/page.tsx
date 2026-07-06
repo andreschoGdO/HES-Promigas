@@ -1662,17 +1662,26 @@ function PanoramaKpi({ label, value, sub, color, Icon }: { label: string; value:
   );
 }
 
-/* ─── Tab Transferencias: documentos formales draft → in_transit → received ─── */
+/* ─── Tab Transferencias: reserved → in_transit → received
+       (con ramas in_transit_return → returned si se cancela en tránsito) ─── */
+
+type TransferStatus = 'draft' | 'reserved' | 'in_transit' | 'received' | 'in_transit_return' | 'returned' | 'cancelled';
 
 type Transfer = {
   id: string;
   code: string;
-  status: 'draft' | 'in_transit' | 'received' | 'cancelled';
+  status: TransferStatus;
+  reserved_at: string | null;
   shipped_at: string | null;
   received_at: string | null;
+  return_shipped_at: string | null;
+  returned_at: string | null;
   cancelled_at: string | null;
+  reserved_by: string | null;
   shipped_by: string | null;
   received_by: string | null;
+  return_shipped_by: string | null;
+  returned_by: string | null;
   carrier: string | null;
   tracking_number: string | null;
   notes: string | null;
@@ -1683,11 +1692,14 @@ type Transfer = {
   inventory_transfer_consumables?: Array<{ id: string; quantity: number; received_quantity: number | null; inventory_consumables: { id: string; name: string; sku: string | null; unit: string; stock_quantity: number } | null }>;
 };
 
-const TRANSFER_STATUS_META: Record<string, { label: string; color: string }> = {
-  draft:      { label: 'Borrador',    color: '#94a3b8' },
-  in_transit: { label: 'En tránsito', color: '#f59e0b' },
-  received:   { label: 'Recibida',    color: '#10b981' },
-  cancelled:  { label: 'Cancelada',   color: '#ef4444' },
+const TRANSFER_STATUS_META: Record<TransferStatus, { label: string; color: string }> = {
+  draft:             { label: 'Borrador',          color: '#94a3b8' },
+  reserved:          { label: 'Reservada',         color: '#3b82f6' },
+  in_transit:        { label: 'En tránsito',       color: '#f59e0b' },
+  received:          { label: 'Recibida',          color: '#10b981' },
+  in_transit_return: { label: 'Volviendo al origen', color: '#8b5cf6' },
+  returned:          { label: 'Devuelta',          color: '#64748b' },
+  cancelled:         { label: 'Cancelada',         color: '#ef4444' },
 };
 
 function TransferenciasTab({ userEmail }: { userEmail: string }) {
@@ -1709,10 +1721,12 @@ function TransferenciasTab({ userEmail }: { userEmail: string }) {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [filterStatus]);
 
-  const doAction = async (id: string, action: 'ship' | 'receive' | 'cancel') => {
-    const confirmMsg = action === 'ship' ? 'Marcar como ENVIADA? Los consumibles se descontarán de la bodega origen.'
-      : action === 'receive' ? 'Confirmar RECEPCIÓN en destino? Los items y stock pasan a la bodega destino.'
-      : 'Cancelar la transferencia? Si estaba en tránsito, el stock vuelve a origen.';
+  const doAction = async (id: string, action: 'ship' | 'receive' | 'cancel' | 'return-arrived') => {
+    const confirmMsg =
+      action === 'ship' ? 'Despachar la transferencia? Los items pasan a "en tránsito" y los consumibles se descuentan de origen.'
+      : action === 'receive' ? 'Confirmar RECEPCIÓN en destino? Los items pasan a in_stock en la bodega destino.'
+      : action === 'return-arrived' ? 'Confirmar que los items VOLVIERON al origen? Pasan a in_stock en la bodega origen.'
+      : 'Cancelar la transferencia?\n\n• Si está en reservada: se libera el stock inmediatamente.\n• Si está en tránsito: entra en "volviendo al origen" (los items físicos ya salieron).';
     if (!confirm(confirmMsg)) return;
     const r = await fetch(`/api/inventory/transfers/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -1742,7 +1756,7 @@ function TransferenciasTab({ userEmail }: { userEmail: string }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: '1.05rem' }}>Transferencias entre bodegas</h2>
         <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-          Documentos formales con tracking. Borrador → Enviada → Recibida.
+          Reservada → En tránsito → Recibida. Si se cancela en tránsito, entra en "Volviendo al origen" y termina en "Devuelta".
         </span>
         <button onClick={() => setShowCreate(true)} className="primary-btn" style={{ marginLeft: 'auto', background: '#0ea5e9' }}>
           <Plus size={14} /> Nueva transferencia
@@ -1790,32 +1804,48 @@ function TransferenciasTab({ userEmail }: { userEmail: string }) {
                       {t.carrier && <> · {t.carrier}</>}
                       {t.tracking_number && <> · {t.tracking_number}</>}
                       <> · creada {new Date(t.created_at).toLocaleDateString('es-CO')}</>
-                      {t.shipped_at && <> · enviada {new Date(t.shipped_at).toLocaleDateString('es-CO')}</>}
+                      {t.reserved_at && <> · reservada {new Date(t.reserved_at).toLocaleDateString('es-CO')}</>}
+                      {t.shipped_at && <> · despachada {new Date(t.shipped_at).toLocaleDateString('es-CO')}</>}
                       {t.received_at && <> · recibida {new Date(t.received_at).toLocaleDateString('es-CO')}</>}
+                      {t.return_shipped_at && <> · en retorno {new Date(t.return_shipped_at).toLocaleDateString('es-CO')}</>}
+                      {t.returned_at && <> · devuelta {new Date(t.returned_at).toLocaleDateString('es-CO')}</>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {t.status === 'draft' && (
+                    {/* Reservada (o draft legacy): despachar o cancelar */}
+                    {(t.status === 'reserved' || t.status === 'draft') && (
                       <>
                         <button onClick={() => doAction(t.id, 'ship')} className="primary-btn" disabled={itemCount === 0 && consCount === 0} style={{ fontSize: '0.78rem', padding: '6px 12px', background: '#f59e0b' }}>
-                          Enviar →
+                          Despachar →
                         </button>
                         <button onClick={() => doAction(t.id, 'cancel')} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px', color: '#ef4444' }}>
                           Cancelar
                         </button>
                       </>
                     )}
+                    {/* En tránsito: recibir en destino o cancelar → volver al origen */}
                     {t.status === 'in_transit' && (
                       <>
                         <button onClick={() => doAction(t.id, 'receive')} className="primary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px', background: '#10b981' }}>
-                          Confirmar recepción →
+                          Recibida en destino →
                         </button>
                         <button onClick={() => doAction(t.id, 'cancel')} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px', color: '#ef4444' }}>
-                          Cancelar (restituir stock)
+                          Cancelar (vuelve al origen)
                         </button>
                       </>
                     )}
-                    {(t.status === 'draft' || t.status === 'cancelled') && (
+                    {/* Volviendo al origen: confirmar arribo o cancelar (perdido) */}
+                    {t.status === 'in_transit_return' && (
+                      <>
+                        <button onClick={() => doAction(t.id, 'return-arrived')} className="primary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px', background: '#64748b' }}>
+                          Volvió al origen →
+                        </button>
+                        <button onClick={() => doAction(t.id, 'cancel')} className="secondary-btn" style={{ fontSize: '0.78rem', padding: '6px 12px', color: '#ef4444' }}>
+                          Cancelar (items perdidos)
+                        </button>
+                      </>
+                    )}
+                    {(t.status === 'cancelled' || t.status === 'returned' || t.status === 'draft') && (
                       <button onClick={() => remove(t.id)} title="Eliminar" style={{ padding: 6, background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', borderRadius: 4 }}>
                         <Trash2 size={14} />
                       </button>

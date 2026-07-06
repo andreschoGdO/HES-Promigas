@@ -813,7 +813,7 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           <FieldsGrid>
             {sec.fields.map((f) => (
               <FieldWrapper key={f.key} label={f.label} required={f.required} unit={f.unit} fullWidth={isFullWidthField(f)} help={f.help}>
-                <FieldInput field={f} value={visit.form_data[f.key]} onChange={(v) => setField(f.key, v)} />
+                <FieldInput field={f} value={visit.form_data[f.key]} onChange={(v) => setField(f.key, v)} formData={visit.form_data} />
               </FieldWrapper>
             ))}
           </FieldsGrid>
@@ -1006,8 +1006,55 @@ function FieldWrapper({ label, required, unit, fullWidth, help, children }: {
 }
 
 /* ───────────── Render del input según tipo ───────────── */
-function FieldInput({ field, value, onChange }: { field: VisitField; value: unknown; onChange: (v: unknown) => void }) {
-  const v = value ?? (field.type === 'checkbox' ? false : '');
+function FieldInput({ field, value, onChange, formData }: {
+  field: VisitField;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  formData?: Record<string, unknown>;
+}) {
+  const v = value ?? (field.type === 'checkbox' ? false : field.type === 'serial_list' ? [] : '');
+
+  // ─── serial_list: N inputs según qtyKey del form_data ───
+  if (field.type === 'serial_list') {
+    const rawQty = field.qtyKey && formData ? formData[field.qtyKey] : undefined;
+    const qty = (() => {
+      const n = Number(rawQty);
+      if (Number.isFinite(n) && n > 0 && n <= 100) return Math.floor(n);
+      return field.qtyFallback ?? 0;
+    })();
+    const arr: string[] = Array.isArray(v) ? v.map(String) : [];
+    // Normalizar longitud: pad con '' si qty > arr.length, truncar si sobra
+    const padded = qty > 0
+      ? [...arr, ...Array(Math.max(0, qty - arr.length)).fill('')].slice(0, qty)
+      : arr;
+    if (qty === 0) {
+      return (
+        <div style={{ padding: '10px 12px', background: 'var(--bg-elevated)', border: '1px dashed var(--border-strong)', borderRadius: 8, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+          Ingresá la cantidad en el campo <strong>&quot;{field.qtyKey}&quot;</strong> más arriba para habilitar los seriales.
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+        {padded.map((serial, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', minWidth: 22, fontWeight: 600 }}>#{i + 1}</span>
+            <input
+              type="text"
+              value={serial}
+              onChange={(e) => {
+                const next = [...padded];
+                next[i] = e.target.value.trim();
+                onChange(next);
+              }}
+              placeholder="Serial…"
+              style={{ flex: 1, minHeight: 40, fontFamily: 'ui-monospace, monospace', fontSize: '0.82rem' }}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   if (field.type === 'textarea') {
     return <textarea value={String(v)} onChange={(e) => onChange(e.target.value)} placeholder={field.placeholder} rows={3} style={{ width: '100%' }} />;

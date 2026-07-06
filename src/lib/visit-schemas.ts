@@ -8,7 +8,7 @@
  */
 
 export type VisitType = 'previa' | 'instalacion' | 'emergencia' | 'normalizacion';
-export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'date' | 'time' | 'checkbox' | 'radio' | 'tel' | 'email';
+export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'date' | 'time' | 'checkbox' | 'radio' | 'tel' | 'email' | 'serial_list';
 
 export interface VisitField {
   key: string;
@@ -20,6 +20,17 @@ export interface VisitField {
   unit?: string;
   inputMode?: 'numeric' | 'decimal' | 'tel' | 'email';
   help?: string;
+  /** Solo `serial_list`: nombre de otro field cuya value indica cuántos inputs
+   *  renderizar. Ej: qtyKey='panel_cantidad' → renderiza tantos inputs como
+   *  panel_cantidad indique. Si el campo qty está vacío/0, usa qtyFallback. */
+  qtyKey?: string;
+  /** Solo `serial_list`: cantidad por default si qtyKey no está definido o su
+   *  value no es un número > 0. Ej: 1 para inversor. */
+  qtyFallback?: number;
+  /** Solo `serial_list`: categoría de inventario asociada a este grupo. Se usa
+   *  al transicionar a Operativo para mapear seriales al category_id correcto.
+   *  Valores: 'inverter' | 'battery' | 'panel'. */
+  serialFamily?: 'inverter' | 'battery' | 'panel';
 }
 
 export interface VisitSection {
@@ -161,7 +172,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         fields: [
           { key: 'inv_marca', label: 'Marca del inversor', type: 'select', options: ['LIVOLTEK', 'DEYE', 'Huawei', 'Sungrow', 'Otra'], required: true },
           { key: 'inv_modelo', label: 'Modelo', type: 'text', required: true },
-          { key: 'inv_serial', label: 'Número(s) de serie', type: 'textarea', required: true, help: 'Uno por línea si hay varios inversores en paralelo.' },
+          { key: 'inv_cantidad', label: 'Cantidad de inversores', type: 'number', inputMode: 'numeric', required: true, help: 'Normalmente 1. Si hay varios en paralelo, ajustar.' },
+          { key: 'inv_serials', label: 'Seriales de inversor', type: 'serial_list', required: true, qtyKey: 'inv_cantidad', qtyFallback: 1, serialFamily: 'inverter', help: 'Un input por unidad. Escaneá el QR o transcribí el serial impreso.' },
           { key: 'inv_potencia_kw', label: 'Potencia nominal', type: 'number', inputMode: 'decimal', unit: 'kW', required: true },
           { key: 'inv_ubicacion', label: 'Ubicación física', type: 'text' },
         ],
@@ -172,6 +184,7 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'panel_marca', label: 'Marca de paneles', type: 'text' },
           { key: 'panel_modelo', label: 'Modelo', type: 'text' },
           { key: 'panel_cantidad', label: 'Cantidad instalada', type: 'number', inputMode: 'numeric', required: true },
+          { key: 'panel_serials', label: 'Seriales de paneles', type: 'serial_list', required: true, qtyKey: 'panel_cantidad', serialFamily: 'panel', help: 'Un input por panel. Debe coincidir con "Cantidad instalada".' },
           { key: 'panel_potencia_wp', label: 'Potencia c/u', type: 'number', inputMode: 'numeric', unit: 'Wp' },
           { key: 'panel_total_kwp', label: 'Total kWp instalados', type: 'number', inputMode: 'decimal', unit: 'kWp' },
           { key: 'configuracion_strings', label: 'Configuración de strings', type: 'text' },
@@ -184,7 +197,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'batt_marca', label: 'Marca batería', type: 'text' },
           { key: 'batt_modelo', label: 'Modelo', type: 'text' },
           { key: 'batt_capacidad_kwh', label: 'Capacidad por batería', type: 'number', inputMode: 'decimal', unit: 'kWh' },
-          { key: 'batt_serial', label: 'Serial(es) de batería', type: 'textarea', help: 'Uno por línea si hay varias baterías.' },
+          { key: 'batt_cantidad', label: 'Cantidad de baterías', type: 'number', inputMode: 'numeric' },
+          { key: 'batt_serials', label: 'Seriales de baterías', type: 'serial_list', qtyKey: 'batt_cantidad', serialFamily: 'battery', help: 'Un input por batería. Debe coincidir con "Cantidad de baterías".' },
         ],
       },
       {

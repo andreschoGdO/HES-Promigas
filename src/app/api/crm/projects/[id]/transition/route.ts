@@ -303,13 +303,21 @@ export async function POST(request: Request, context: Ctx) {
           error: 'El proyecto no tiene reserva activa. Debió haberse creado en Alistamiento — vuelve a esa etapa.',
         }, { status: 409 });
       }
-      // Intentar instalar los items. `body.serials` (opcional) es un mapeo
-      // { [category_id]: string[] } con los seriales que el técnico ingresó
-      // en el acta. Se usa solo para reservas del modelo nuevo (mig 44).
-      const serialsFromBody = (body.serials && typeof body.serials === 'object')
-        ? body.serials as Record<string, string[]>
-        : null;
-      preInstallation = await fulfillReservationOnOperativo(projOp as ProjRow, body.actor_email ?? null, serialsFromBody);
+      // Fuentes posibles de seriales para la reserva por cantidades (mig 44):
+      //   1. body.serials — explícito del cliente { [category_id]: string[] }
+      //   2. Acta de instalación vinculada — leemos inv_serials, panel_serials,
+      //      batt_serials del form_data y los mapeamos a los category_id del
+      //      diseño del proyecto.
+      // La primera fuente gana si viene. La segunda es el flujo esperado
+      // para producción (técnico llena acta → CRM avanza a Operativo).
+      let serialsFromSource: Record<string, string[]> | null =
+        (body.serials && typeof body.serials === 'object')
+          ? body.serials as Record<string, string[]>
+          : null;
+      if (!serialsFromSource) {
+        serialsFromSource = await readSerialsFromActa(projOp as ProjRow);
+      }
+      preInstallation = await fulfillReservationOnOperativo(projOp as ProjRow, body.actor_email ?? null, serialsFromSource);
       if (!preInstallation) {
         return NextResponse.json({
           error: 'No se pudo procesar la instalación de los items reservados.',
@@ -1251,4 +1259,79 @@ export async function GET(_request: Request, context: Ctx) {
 
   const available = TRANSITIONS.filter((t) => t.fromModule === mod && t.fromStage === stage);
   return NextResponse.json({ current_module: mod, current_stage: stage, transitions: available });
+}
+
+/**
+ * Lee los seriales del acta de instalación vinculada al proyecto (si existe).
+ * Extrae inv_serials, panel_serials, batt_serials del form_data y los mapea
+ * a los category_id del diseño del proyecto.
+ *
+ * Fuentes del vínculo con el acta (en orden):
+ *   1. crm_projects.visita_instalacion_id (FK directo)
+ *   2. field_visits filtradas por house_id + type='instalacion' (más reciente)
+ *   3. field_visits filtradas por casa (string) + type='instalacion' (más reciente)
+ *
+ * Retorna null si no se encuentra ningún acta o si no hay seriales cargados.
+ * Retorna { [category_id]: string[] } listo para fulfillReservationOnOperativo.
+ */
+async function readSerialsFromActa(project: ProjRow): Promise<Record<string, string[]> | null> {
+  // Cargar el proyecto completo para saber los category_id del diseño +
+  // el FK al acta.
+  const { data: p } = await supabaseAdmin
+    .from('crm_projects')
+    .select('visita_instalacion_id, house_id, casa_numero, conjunto, diseno_inversor_categoria_id, diseno_bateria_categoria_id, diseno_panel_categoria_id')
+    .eq('id', project.id)
+    .maybeSingle();
+  if (!p) return null;
+
+  // 1. Intento con FK directo
+  let visit: { form_data: Record<string, unknown> } | null = null;
+  if (p.visita_instalacion_id) {
+    const { data } = await supabaseAdmin
+      .from('field_visits')
+      .select('form_data')
+      .eq('id', p.visita_instalacion_id)
+      .maybeSingle();
+    if (data) visit = data as { form_data: Record<string, unknown> };
+  }
+  // 2. Fallback: buscar por house_id + tipo instalación
+  if (!visit && p.house_id) {
+    const { data } = await supabaseAdmin
+      .from('field_visits')
+      .select('form_data')
+      .eq('house_id', p.house_id)
+      .eq('visit_type', 'instalacion')
+      .order('visit_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data) visit = data as { form_data: Record<string, unknown> };
+  }
+  // 3. Último recurso: buscar por casa string
+  if (!visit && p.casa_numero) {
+    const casaLabel = `Casa ${p.casa_numero}`;
+    const { data } = await supabaseAdmin
+      .from('field_visits')
+      .select('form_data')
+      .ilike('casa', `%${casaLabel}%`)
+      .eq('visit_type', 'instalacion')
+      .order('visit_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data) visit = data as { form_data: Record<string, unknown> };
+  }
+  if (!visit) return null;
+
+  const fd = visit.form_data ?? {};
+  const invSerials = Array.isArray(fd.inv_serials) ? (fd.inv_serials as unknown[]).map(String).filter((s) => s.trim()) : [];
+  const panelSerials = Array.isArray(fd.panel_serials) ? (fd.panel_serials as unknown[]).map(String).filter((s) => s.trim()) : [];
+  const battSerials = Array.isArray(fd.batt_serials) ? (fd.batt_serials as unknown[]).map(String).filter((s) => s.trim()) : [];
+
+  // Si no hay nada, devolver null para que el endpoint falle con "acta sin seriales"
+  if (invSerials.length === 0 && panelSerials.length === 0 && battSerials.length === 0) return null;
+
+  const map: Record<string, string[]> = {};
+  if (p.diseno_inversor_categoria_id && invSerials.length > 0) map[p.diseno_inversor_categoria_id] = invSerials;
+  if (p.diseno_panel_categoria_id && panelSerials.length > 0) map[p.diseno_panel_categoria_id] = panelSerials;
+  if (p.diseno_bateria_categoria_id && battSerials.length > 0) map[p.diseno_bateria_categoria_id] = battSerials;
+  return Object.keys(map).length > 0 ? map : null;
 }

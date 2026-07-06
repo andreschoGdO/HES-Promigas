@@ -40,7 +40,13 @@ export async function GET(request: Request) {
  *   notes?: string;
  *   created_by?: string;
  * }
- * Crea la transferencia en status='draft'. Los items NO cambian de estado.
+ *
+ * Crea la transferencia en status='reserved' y aparta los items (in_stock → reserved).
+ * Antes creaba en 'draft' sin tocar items; ahora la reserva es inmediata para evitar
+ * doble picking del mismo equipo.
+ *
+ * Si algún item ya está reserved/installed/etc., se rechaza la operación completa
+ * (todo o nada).
  */
 export async function POST(request: Request) {
   try {
@@ -52,12 +58,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Las bodegas origen y destino deben ser diferentes' }, { status: 400 });
     }
 
+    const itemIds: string[] = Array.isArray(body.item_ids) ? body.item_ids : [];
+    const consumables: Array<{ id: string; quantity: number }> = Array.isArray(body.consumables) ? body.consumables : [];
+
+    // ─── Validación previa: todos los items deben estar in_stock en la bodega origen ───
+    if (itemIds.length > 0) {
+      const { data: itemsCheck } = await supabaseAdmin
+        .from('inventory_items')
+        .select('id, serial_number, status, warehouse_id')
+        .in('id', itemIds);
+      const conflicts: string[] = [];
+      for (const it of itemsCheck ?? []) {
+        if (it.status !== 'in_stock') conflicts.push(`${it.serial_number}: status ${it.status}`);
+        else if (it.warehouse_id !== body.from_warehouse_id) conflicts.push(`${it.serial_number}: no está en la bodega origen`);
+      }
+      if (conflicts.length > 0) {
+        return NextResponse.json({
+          error: 'No se puede crear la transferencia — items no disponibles',
+          conflicts,
+        }, { status: 409 });
+      }
+    }
+
+    // ─── Crear la transferencia en reserved ───
+    const now = new Date().toISOString();
     const { data: transfer, error } = await supabaseAdmin
       .from('inventory_transfers')
       .insert({
         from_warehouse_id: body.from_warehouse_id,
         to_warehouse_id: body.to_warehouse_id,
-        status: 'draft',
+        status: 'reserved',
+        reserved_at: now,
+        reserved_by: body.created_by ?? null,
         carrier: body.carrier ?? null,
         tracking_number: body.tracking_number ?? null,
         notes: body.notes ?? null,
@@ -67,14 +99,30 @@ export async function POST(request: Request) {
       .single();
     if (error) throw error;
 
-    // Líneas
-    const itemIds: string[] = Array.isArray(body.item_ids) ? body.item_ids : [];
+    // ─── Insertar líneas de items + consumibles ───
     if (itemIds.length > 0) {
       await supabaseAdmin
         .from('inventory_transfer_items')
         .insert(itemIds.map((item_id: string) => ({ transfer_id: transfer.id, item_id })));
+
+      // Cambiar items a reserved
+      await supabaseAdmin
+        .from('inventory_items')
+        .update({ status: 'reserved' })
+        .in('id', itemIds);
+
+      // Registrar movimientos (uno por item)
+      await supabaseAdmin.from('inventory_movements').insert(
+        itemIds.map((itemId) => ({
+          item_id: itemId,
+          type: 'reserve',
+          from_status: 'in_stock',
+          to_status: 'reserved',
+          responsible_email: body.created_by ?? null,
+          notes: `Transferencia ${transfer.code ?? transfer.id.slice(0, 8)}: apartado en origen`,
+        })),
+      );
     }
-    const consumables: Array<{ id: string; quantity: number }> = Array.isArray(body.consumables) ? body.consumables : [];
     if (consumables.length > 0) {
       await supabaseAdmin
         .from('inventory_transfer_consumables')

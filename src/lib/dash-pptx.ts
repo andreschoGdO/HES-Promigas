@@ -123,10 +123,23 @@ export function generateDashPPTX(r: DashReport): void {
     { label: 'CAPEX ejecutado (acum.)', value: fmtCOP(r.global.capexAcumM), hint: 'desde inicio de operación' },
     { label: 'Avance vs. meta anual',   value: `${r.global.avancePct}%`,     hint: `${r.global.casasAcum} de ${r.global.metaCasas} casas meta` },
   ]);
-  addTable(s2, 4.1,
-    ['Mes', 'Casas', 'kWp', 'kWh', 'CAPEX'],
-    r.global.porMes.map((m) => [m.mes, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh), `$${fmtInt(m.capexM)}M`]),
-  );
+  // Detalle mensual: si son más de 8 meses, paginar en slides adicionales
+  const mesesRows = r.global.porMes.map((m) => [m.mes, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh), `$${fmtInt(m.capexM)}M`]);
+  const MESES_POR_SLIDE = 8;
+  if (mesesRows.length <= MESES_POR_SLIDE) {
+    addTable(s2, 4.1, ['Mes', 'Casas', 'kWp', 'kWh', 'CAPEX'], mesesRows);
+  } else {
+    // Primeros N meses en este slide
+    addTable(s2, 4.1, ['Mes', 'Casas', 'kWp', 'kWh', 'CAPEX'], mesesRows.slice(0, MESES_POR_SLIDE));
+    // El resto en slides continuación
+    for (let offset = MESES_POR_SLIDE; offset < mesesRows.length; offset += MESES_POR_SLIDE) {
+      const sCont = pptx.addSlide();
+      const pagina = Math.floor(offset / MESES_POR_SLIDE) + 1;
+      const totalPag = Math.ceil(mesesRows.length / MESES_POR_SLIDE);
+      addSectionHeader(sCont, 'Avance global', `Detalle mensual (cont.) · Página ${pagina} de ${totalPag}`);
+      addTable(sCont, 1.4, ['Mes', 'Casas', 'kWp', 'kWh', 'CAPEX'], mesesRows.slice(offset, offset + MESES_POR_SLIDE));
+    }
+  }
 
   // ─── SLIDE 2b: USD/Wp POR SOLUCIÓN (slide propio) ───
   if (r.global.usdWpBySolucion?.length > 0) {

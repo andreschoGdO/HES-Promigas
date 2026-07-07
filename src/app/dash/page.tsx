@@ -326,9 +326,10 @@ export default function DashPage() {
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
               DETALLE MENSUAL: INSTALACIÓN Y CAPEX
             </div>
-            <SimpleTable
+            <PaginatedTable
               head={['Mes', 'Casas', 'kWp', 'kWh', 'CAPEX']}
               rows={report.global.porMes.map((m) => [m.mes, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh), `$${fmtInt(m.capexM)}M`])}
+              pageSize={6}
             />
           </div>
         </div>
@@ -699,6 +700,52 @@ function DetalleMarcaZonaConstructor({
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Tabla con paginación. Muestra `pageSize` filas por página (default: 6) y
+ * ofrece controles Prev/Next + indicador "Página X de Y". Si `rows.length <= pageSize`
+ * se renderiza como una SimpleTable normal sin controles.
+ */
+function PaginatedTable({ head, rows, pageSize = 6 }: { head: string[]; rows: React.ReactNode[][]; pageSize?: number }) {
+  const [page, setPage] = useState(0);
+  const total = rows.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(page, totalPages - 1);
+  const start = currentPage * pageSize;
+  const pageRows = rows.slice(start, start + pageSize);
+
+  if (total <= pageSize) return <SimpleTable head={head} rows={rows} />;
+
+  return (
+    <div>
+      <SimpleTable head={head} rows={pageRows} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 8, fontSize: '0.78rem' }}>
+        <span style={{ color: 'var(--text-muted)' }}>
+          {start + 1}–{Math.min(start + pageSize, total)} de {total}
+        </span>
+        <button
+          onClick={() => setPage(Math.max(0, currentPage - 1))}
+          disabled={currentPage === 0}
+          className="secondary-btn"
+          style={{ padding: '4px 10px', fontSize: '0.78rem', opacity: currentPage === 0 ? 0.4 : 1 }}
+        >
+          ← Anterior
+        </button>
+        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+          {currentPage + 1} / {totalPages}
+        </span>
+        <button
+          onClick={() => setPage(Math.min(totalPages - 1, currentPage + 1))}
+          disabled={currentPage >= totalPages - 1}
+          className="secondary-btn"
+          style={{ padding: '4px 10px', fontSize: '0.78rem', opacity: currentPage >= totalPages - 1 ? 0.4 : 1 }}
+        >
+          Siguiente →
+        </button>
+      </div>
+    </div>
   );
 }
 

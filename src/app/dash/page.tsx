@@ -530,16 +530,35 @@ export default function DashPage() {
       {/* ─── SLIDE 8: LOGÍSTICA ─── */}
       <section className="card">
         <SectionHeader eyebrow="Logística" title="Estado de inventario en bodega" />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-              STOCK DISPONIBLE POR MARCA
+        {/* Stock por bodega (una tabla por Cali/Barranquilla/Cartagena) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 20 }}>
+          {(report.logistica.stockPorBodega ?? []).map((b) => (
+            <div key={b.warehouseName}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+                STOCK · {b.warehouseName.toUpperCase()}
+              </div>
+              <SimpleTable
+                head={['Marca', 'Pan.', 'Inv.', 'Bat.', 'Est.']}
+                rows={b.stock.map((s) => [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias), fmtInt(s.estructuras)])}
+              />
             </div>
-            <SimpleTable
-              head={['Marca', 'Paneles', 'Inversores', 'Baterías', 'Estructuras']}
-              rows={report.logistica.stock.map((s) => [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias), fmtInt(s.estructuras)])}
-            />
-          </div>
+          ))}
+          {/* Fallback si stockPorBodega no viene (data vieja): mostrar el stock global */}
+          {(!report.logistica.stockPorBodega || report.logistica.stockPorBodega.length === 0) && (
+            <div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+                STOCK DISPONIBLE POR MARCA (GLOBAL)
+              </div>
+              <SimpleTable
+                head={['Marca', 'Paneles', 'Inversores', 'Baterías', 'Estructuras']}
+                rows={report.logistica.stock.map((s) => [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias), fmtInt(s.estructuras)])}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Alertas de reabastecimiento (nivel global) */}
+        <div>
           <div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
               ALERTAS DE REABASTECIMIENTO

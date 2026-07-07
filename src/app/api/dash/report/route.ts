@@ -545,6 +545,9 @@ export async function GET(request: Request) {
     return { componente: `Equipos ${s.marca}`, nivel };
   });
 
+  // Stock desglosado por bodega (misma agrupacion, restringida a items de esa bodega)
+  const stockPorBodega: DashReport['logistica']['stockPorBodega'] = [];
+
   // ─── KITS POR BODEGA ───
   // Reemplaza la gráfica de "Cobertura estimada". Calcula cuántos kits
   // solares se pueden armar en cada bodega respetando la prioridad de la
@@ -573,6 +576,27 @@ export async function GET(request: Request) {
       totalKits: res.totalKits,
       byTipo: { T2: res.byTipo[2], T3: res.byTipo[3], T4: res.byTipo[4] },
       porKit: KIT_DEFS.map((k) => ({ id: k.id, label: k.label, count: res.kitsBuilt[k.id] ?? 0 })),
+    });
+
+    // Stock por marca × family SOLO para esta bodega — misma agrupacion que el global 'stock'
+    const stockMarcaBodega = new Map<string, DashReport['logistica']['stock'][number]>();
+    for (const it of items) {
+      if (it.status !== 'in_stock' || it.warehouse_id !== wh.id) continue;
+      const cat = catById.get(it.category_id);
+      if (!cat?.default_brand) continue;
+      const marca = cat.default_brand;
+      const fam = cat.family ?? 'other';
+      const cur = stockMarcaBodega.get(marca) ?? { marca, paneles: 0, inversores: 0, baterias: 0, estructuras: 0, cobertura: 0 };
+      if (fam === 'panel') cur.paneles++;
+      else if (fam === 'inverter') cur.inversores++;
+      else if (fam === 'battery') cur.baterias++;
+      else if (fam === 'structure' || fam === 'estructura') cur.estructuras++;
+      stockMarcaBodega.set(marca, cur);
+    }
+    stockPorBodega.push({
+      warehouseName: wh.name,
+      city: cityKey,
+      stock: Array.from(stockMarcaBodega.values()).sort((a, b) => a.marca.localeCompare(b.marca)),
     });
   }
 
@@ -654,7 +678,7 @@ export async function GET(request: Request) {
       abiertos, enTransito, resueltosSitio,
       detalle: postDetalle,
     },
-    logistica: { stock, alertas, kitsPorBodega },
+    logistica: { stock, stockPorBodega, alertas, kitsPorBodega },
   };
 
   return NextResponse.json(report);

@@ -100,8 +100,10 @@ export interface DashReport {
   };
   logistica: {
     stock: StockRow[];
+    /** Mismo modelo que `stock` pero desglosado por bodega (Cali/BQ/Cartagena). */
+    stockPorBodega: Array<{ warehouseName: string; city: string; stock: StockRow[] }>;
     alertas: AlertaRow[];
-    kitsPorBodega: KitsPorBodega[];  // reemplaza la gráfica de cobertura
+    kitsPorBodega: KitsPorBodega[];
   };
 }
 
@@ -134,5 +136,5 @@ export const DEFAULT_REPORT: DashReport = {
   },
   legalizaciones: { tramite: 0, aprobadas: 0, enRevision: 0, detalle: [] },
   postventa:     { abiertos: 0, enTransito: 0, resueltosSitio: 0, detalle: [] },
-  logistica:     { stock: [], alertas: [], kitsPorBodega: [] },
+  logistica:     { stock: [], stockPorBodega: [], alertas: [], kitsPorBodega: [] },
 };

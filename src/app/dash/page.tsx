@@ -7,6 +7,7 @@ import {
   PieChart, Pie, Cell, Legend, LabelList,
 } from 'recharts';
 import { generateDashPDF } from '@/lib/dash-pdf';
+import { generateDashPPTX } from '@/lib/dash-pptx';
 import { DEFAULT_REPORT, type DashReport } from '@/lib/dash-report-data';
 
 const ACCENT = '#07c5a8';
@@ -70,6 +71,7 @@ function StatCard({ label, value, hint, tag, detalle, detalleSecundario }: {
 /** Watt-peak por panel para calcular cuántos paneles equivalen a un kWp acumulado. */
 const PANEL_WP = 595;
 const KWH_POR_BATERIA = 5.1;  // Livoltek HV promedio
+const TRM_COP = 3901.29;      // TRM operativa (mig 46 tiene los USD/Wp calculados con la TRM del cierre)
 
 /**
  * Formatter para <LabelList> de Recharts. Acepta el tipo ancho (RenderableText,
@@ -143,12 +145,21 @@ export default function DashPage() {
 
   useEffect(() => { void load(from, to); }, [from, to]);
 
+  const [downloadingPptx, setDownloadingPptx] = useState(false);
   const handleDownload = async () => {
     setDownloading(true);
     try {
       generateDashPDF(report);
     } finally {
       setTimeout(() => setDownloading(false), 400);
+    }
+  };
+  const handleDownloadPptx = async () => {
+    setDownloadingPptx(true);
+    try {
+      generateDashPPTX(report);
+    } finally {
+      setTimeout(() => setDownloadingPptx(false), 400);
     }
   };
 
@@ -217,14 +228,25 @@ export default function DashPage() {
               <RefreshCw size={14} className={loading ? 'spin' : ''} />
             </button>
           </div>
-          <button
-            className="primary-btn"
-            onClick={handleDownload}
-            disabled={downloading || loading}
-          >
-            <Download size={16} />
-            {downloading ? 'Generando…' : 'Descargar PDF'}
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button
+              className="primary-btn"
+              onClick={handleDownload}
+              disabled={downloading || loading}
+            >
+              <Download size={16} />
+              {downloading ? 'Generando…' : 'PDF'}
+            </button>
+            <button
+              className="primary-btn"
+              onClick={handleDownloadPptx}
+              disabled={downloadingPptx || loading}
+              style={{ background: '#D24726', color: '#fff' }}
+            >
+              <Download size={16} />
+              {downloadingPptx ? 'Generando…' : 'PPTX'}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -310,6 +332,40 @@ export default function DashPage() {
             />
           </div>
         </div>
+
+        {/* USD/Wp por solución */}
+        {report.global.usdWpBySolucion && report.global.usdWpBySolucion.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+              USD/Wp POR SOLUCIÓN · TRM {new Intl.NumberFormat('es-CO').format(TRM_COP)} COP/USD
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(180px, 1fr))`, gap: 12 }}>
+              {report.global.usdWpBySolucion.map((s) => (
+                <div key={s.solucion} className="stat-card" style={{ borderLeft: '4px solid var(--accent)' }}>
+                  <div className="stat-label">{s.solucion}</div>
+                  <div className="stat-value">${fmt1(s.usdWpPromedio)} /Wp</div>
+                  <div style={{ fontSize: '0.72rem', color: ACCENT, fontWeight: 600 }}>{s.casas} casa{s.casas === 1 ? '' : 's'}</div>
+                </div>
+              ))}
+              {/* Total ponderado */}
+              {(() => {
+                const totCasas = report.global.usdWpBySolucion.reduce((a, s) => a + s.casas, 0);
+                if (totCasas === 0) return null;
+                const totKwp = report.global.kwpAcum;
+                const totUsdWp = totKwp > 0
+                  ? (report.global.capexVentaAcumM * 1_000_000 / TRM_COP) / (totKwp * 1000)
+                  : 0;
+                return (
+                  <div className="stat-card" style={{ borderLeft: '4px solid #64748b', background: 'var(--bg-elevated)' }}>
+                    <div className="stat-label">Promedio general</div>
+                    <div className="stat-value">${fmt1(totUsdWp)} /Wp</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>{totCasas} casas · ${fmtInt(report.global.capexVentaAcumM)}M venta</div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* ─── SLIDE 3 (NUEVA): DETALLE GLOBAL POR MARCA, ZONA Y CONSTRUCTOR ─── */}
@@ -321,61 +377,15 @@ export default function DashPage() {
         constructores={report.detalleGlobal?.constructores ?? report.detalle.constructores}
       />
 
-      {/* ─── SLIDE 4: PLANEACIÓN (movido antes del avance semanal) ─── */}
+      {/* ─── SLIDE 4: CONSTRUCCIÓN (semanal + planeación unificados) ─── */}
       <section className="card">
-        <SectionHeader eyebrow="Planeación" title="Lo asignado para ejecutar la próxima semana" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard label="Casas asignadas"      value={fmtInt(report.planeacion.casasAsignadas)} hint="en gestión + próxima semana" tag={report.planeacion.casasAsignadas > 0 ? `${report.planeacion.distribucion.length} grupos` : undefined} />
-          <StatCard
-            label="kWp planificados"
-            value={`${fmt1(report.planeacion.kwpPlan)} kWp`}
-            hint="estimado"
-            tag={report.planeacion.kwpPlan > 0 ? `~${fmtInt(Math.round(report.planeacion.kwpPlan * 1000 / PANEL_WP))} paneles` : undefined}
-          />
-          <StatCard
-            label="kWh batería planif."
-            value={`${fmtInt(report.planeacion.kwhPlan)} kWh`}
-            hint="estimado"
-            tag={report.planeacion.kwhPlan > 0 ? `~${fmtInt(Math.round(report.planeacion.kwhPlan / KWH_POR_BATERIA))} baterías` : undefined}
-          />
-          <StatCard
-            label="CAPEX estimado"
-            value={`$${fmtInt(report.planeacion.capexPlanM)}M COP`}
-            hint="próxima semana"
-            tag={report.planeacion.casasAsignadas > 0 ? `~$${fmt1(report.planeacion.capexPlanM / report.planeacion.casasAsignadas)}M / casa` : undefined}
-          />
-          <StatCard label="Constructores activos" value={`${report.planeacion.constructoresActivos}`} hint={report.planeacion.constructoresLista} />
-          <StatCard label="Zonas con actividad"   value={`${report.planeacion.zonasActivas}`} hint={report.planeacion.zonasLista} />
-        </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-          DISTRIBUCIÓN DE LO ASIGNADO POR ZONA Y CONSTRUCTOR
-        </div>
-        <SimpleTable
-          head={['Zona', 'Constructor', 'Casas asignadas', 'Marca predominante', 'Fecha estimada de inicio']}
-          rows={report.planeacion.distribucion.map((p) => [p.zona, p.constructor, fmtInt(p.casas), p.marca, p.fecha])}
-        />
-      </section>
-
-      {/* ─── SLIDE 5: AVANCE SEMANAL ─── */}
-      <section className="card">
-        <SectionHeader eyebrow="Avance semanal" title="Resultados de construcción de esta semana" />
+        <SectionHeader eyebrow="Construcción" title="Operación semanal y proyección" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
           <StatCard
-            label="Casas instaladas"
+            label="Instaladas esta semana"
             value={fmtInt(report.semana.casasInstaladas)}
-            hint={`de ${report.semana.programadas} programadas`}
-            tag={report.semana.programadas > 0 ? `${Math.round((report.semana.casasInstaladas / report.semana.programadas) * 100)}% cumplimiento` : undefined}
+            hint={report.semana.casasInstaladas > 0 ? 'ya operativas' : 'ninguna esta semana'}
             detalle={report.semana.detalle?.instaladas}
-            detalleSecundario={report.semana.detalle?.programadas
-              ? { label: 'Programadas (todas)', items: report.semana.detalle.programadas }
-              : undefined}
-          />
-          <StatCard
-            label="En stand by"
-            value={fmtInt(report.semana.standBy)}
-            hint="ver motivos abajo"
-            tag={report.semana.standBy > 0 ? 'requiere acción' : undefined}
-            detalle={report.semana.detalle?.standBy}
           />
           <StatCard
             label="En curso"
@@ -384,41 +394,96 @@ export default function DashPage() {
             detalle={report.semana.detalle?.porIniciar}
           />
           <StatCard
-            label="kWp solar instalados"
+            label="Próxima semana"
+            value={fmtInt(report.planeacion.casasAsignadas)}
+            hint="en gestión + planeadas"
+            tag={report.planeacion.casasAsignadas > 0 ? `${report.planeacion.distribucion.length} grupos` : undefined}
+          />
+          <StatCard
+            label="kWp instalados"
             value={`${fmt1(report.semana.kwpSemana)} kWp`}
             hint="esta semana"
             tag={report.semana.kwpSemana > 0 ? `~${fmtInt(Math.round(report.semana.kwpSemana * 1000 / PANEL_WP))} paneles` : undefined}
           />
           <StatCard
-            label="kWh batería instalados"
+            label="kWh batería"
             value={`${fmtInt(report.semana.kwhSemana)} kWh`}
             hint="esta semana"
             tag={report.semana.kwhSemana > 0 ? `~${fmtInt(Math.round(report.semana.kwhSemana / KWH_POR_BATERIA))} baterías` : undefined}
           />
           <StatCard
             label="CAPEX ejecutado"
-            value={`$${fmtInt(report.semana.capexSemanaM)}M COP`}
-            hint="acumulado semana"
+            value={`$${fmtInt(report.semana.capexSemanaM)}M`}
+            hint="COP acumulado semana"
             tag={report.semana.casasInstaladas > 0 ? `~$${fmt1(report.semana.capexSemanaM / report.semana.casasInstaladas)}M / casa` : undefined}
           />
         </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-          MOTIVOS DE STAND BY ({report.semana.standBy} CASAS)
-        </div>
-        <SimpleTable
-          head={['Motivo', 'Casas', 'Acción en curso']}
-          rows={report.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion])}
-        />
-      </section>
 
-      {/* ─── SLIDE 6: DETALLE SEMANAL POR MARCA, ZONA Y CONSTRUCTOR ─── */}
-      <DetalleMarcaZonaConstructor
-        eyebrow="Avance semanal"
-        title="Detalle por marca, zona y constructor"
-        marcas={report.detalle.marcas}
-        zonas={report.detalle.zonas}
-        constructores={report.detalle.constructores}
-      />
+        {/* Detalle por marca / zona / constructor (semanal — puede estar vacío si no hay instalaciones) */}
+        {report.detalle.marcas.length + report.detalle.zonas.length + report.detalle.constructores.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginTop: 12 }}>
+            {report.detalle.marcas.length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+                  MARCA (SEMANA)
+                </div>
+                <SimpleTable
+                  head={['Marca', 'Casas', 'kWp']}
+                  rows={report.detalle.marcas.map((m) => [m.marca, fmtInt(m.casas), fmt1(m.kwp)])}
+                />
+              </div>
+            )}
+            {report.detalle.zonas.length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+                  ZONA (SEMANA)
+                </div>
+                <SimpleTable
+                  head={['Zona', 'Casas', 'CAPEX']}
+                  rows={report.detalle.zonas.map((z) => [z.zona, fmtInt(z.casas), z.capex])}
+                />
+              </div>
+            )}
+            {report.detalle.constructores.length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+                  CONSTRUCTOR
+                </div>
+                <SimpleTable
+                  head={['Constructor', 'Asignadas', 'Instaladas']}
+                  rows={report.detalle.constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)])}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Distribución planeación próxima semana */}
+        {report.planeacion.distribucion.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+              PRÓXIMA SEMANA — DISTRIBUCIÓN POR ZONA Y CONSTRUCTOR
+            </div>
+            <SimpleTable
+              head={['Zona', 'Constructor', 'Casas', 'Marca', 'Fecha']}
+              rows={report.planeacion.distribucion.map((p) => [p.zona, p.constructor, fmtInt(p.casas), p.marca, p.fecha])}
+            />
+          </div>
+        )}
+
+        {/* Motivos de stand-by (si hay) */}
+        {report.semana.motivos.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+              STAND BY — REQUIERE ACCIÓN ({report.semana.standBy} CASAS)
+            </div>
+            <SimpleTable
+              head={['Motivo', 'Casas', 'Acción']}
+              rows={report.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion])}
+            />
+          </div>
+        )}
+      </section>
 
       {/* ─── SLIDE 7: LEGALIZACIONES ─── */}
       <section className="card">
@@ -501,18 +566,44 @@ export default function DashPage() {
         </div>
         <div style={{ marginTop: 24 }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-            COBERTURA ESTIMADA (SEMANAS DE INSTALACIÓN)
+            KITS SOLARES ARMABLES POR BODEGA — SIMULACIÓN
           </div>
-          <div style={{ height: 220 }}>
-            <ResponsiveContainer>
-              <BarChart data={report.logistica.stock}>
-                <XAxis dataKey="marca" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="cobertura" fill={ACCENT} name="Semanas" />
-              </BarChart>
-            </ResponsiveContainer>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+            {(report.logistica.kitsPorBodega ?? []).map((kit) => {
+              const pct = (n: number) => kit.totalKits > 0 ? Math.round((n / kit.totalKits) * 100) : 0;
+              return (
+                <div key={kit.warehouseName} className="stat-card" style={{ padding: 16, borderLeft: '4px solid var(--accent)' }}>
+                  <div className="stat-label" style={{ marginBottom: 4 }}>{kit.warehouseName}</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 8 }}>
+                    Prio: T2 {Math.round(kit.priority.T2 * 100)}% · T3 {Math.round(kit.priority.T3 * 100)}% · T4 {Math.round(kit.priority.T4 * 100)}%
+                  </div>
+                  <div className="stat-value" style={{ marginBottom: 8 }}>{fmtInt(kit.totalKits)} kits</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                      <span>Tipo 2</span>
+                      <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{kit.byTipo.T2} ({pct(kit.byTipo.T2)}%)</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                      <span>Tipo 3</span>
+                      <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{kit.byTipo.T3} ({pct(kit.byTipo.T3)}%)</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                      <span>Tipo 4</span>
+                      <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{kit.byTipo.T4} ({pct(kit.byTipo.T4)}%)</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {(report.logistica.kitsPorBodega ?? []).length === 0 && (
+              <div style={{ padding: 20, color: 'var(--text-muted)', textAlign: 'center', gridColumn: '1 / -1', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                No hay bodegas o stock disponible para simular kits.
+              </div>
+            )}
           </div>
+          <p style={{ marginTop: 8, fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+            Simulación con el stock actual y las prioridades por ciudad. Los equipos no se reutilizan entre kits.
+          </p>
         </div>
       </section>
 

@@ -32,6 +32,21 @@ export interface GarantRow { marca: string; equipo: string; falla: string; estad
 export interface StockRow  { marca: string; paneles: number; inversores: number; baterias: number; estructuras: number; cobertura: number; }
 export interface AlertaRow { componente: string; nivel: 'Bajo' | 'Medio' | 'Adecuado' | 'Alto'; }
 
+export interface UsdWpBySolucion {
+  solucion: string;      // "Sol.2" | "Sol.3" | "Sol.4"
+  casas: number;         // # casas de esta solución
+  usdWpPromedio: number; // promedio ponderado por kWp
+}
+
+export interface KitsPorBodega {
+  warehouseName: string;
+  city: string;
+  priority: { T2: number; T3: number; T4: number };  // en fracción 0-1
+  totalKits: number;
+  byTipo: { T2: number; T3: number; T4: number };    // conteo por tipo
+  porKit: Array<{ id: string; label: string; count: number }>; // detalle por sub-kit
+}
+
 export interface DashReport {
   periodo: { desde: string; hasta: string; anio: string };
   global: {
@@ -39,10 +54,12 @@ export interface DashReport {
     kwpAcum: number;
     kwhAcum: number;
     capexAcumM: number;
+    capexVentaAcumM: number;   // capex de venta acumulado (mig 46)
     avancePct: number;
     metaCasas: number;
     mesesActivos: number;
     porMes: AvanceGlobalMes[];
+    usdWpBySolucion: UsdWpBySolucion[];  // métrica USD/Wp por solución (mig 46)
   };
   semana: {
     casasInstaladas: number; programadas: number;
@@ -84,6 +101,7 @@ export interface DashReport {
   logistica: {
     stock: StockRow[];
     alertas: AlertaRow[];
+    kitsPorBodega: KitsPorBodega[];  // reemplaza la gráfica de cobertura
   };
 }
 
@@ -97,9 +115,9 @@ export interface DashReport {
 export const DEFAULT_REPORT: DashReport = {
   periodo: { desde: '—', hasta: '—', anio: '—' },
   global: {
-    casasAcum: 0, kwpAcum: 0, kwhAcum: 0, capexAcumM: 0,
+    casasAcum: 0, kwpAcum: 0, kwhAcum: 0, capexAcumM: 0, capexVentaAcumM: 0,
     avancePct: 0, metaCasas: 0, mesesActivos: 0,
-    porMes: [],
+    porMes: [], usdWpBySolucion: [],
   },
   semana: {
     casasInstaladas: 0, programadas: 0, standBy: 0, porIniciar: 0,
@@ -116,5 +134,5 @@ export const DEFAULT_REPORT: DashReport = {
   },
   legalizaciones: { tramite: 0, aprobadas: 0, enRevision: 0, detalle: [] },
   postventa:     { abiertos: 0, enTransito: 0, resueltosSitio: 0, detalle: [] },
-  logistica:     { stock: [], alertas: [] },
+  logistica:     { stock: [], alertas: [], kitsPorBodega: [] },
 };

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import type { DashReport } from '@/lib/dash-report-data';
+import { computeKits, KIT_DEFS } from '@/lib/kits';
 
 /**
  * GET /api/dash/report?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -58,7 +59,7 @@ interface CrmProjectRow {
   title: string | null;
 }
 
-interface FacturaRow { project_id: string; capex: number | null; }
+interface FacturaRow { project_id: string; capex: number | null; capex_venta: number | null; usd_wp: number | null; solucion: string | null; }
 
 interface CategoryRow {
   id: string;
@@ -168,10 +169,16 @@ export async function GET(request: Request) {
   // ─── CAPEX (facturación) ───
   const { data: factRaw } = await supabaseAdmin
     .from('facturacion_records')
-    .select('project_id, capex');
+    .select('project_id, capex, capex_venta, usd_wp, solucion');
   const capexByProj = new Map<string, number>();
+  const capexVentaByProj = new Map<string, number>();
+  const usdWpByProj = new Map<string, number>();
+  const solucionByProj = new Map<string, string>();
   ((factRaw ?? []) as FacturaRow[]).forEach((f) => {
     if (f.capex != null) capexByProj.set(f.project_id, Number(f.capex));
+    if (f.capex_venta != null) capexVentaByProj.set(f.project_id, Number(f.capex_venta));
+    if (f.usd_wp != null) usdWpByProj.set(f.project_id, Number(f.usd_wp));
+    if (f.solucion) solucionByProj.set(f.project_id, f.solucion);
   });
 
   // ─── CATEGORÍAS + INVENTARIO ───
@@ -480,6 +487,64 @@ export async function GET(request: Request) {
     return { componente: `Equipos ${s.marca}`, nivel };
   });
 
+  // ─── KITS POR BODEGA ───
+  // Reemplaza la gráfica de "Cobertura estimada". Calcula cuántos kits
+  // solares se pueden armar en cada bodega respetando la prioridad de la
+  // ciudad (60/35/5 para Cali, 15/42.5/42.5 para Costa).
+  const { data: warehousesRaw } = await supabaseAdmin
+    .from('warehouses').select('id, code, name, city');
+  const warehousesList = (warehousesRaw ?? []) as Array<{ id: string; code: string; name: string; city: string | null }>;
+  const kitsPorBodega: DashReport['logistica']['kitsPorBodega'] = [];
+  for (const wh of warehousesList) {
+    // Contar items in_stock por category_id → agrupar por code
+    const stockPorCat: Record<string, number> = {};
+    for (const it of items) {
+      if (it.status !== 'in_stock' || it.warehouse_id !== wh.id) continue;
+      const cat = catById.get(it.category_id);
+      const anyCat = cat as unknown as { code?: string } | undefined;
+      const code = anyCat?.code;
+      if (!code) continue;
+      stockPorCat[code] = (stockPorCat[code] ?? 0) + 1;
+    }
+    const cityKey = wh.city ?? 'Cali';
+    const res = computeKits(cityKey, wh.name, stockPorCat);
+    kitsPorBodega.push({
+      warehouseName: wh.name,
+      city: cityKey,
+      priority: { T2: res.priority[2], T3: res.priority[3], T4: res.priority[4] },
+      totalKits: res.totalKits,
+      byTipo: { T2: res.byTipo[2], T3: res.byTipo[3], T4: res.byTipo[4] },
+      porKit: KIT_DEFS.map((k) => ({ id: k.id, label: k.label, count: res.kitsBuilt[k.id] ?? 0 })),
+    });
+  }
+
+  // ─── USD/Wp POR SOLUCIÓN ───
+  // Promedio ponderado por kWp de todas las casas instaladas de cada solución.
+  const solGroups = new Map<string, { casas: number; sumUsdWpXKwp: number; sumKwp: number }>();
+  for (const p of casasInstaladas) {
+    const sol = solucionByProj.get(p.id);
+    const usd = usdWpByProj.get(p.id);
+    const kwp = Number(p.diseno_kwp ?? 0);
+    if (!sol || usd == null || kwp <= 0) continue;
+    const cur = solGroups.get(sol) ?? { casas: 0, sumUsdWpXKwp: 0, sumKwp: 0 };
+    cur.casas++;
+    cur.sumUsdWpXKwp += usd * kwp;
+    cur.sumKwp += kwp;
+    solGroups.set(sol, cur);
+  }
+  const usdWpBySolucion: DashReport['global']['usdWpBySolucion'] = Array.from(solGroups.entries())
+    .map(([solucion, v]) => ({
+      solucion,
+      casas: v.casas,
+      usdWpPromedio: v.sumKwp > 0 ? v.sumUsdWpXKwp / v.sumKwp : 0,
+    }))
+    .sort((a, b) => a.solucion.localeCompare(b.solucion));
+
+  const capexVentaAcumM = casasInstaladas.reduce(
+    (s, p) => s + (capexVentaByProj.get(p.id) ?? 0) / MILLIONS,
+    0,
+  );
+
   const report: DashReport = {
     periodo: {
       desde: iso(from).slice(5).replace('-', '/'),
@@ -487,11 +552,12 @@ export async function GET(request: Request) {
       anio: String(to.getFullYear()),
     },
     global: {
-      casasAcum, kwpAcum, kwhAcum, capexAcumM,
+      casasAcum, kwpAcum, kwhAcum, capexAcumM, capexVentaAcumM,
       avancePct: metaAnual > 0 ? Math.round((casasAcum / metaAnual) * 100) : 0,
       metaCasas: metaAnual,
       mesesActivos,
       porMes,
+      usdWpBySolucion,
     },
     semana: {
       casasInstaladas: instaladasSemana.length,
@@ -530,7 +596,7 @@ export async function GET(request: Request) {
       abiertos, enTransito, resueltosSitio,
       detalle: postDetalle,
     },
-    logistica: { stock, alertas },
+    logistica: { stock, alertas, kitsPorBodega },
   };
 
   return NextResponse.json(report);

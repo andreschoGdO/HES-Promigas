@@ -414,12 +414,6 @@ export default function DashPage() {
             hint="esta semana"
             tag={report.semana.kwhSemana > 0 ? `~${fmtInt(Math.round(report.semana.kwhSemana / KWH_POR_BATERIA))} baterías` : undefined}
           />
-          <StatCard
-            label="CAPEX ejecutado"
-            value={`$${fmtInt(report.semana.capexSemanaM)}M`}
-            hint="COP acumulado semana"
-            tag={report.semana.casasInstaladas > 0 ? `~$${fmt1(report.semana.capexSemanaM / report.semana.casasInstaladas)}M / casa` : undefined}
-          />
         </div>
 
         {/* Detalle por marca / zona / constructor (semanal — puede estar vacío si no hay instalaciones) */}

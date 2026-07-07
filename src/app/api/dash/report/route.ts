@@ -55,6 +55,7 @@ interface CrmProjectRow {
   garantia_estado: string | null;
   garantia_retorno_bodega: string | null;
   client_name: string | null;
+  client_city: string | null;
   code: string | null;
   title: string | null;
 }
@@ -101,6 +102,24 @@ function inRange(dateStr: string | null, from: Date, to: Date): boolean {
 function daysSince(dateStr: string | null): number {
   if (!dateStr) return 0;
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Deriva la zona desde `zona` (si está seteada) o `client_city` como fallback.
+ * Cali/Jamundí/Yumbo/Palmira/Valle/Buenaventura → Valle.
+ * Barranquilla/Soledad/Malambo → Costa.
+ * Cartagena/Turbaco/Arjona/Bolívar/Sincelejo/Montería → Costa.
+ * El proyecto puede tener zona=null si fue creado desde el modal manual del
+ * CRM (que no pide zona). Este helper cubre ese caso sin forzar migración.
+ */
+function deriveZona(zona: string | null | undefined, city: string | null | undefined): string {
+  if (zona) return zona;
+  if (!city) return 'Sin zona';
+  const c = city.trim().toLowerCase();
+  if (['cali', 'jamundí', 'jamundi', 'yumbo', 'palmira', 'valle', 'buenaventura'].some((x) => c.includes(x))) return 'Valle';
+  if (['barranquilla', 'soledad', 'malambo', 'puerto colombia', 'sabanagrande', 'galapa'].some((x) => c.includes(x))) return 'Costa';
+  if (['cartagena', 'turbaco', 'arjona', 'magangué', 'magangue', 'bolívar', 'bolivar', 'sincelejo', 'monteria', 'montería'].some((x) => c.includes(x))) return 'Costa';
+  return 'Sin zona';
 }
 
 export async function GET(request: Request) {
@@ -162,7 +181,7 @@ export async function GET(request: Request) {
       operativo_at, updated_at, created_at,
       agpe_operador_red, agpe_estado, agpe_fecha_estimada,
       garantia_marca, garantia_equipo, garantia_falla, garantia_estado, garantia_retorno_bodega,
-      client_name, code, title
+      client_name, client_city, code, title
     `);
   if (projErr) return NextResponse.json({ error: projErr.message }, { status: 500 });
   const projects = (projRaw ?? []) as CrmProjectRow[];
@@ -331,7 +350,7 @@ export async function GET(request: Request) {
 
   const zonaGroup = new Map<string, { casas: number; capex: number }>();
   instaladasSemana.forEach((p) => {
-    const z = p.zona ?? 'Sin zona';
+    const z = deriveZona(p.zona, p.client_city);
     const cur = zonaGroup.get(z) ?? { casas: 0, capex: 0 };
     cur.casas++;
     cur.capex += (capexByProj.get(p.id) ?? 0);
@@ -374,7 +393,7 @@ export async function GET(request: Request) {
 
   const zonaGroupG = new Map<string, { casas: number; capex: number }>();
   casasInstaladas.forEach((p) => {
-    const z = p.zona ?? 'Sin zona';
+    const z = deriveZona(p.zona, p.client_city);
     const cur = zonaGroupG.get(z) ?? { casas: 0, capex: 0 };
     cur.casas++;
     cur.capex += (capexByProj.get(p.id) ?? 0);
@@ -414,13 +433,14 @@ export async function GET(request: Request) {
   const capexPlanM = proximaSemana.reduce((s, p) => s + getCapexM(p), 0);
 
   const constructoresProxSet = new Set(proximaSemana.map((p) => p.contractor_name).filter(Boolean) as string[]);
-  const zonasProxSet = new Set(proximaSemana.map((p) => p.zona).filter(Boolean) as string[]);
+  const zonasProxSet = new Set(proximaSemana.map((p) => deriveZona(p.zona, p.client_city)).filter((z) => z !== 'Sin zona') as string[]);
 
   const distGroup = new Map<string, DashReport['planeacion']['distribucion'][number]>();
   proximaSemana.forEach((p) => {
-    const key = `${p.zona ?? '?'}|${p.contractor_name ?? '?'}`;
+    const zonaEff = deriveZona(p.zona, p.client_city);
+    const key = `${zonaEff}|${p.contractor_name ?? '?'}`;
     const cur = distGroup.get(key) ?? {
-      zona: p.zona ?? 'Sin zona',
+      zona: zonaEff,
       constructor: p.contractor_name ?? 'Sin asignar',
       casas: 0,
       marca: '',
@@ -444,20 +464,55 @@ export async function GET(request: Request) {
     fecha: p.agpe_fecha_estimada ?? '—',
   }));
 
-  // ─── SLIDE 7: POSTVENTA ───
-  const postProjects = projects.filter((p) => p.operations_stage === 'logistica_inversa' || p.garantia_estado);
-  const abiertos = postProjects.filter((p) =>
-    p.garantia_estado && !['Resuelto en sitio', 'Cerrado'].includes(p.garantia_estado)).length;
-  const enTransito = postProjects.filter((p) =>
-    p.garantia_estado === 'Reemplazo aprobado' || (p.garantia_retorno_bodega && new Date(p.garantia_retorno_bodega) >= new Date())).length;
-  const resueltosSitio = postProjects.filter((p) => p.garantia_estado === 'Resuelto en sitio').length;
-  const postDetalle = postProjects.slice(0, 20).map((p) => ({
-    marca: p.garantia_marca ?? '—',
-    equipo: p.garantia_equipo ?? '—',
-    falla: p.garantia_falla ?? '—',
-    estado: p.garantia_estado ?? '—',
-    retorno: p.garantia_retorno_bodega ?? 'No aplica',
-  }));
+  // ─── SLIDE 7: POSTVENTA (desde inventario, mig 47) ───
+  // La etapa 'logistica_inversa' se retiró del CRM — la garantía vive por
+  // equipo en /inventario. Traemos aquí items con status='in_repair' o 'rma'
+  // para reflejar el mismo dashboard.
+  interface InRepairItem {
+    id: string;
+    serial_number: string;
+    brand: string | null;
+    model: string | null;
+    status: string;
+    current_location: string | null;
+    notes: string | null;
+    updated_at: string | null;
+    inventory_categories: { name: string; family: string } | { name: string; family: string }[] | null;
+  }
+  const { data: repairRaw } = await supabaseAdmin
+    .from('inventory_items')
+    .select('id, serial_number, brand, model, status, current_location, notes, updated_at, inventory_categories(name, family)')
+    .in('status', ['in_repair', 'rma'])
+    .order('updated_at', { ascending: false })
+    .limit(50);
+  const repairItems = (repairRaw ?? []) as unknown as InRepairItem[];
+
+  const abiertos = repairItems.filter((it) => it.status === 'in_repair').length;
+  const enTransito = repairItems.filter(
+    (it) => it.status === 'rma' || it.current_location === 'supplier_rma' || it.current_location === 'in_transit',
+  ).length;
+  // "Resueltos" = items que salieron de in_repair en los últimos 30d
+  // (por movement type='repair_end'). Requiere query aparte.
+  const nowMs = Date.now();
+  const D30 = 30 * 24 * 60 * 60 * 1000;
+  const { data: repairEndRaw } = await supabaseAdmin
+    .from('inventory_movements')
+    .select('item_id, created_at')
+    .eq('type', 'repair_end')
+    .gte('created_at', new Date(nowMs - D30).toISOString());
+  const resueltosSitio = (repairEndRaw ?? []).length;
+
+  const postDetalle = repairItems.slice(0, 20).map((it) => {
+    const cat = Array.isArray(it.inventory_categories) ? it.inventory_categories[0] : it.inventory_categories;
+    const estadoLabel = it.status === 'rma' ? 'En RMA proveedor' : 'En reparación';
+    return {
+      marca: it.brand ?? '—',
+      equipo: cat?.name ?? [it.brand, it.model].filter(Boolean).join(' ') ?? it.serial_number,
+      falla: it.notes ?? '—',
+      estado: estadoLabel,
+      retorno: it.current_location === 'supplier_rma' ? 'Con proveedor' : (it.current_location ?? 'No aplica'),
+    };
+  });
 
   // ─── SLIDE 8: LOGÍSTICA (inventario disponible por marca × family) ───
   // Status 'in_stock' es el correcto (mig 07). El bug anterior filtraba por

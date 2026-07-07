@@ -91,9 +91,11 @@ export const KIT_DEFS: KitDef[] = [
 ];
 
 export const PRIORITY_BY_CITY: Record<string, { 2: number; 3: number; 4: number }> = {
-  'Cali':         { 2: 0.60, 3: 0.35, 4: 0.05 },
-  'Barranquilla': { 2: 0.15, 3: 0.425, 4: 0.425 },
-  'Cartagena':    { 2: 0.15, 3: 0.425, 4: 0.425 },
+  // Cali: mercado residencial estándar → fuerte T2, T3 secundario, T4 marginal
+  'Cali':         { 2: 0.55, 3: 0.40, 4: 0.05 },
+  // Costa: mercado con más consumo → T3 principal, T4 muy cerca, T2 residual
+  'Barranquilla': { 2: 0.10, 3: 0.50, 4: 0.40 },
+  'Cartagena':    { 2: 0.10, 3: 0.50, 4: 0.40 },
 };
 export const DEFAULT_PRIORITY = { 2: 0.34, 3: 0.33, 4: 0.33 };
 

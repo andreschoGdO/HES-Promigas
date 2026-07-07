@@ -3814,7 +3814,7 @@ function KitsTab() {
           <strong> sin reutilizar equipos</strong>.
         </p>
         <ul style={{ margin: '10px 0 0', paddingLeft: 20, fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-          <li>Cali prioriza <strong>Tipo 2</strong> (60% / 35% / 5%). Barranquilla y Cartagena priorizan <strong>Tipo 3 y 4</strong> (15% / 42.5% / 42.5%).</li>
+          <li>Cali prioriza <strong>Tipo 2 y 3</strong> (55% / 40% / 5%). Barranquilla y Cartagena priorizan <strong>Tipo 3 &gt; 4</strong> (10% / 50% / 40%).</li>
           <li>Solo las soluciones <strong>Livoltek</strong> se pueden poner Top Cover para hacer paralelo con baterías, y solo en <strong>Tipo 4</strong>.</li>
           <li>Cada kit lleva: <strong>1 Inversor + 1 BMS + Baterías según categoría</strong>.</li>
         </ul>

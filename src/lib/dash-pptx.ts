@@ -98,7 +98,7 @@ export function generateDashPPTX(r: DashReport): void {
     x: 0.5, y: 2, w: 12, h: 0.4,
     fontSize: 12, bold: true, color: ACCENT, fontFace: 'Inter',
   });
-  s1.addText('Avance Semanal de Instalación', {
+  s1.addText('Weekly Construcción', {
     x: 0.5, y: 2.5, w: 12, h: 1.2,
     fontSize: 44, bold: true, color: TEXT, fontFace: 'Inter',
   });

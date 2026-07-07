@@ -181,7 +181,7 @@ export function generateDashPDF(r: DashReport): void {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(34);
   doc.setTextColor(TEXT);
-  doc.text('Avance Semanal de Instalación', 20, pageH / 2 + 2);
+  doc.text('Weekly Construcción', 20, pageH / 2 + 2);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(14);
   doc.setTextColor(MUTED);

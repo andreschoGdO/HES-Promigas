@@ -194,7 +194,7 @@ export default function DashPage() {
               Construcción · Seguimiento semanal
             </div>
             <h1 style={{ fontSize: '1.8rem', fontWeight: 700, margin: '4px 0', letterSpacing: '-0.02em' }}>
-              Avance Semanal de Instalación
+              Weekly Construcción
             </h1>
             <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
               Sistemas Solares + BESS residenciales

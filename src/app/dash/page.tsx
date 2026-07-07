@@ -346,7 +346,7 @@ export default function DashPage() {
               {report.global.usdWpBySolucion.map((s) => (
                 <div key={s.solucion} className="stat-card" style={{ borderLeft: '4px solid var(--accent)' }}>
                   <div className="stat-label">{s.solucion}</div>
-                  <div className="stat-value">${fmt1(s.usdWpPromedio)} /Wp</div>
+                  <div className="stat-value">${fmt1(s.usdWpPromedio)} USD/Wp</div>
                   <div style={{ fontSize: '0.72rem', color: ACCENT, fontWeight: 600 }}>{s.casas} casa{s.casas === 1 ? '' : 's'}</div>
                 </div>
               ))}
@@ -361,7 +361,7 @@ export default function DashPage() {
                 return (
                   <div className="stat-card" style={{ borderLeft: '4px solid #64748b', background: 'var(--bg-elevated)' }}>
                     <div className="stat-label">Promedio general</div>
-                    <div className="stat-value">${fmt1(totUsdWp)} /Wp</div>
+                    <div className="stat-value">${fmt1(totUsdWp)} USD/Wp</div>
                     <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>{totCasas} casas · ${fmtInt(report.global.capexVentaAcumM)}M venta</div>
                   </div>
                 );

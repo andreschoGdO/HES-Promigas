@@ -151,7 +151,7 @@ export function generateDashPPTX(r: DashReport): void {
     });
     addStatRow(s2b, 2.0, r.global.usdWpBySolucion.map((s) => ({
       label: s.solucion,
-      value: `$${fmt1(s.usdWpPromedio)} /Wp`,
+      value: `$${fmt1(s.usdWpPromedio)} USD/Wp`,
       hint: `${s.casas} casa${s.casas === 1 ? '' : 's'}`,
     })));
     // Nota explicativa

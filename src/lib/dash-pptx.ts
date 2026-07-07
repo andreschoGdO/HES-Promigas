@@ -127,13 +127,39 @@ export function generateDashPPTX(r: DashReport): void {
     ['Mes', 'Casas', 'kWp', 'kWh', 'CAPEX'],
     r.global.porMes.map((m) => [m.mes, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh), `$${fmtInt(m.capexM)}M`]),
   );
-  // USD/Wp por solución
+
+  // ─── SLIDE 2b: USD/Wp POR SOLUCIÓN (slide propio) ───
   if (r.global.usdWpBySolucion?.length > 0) {
-    addStatRow(s2, 6.5, r.global.usdWpBySolucion.map((s) => ({
+    const s2b = pptx.addSlide();
+    addSectionHeader(s2b, 'Avance global', 'Rentabilidad · USD/Wp por solución');
+    s2b.addText('TRM operativa: 3.901,29 COP/USD', {
+      x: 0.4, y: 1.35, w: 8, h: 0.3,
+      fontSize: 10, italic: true, color: MUTED, fontFace: 'Inter',
+    });
+    addStatRow(s2b, 2.0, r.global.usdWpBySolucion.map((s) => ({
       label: s.solucion,
       value: `$${fmt1(s.usdWpPromedio)} /Wp`,
-      hint: `${s.casas} casas`,
+      hint: `${s.casas} casa${s.casas === 1 ? '' : 's'}`,
     })));
+    // Nota explicativa
+    s2b.addText(
+      'Promedio ponderado por kWp de todas las casas instaladas de cada solución. ' +
+      'Los valores vienen del CSV corporativo de cierre — se guardan tal cual para respetar el cierre contable de cada casa.',
+      {
+        x: 0.4, y: 4, w: 12.5, h: 0.8,
+        fontSize: 10, color: MUTED, fontFace: 'Inter',
+      },
+    );
+    // CAPEX venta acumulado como métrica complementaria
+    if (r.global.capexVentaAcumM > 0) {
+      addStatRow(s2b, 5.2, [
+        {
+          label: 'CAPEX venta acumulado',
+          value: `$${fmtInt(r.global.capexVentaAcumM)}M COP`,
+          hint: `${r.global.casasAcum} casas · ${fmt1(r.global.kwpAcum)} kWp`,
+        },
+      ]);
+    }
   }
 
   // ─── SLIDE 3: CONSTRUCCIÓN (semanal + planeación) ───

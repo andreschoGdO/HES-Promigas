@@ -5,9 +5,12 @@
 --      - 'Aprobado sin visita'
 --      - 'Aprobado visitado'
 -- 2. Actualizar options del dropdown en crm_stage_fields.
--- 3. Mover las 13 casas de RESERVA DE PANCE (Cali) que aparecen en el listado
+-- 3. Mover las casas de RESERVA DE PANCE (Cali) que aparecen en el listado
 --    del operador de red a operations_stage='legalizacion' con el estado
 --    correspondiente. Se conserva el "pendiente" en las notas.
+--    IMPORTANTE: solo se tocan las que ya están en 'operativo'. Las que
+--    todavía están en dimensionado/alistamiento/instalación NO se mueven —
+--    tienen que completar la construcción primero.
 -- ─────────────────────────────────────────────────────────────────
 
 begin;
@@ -53,16 +56,18 @@ update crm_projects p
        updated_at = now()
   from target t
  where p.conjunto = 'RESERVA DE PANCE'
-   and p.casa_numero = t.casa_n;
+   and p.casa_numero = t.casa_n
+   and p.operations_stage = 'operativo';  -- solo casas ya operativas se mueven
 
--- 4. Registrar el cambio en el audit log
+-- 4. Registrar el cambio en el audit log (solo los que realmente se movieron)
 insert into crm_project_events (project_id, event_type, to_module, to_stage, actor_email, notes)
 select p.id, 'stage_change', 'operations', 'legalizacion', 'mig-52',
        'Movida a Legalización desde el listado del operador de red (mig 52). Estado: ' || p.agpe_estado
   from crm_projects p
  where p.conjunto = 'RESERVA DE PANCE'
    and p.casa_numero in ('70','63','57','56','48','42','30','29','23','18','11','10','2')
-   and p.operations_stage = 'legalizacion';
+   and p.operations_stage = 'legalizacion'
+   and p.updated_at > now() - interval '1 minute';  -- filtro que solo captura el UPDATE recién ejecutado
 
 commit;
 

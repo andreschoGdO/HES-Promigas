@@ -83,13 +83,15 @@ const fmtLabel = (v: unknown): string => {
   return Number.isFinite(n) && n > 0 ? String(n) : '';
 };
 
-function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
+function SectionHeader({ eyebrow, title, size = 'normal' }: { eyebrow: string; title: string; size?: 'normal' | 'large' }) {
+  const titleSize = size === 'large' ? '2.2rem' : '1.4rem';
+  const eyebrowSize = size === 'large' ? '0.82rem' : '0.72rem';
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ color: ACCENT, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+    <div style={{ marginBottom: size === 'large' ? 20 : 16 }}>
+      <div style={{ color: ACCENT, fontSize: eyebrowSize, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
         {eyebrow}
       </div>
-      <h2 style={{ fontSize: '1.4rem', fontWeight: 700, margin: '4px 0 0', letterSpacing: '-0.02em' }}>{title}</h2>
+      <h2 style={{ fontSize: titleSize, fontWeight: 700, margin: '4px 0 0', letterSpacing: '-0.02em' }}>{title}</h2>
     </div>
   );
 }
@@ -380,7 +382,7 @@ export default function DashPage() {
 
       {/* ─── SLIDE 4: CONSTRUCCIÓN (semanal + planeación unificados) ─── */}
       <section className="card">
-        <SectionHeader eyebrow="Construcción" title="Operación semanal y proyección" />
+        <SectionHeader eyebrow="Weekly" title="Construcción" size="large" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
           <StatCard
             label="Instaladas esta semana"

@@ -63,6 +63,7 @@ interface FacturaRow { project_id: string; capex: number | null; capex_venta: nu
 
 interface CategoryRow {
   id: string;
+  code: string | null;
   family: string | null;
   default_brand: string | null;
   default_capacity_value: number | null;
@@ -184,7 +185,7 @@ export async function GET(request: Request) {
   // ─── CATEGORÍAS + INVENTARIO ───
   const { data: catsRaw } = await supabaseAdmin
     .from('inventory_categories')
-    .select('id, family, default_brand, default_capacity_value');
+    .select('id, code, family, default_brand, default_capacity_value');
   const cats = (catsRaw ?? []) as CategoryRow[];
   const catById = new Map(cats.map((c) => [c.id, c]));
 

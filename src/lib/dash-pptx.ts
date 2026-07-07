@@ -177,7 +177,7 @@ export function generateDashPPTX(r: DashReport): void {
 
   // ─── SLIDE 3: CONSTRUCCIÓN (semanal + planeación) ───
   const s3 = pptx.addSlide();
-  addSectionHeader(s3, 'Construcción', 'Operación semanal y proyección');
+  addSectionHeader(s3, 'Weekly', 'Construcción');
   addStatRow(s3, 1.4, [
     { label: 'Instaladas esta semana', value: fmtInt(r.semana.casasInstaladas), hint: 'ya operativas' },
     { label: 'En curso',                value: fmtInt(r.semana.porIniciar),      hint: 'alistamiento o instalación' },

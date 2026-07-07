@@ -34,10 +34,13 @@ export const OPERATIONS_STAGES: StageMeta[] = [
   { key: 'instalacion',      label: '3. Instalación',      shortLabel: 'Instalación',      color: '#8b5cf6', description: 'Contratista seleccionado, instalación en curso. Visita de instalación enlazada en /visitas.' },
   { key: 'operativo',        label: '4. Operativo',        shortLabel: 'Operativo',        color: '#10b981', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum.' },
   { key: 'legalizacion',     label: '5. Legalización',     shortLabel: 'Legalización',     color: '#0ea5e9', description: 'Trámite AGPE en curso para habilitar venta de excedentes. El sistema sigue OPERATIVO — solo queda registro de que se legalizó al volver.' },
-  { key: 'logistica_inversa',label: '6. Logística inversa', shortLabel: 'Garantía / cambio', color: '#ec4899', description: 'Reparación, garantía, cambio de equipos. El sistema sigue operativo pero hay tickets de servicio abiertos.' },
-  { key: 'desistido',        label: '7. Desistido',        shortLabel: 'Desistido',        color: '#f97316', description: 'Cliente desistió del proyecto antes o durante. Equipos se recuperan a bodega.' },
-  { key: 'sin_renovacion',   label: '8. Sin renovación',   shortLabel: 'No renovado',      color: '#64748b', description: 'Fin del contrato — cliente no renueva. Equipos se retiran y se devuelven a bodega para reuso.' },
+  { key: 'desistido',        label: '6. Desistido',        shortLabel: 'Desistido',        color: '#f97316', description: 'Cliente desistió del proyecto antes o durante. Equipos se recuperan a bodega.' },
+  { key: 'sin_renovacion',   label: '7. Sin renovación',   shortLabel: 'No renovado',      color: '#64748b', description: 'Fin del contrato — cliente no renueva. Equipos se retiran y se devuelven a bodega para reuso.' },
 ];
+// Nota (mig 47): la etapa 'logistica_inversa' fue retirada del kanban.
+// Garantía y cambio de equipos ahora se gestionan desde /inventario por
+// equipo (status 'in_repair' / 'rma'). El tipo OperationsStage la mantiene
+// como valor válido histórico para compatibilidad con eventos y logs viejos.
 
 export const MODULE_META: Record<CrmModule, { label: string; color: string; href: string }> = {
   operations: { label: 'Construcción', color: '#f59e0b', href: '/operaciones' },
@@ -142,25 +145,11 @@ export const TRANSITIONS: TransitionDef[] = [
   // proyectos exitosos permanecen en Operativo indefinidamente (el sistema
   // sigue generando). Solo entran a 'closed' por desistimiento, fin de
   // contrato o cancelación explícita (botón Cancelar en el detalle).
-  // Garantía / Logística inversa: el sistema sigue operativo pero hay un ticket abierto.
-  {
-    action: 'operations_to_logistica_inversa',
-    label: 'Abrir ticket de garantía / cambio',
-    buttonLabel: 'Garantía / cambio →',
-    fromModule: 'operations', fromStage: 'operativo', toModule: 'operations', toStage: 'logistica_inversa',
-    requiredFields: [
-      f('notes', 'Motivo del cambio / garantía', 'textarea'),
-    ],
-    noteTemplate: 'Abierto ticket de logística inversa.',
-  },
-  {
-    action: 'logistica_inversa_to_operativo',
-    label: 'Cerrar ticket y volver a Operativo',
-    buttonLabel: 'Sistema reparado →',
-    fromModule: 'operations', fromStage: 'logistica_inversa', toModule: 'operations', toStage: 'operativo',
-    requiredFields: [],
-    noteTemplate: 'Ticket cerrado. Sistema vuelve a operativo.',
-  },
+  //
+  // Garantía / cambio de equipos (mig 47): las transiciones
+  // operations_to_logistica_inversa y logistica_inversa_to_operativo se
+  // retiraron. Los tickets de garantía viven en /inventario por equipo.
+  //
   // Desistido: cliente desistió. Se cierra y se cancela el proyecto.
   {
     action: 'operations_to_desistido',

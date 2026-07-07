@@ -218,6 +218,8 @@ export async function GET(request: Request) {
   const getKwp = (p: CrmProjectRow) => Number(p.diseno_kwp ?? 0);
   const getCapexM = (p: CrmProjectRow) => (capexByProj.get(p.id) ?? 0) / MILLIONS;
 
+  // 'logistica_inversa' se retiró del kanban en mig 47 pero se conserva en el
+  // set por compat con proyectos legacy que aún puedan tener ese stage.
   const INSTALADAS = new Set(['operativo', 'logistica_inversa', 'legalizacion']);
   const CERRADAS_OK = new Set(['sin_renovacion']);
 

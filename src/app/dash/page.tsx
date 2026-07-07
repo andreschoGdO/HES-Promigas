@@ -530,19 +530,32 @@ export default function DashPage() {
       {/* ─── SLIDE 8: LOGÍSTICA ─── */}
       <section className="card">
         <SectionHeader eyebrow="Logística" title="Estado de inventario en bodega" />
-        {/* Stock por bodega (una tabla por Cali/Barranquilla/Cartagena) */}
+        {/* Stock por bodega — union de marcas para que las 3 tablas tengan las mismas filas */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, marginBottom: 20 }}>
-          {(report.logistica.stockPorBodega ?? []).map((b) => (
-            <div key={b.warehouseName}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-                STOCK · {b.warehouseName.toUpperCase()}
-              </div>
-              <SimpleTable
-                head={['Marca', 'Pan.', 'Inv.', 'Bat.', 'Est.']}
-                rows={b.stock.map((s) => [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias), fmtInt(s.estructuras)])}
-              />
-            </div>
-          ))}
+          {(() => {
+            const bodegas = report.logistica.stockPorBodega ?? [];
+            // Union de marcas presente en cualquiera de las bodegas, ordenada alfabeticamente
+            const marcasUnion = Array.from(new Set(bodegas.flatMap((b) => b.stock.map((s) => s.marca)))).sort((a, b) => a.localeCompare(b));
+            return bodegas.map((b) => {
+              const stockMap = new Map(b.stock.map((s) => [s.marca, s] as const));
+              // Rellenar cada bodega con las marcas faltantes en 0
+              const rows = marcasUnion.map((marca) => {
+                const s = stockMap.get(marca) ?? { marca, paneles: 0, inversores: 0, baterias: 0, estructuras: 0, cobertura: 0 };
+                return [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias), fmtInt(s.estructuras)];
+              });
+              return (
+                <div key={b.warehouseName}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+                    STOCK · {b.warehouseName.toUpperCase()}
+                  </div>
+                  <SimpleTable
+                    head={['Marca', 'Pan.', 'Inv.', 'Bat.', 'Est.']}
+                    rows={rows}
+                  />
+                </div>
+              );
+            });
+          })()}
           {/* Fallback si stockPorBodega no viene (data vieja): mostrar el stock global */}
           {(!report.logistica.stockPorBodega || report.logistica.stockPorBodega.length === 0) && (
             <div>
@@ -608,6 +621,23 @@ export default function DashPage() {
                       <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{kit.byTipo.T4} ({pct(kit.byTipo.T4)}%)</span>
                     </div>
                   </div>
+
+                  {/* Desglose por sub-kit — muestra cuáles se pueden armar (K2A, K2B, K3A, etc.) */}
+                  {kit.porKit && kit.porKit.some((p) => p.count > 0) && (
+                    <details style={{ marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                      <summary style={{ cursor: 'pointer', fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        Ver detalle por kit
+                      </summary>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, paddingLeft: 4 }}>
+                        {kit.porKit.filter((p) => p.count > 0).map((p) => (
+                          <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                            <span title={p.label}>{p.label.length > 40 ? p.label.slice(0, 40) + '…' : p.label}</span>
+                            <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600, color: 'var(--text-primary)' }}>{p.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
               );
             })}

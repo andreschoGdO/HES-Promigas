@@ -422,11 +422,11 @@ export default function DashPage() {
             {report.detalle.marcas.length > 0 && (
               <div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-                  MARCA (SEMANA)
+                  KIT (SEMANA)
                 </div>
                 <SimpleTable
-                  head={['Marca', 'Casas', 'kWp']}
-                  rows={report.detalle.marcas.map((m) => [m.marca, fmtInt(m.casas), fmt1(m.kwp)])}
+                  head={['Kit', 'Casas', 'kWp']}
+                  rows={report.detalle.marcas.map((m) => [labelForMarca(m.marca), fmtInt(m.casas), fmt1(m.kwp)])}
                 />
               </div>
             )}
@@ -624,6 +624,22 @@ export default function DashPage() {
  * Se usa dos veces en la página: una para el acumulado global y otra para
  * los datos de la semana. Recibe eyebrow/title para diferenciar.
  */
+/**
+ * Convierte el texto de "marca" (viene de la marca de batería del proyecto)
+ * al nombre completo del kit (inversor + batería) que se muestra al usuario.
+ * Livoltek battery → Kit Livoltek + Livoltek (inversor + batería Livoltek)
+ * DEYE battery     → Kit Deye + Deye
+ * Pylontech        → Kit Deye + Pylontech (siempre con inversor Deye 6k LV)
+ */
+const KIT_LABEL_BY_MARCA: Record<string, string> = {
+  'Livoltek':  'Kit Livoltek + Livoltek',
+  'DEYE':      'Kit Deye + Deye',
+  'Deye':      'Kit Deye + Deye',
+  'Deye HV':   'Kit Deye + Deye',
+  'Pylontech': 'Kit Deye + Pylontech',
+};
+const labelForMarca = (m: string): string => KIT_LABEL_BY_MARCA[m] ?? m;
+
 function DetalleMarcaZonaConstructor({
   eyebrow, title, marcas, zonas, constructores,
 }: {
@@ -634,7 +650,7 @@ function DetalleMarcaZonaConstructor({
 }) {
   const total = marcas.reduce((s, m) => s + m.casas, 0);
   const pie = marcas.map((m) => ({
-    name: m.marca,
+    name: labelForMarca(m.marca),
     value: m.casas,
     pct: total ? Math.round((m.casas / total) * 100) : 0,
   }));
@@ -647,8 +663,8 @@ function DetalleMarcaZonaConstructor({
             CASAS INSTALADAS POR MARCA
           </div>
           <SimpleTable
-            head={['Marca', 'Casas', 'kWp', 'kWh']}
-            rows={marcas.map((m) => [m.marca, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh)])}
+            head={['Kit', 'Casas', 'kWp', 'kWh']}
+            rows={marcas.map((m) => [labelForMarca(m.marca), fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh)])}
           />
           <div style={{ height: 220, marginTop: 16 }}>
             <ResponsiveContainer>

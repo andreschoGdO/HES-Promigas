@@ -124,10 +124,16 @@ function drawDetalleSlide(
   const pageW = doc.internal.pageSize.getWidth();
   const y = 44;
   const colW = (pageW - 20 * 2 - 8) / 2;
+  const kitLabel = (m: string): string => {
+    if (m === 'Livoltek') return 'Kit Livoltek + Livoltek';
+    if (m === 'DEYE' || m === 'Deye' || m === 'Deye HV') return 'Kit Deye + Deye';
+    if (m === 'Pylontech') return 'Kit Deye + Pylontech';
+    return m;
+  };
   autoTable(doc, {
     startY: y,
-    head: [['Marca', 'Casas', 'kWp', 'kWh']],
-    body: marcas.map((m) => [m.marca, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh)]),
+    head: [['Kit', 'Casas', 'kWp', 'kWh']],
+    body: marcas.map((m) => [kitLabel(m.marca), fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh)]),
     headStyles: tableHeaderStyles(),
     bodyStyles: { fontSize: 9, textColor: TEXT },
     alternateRowStyles: { fillColor: HEAD_BG },

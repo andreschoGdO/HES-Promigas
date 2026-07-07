@@ -125,7 +125,7 @@ export const TRANSITIONS: TransitionDef[] = [
     fromModule: 'operations', fromStage: 'operativo', toModule: 'operations', toStage: 'legalizacion',
     requiredFields: [
       f('agpe_operador_red', 'Operador de red', 'select', true, { options: ['EPSA', 'EMCALI', 'AIR-E', 'AFINIA', 'ENEL', 'ELECTRICARIBE', 'Otro'] }),
-      f('agpe_estado', 'Estado del trámite', 'select', true, { options: ['Radicado', 'En revisión'] }),
+      f('agpe_estado', 'Estado del trámite', 'select', true, { options: ['Con visita', 'Radicado', 'En revisión', 'Legalizada'] }),
       f('agpe_fecha_estimada', 'Fecha estimada de aprobación', 'date', false),
     ],
     noteTemplate: 'Iniciado trámite AGPE. Sistema sigue operativo.',

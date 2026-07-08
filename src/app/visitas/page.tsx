@@ -1125,7 +1125,13 @@ function FieldInput({ field, value, onChange, formData }: {
       type={field.type === 'tel' || field.type === 'email' ? field.type : (field.type === 'number' ? 'text' : field.type)}
       inputMode={field.inputMode}
       value={String(v)}
-      onChange={(e) => onChange(field.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value.replace(',', '.'))) : e.target.value)}
+      onChange={(e) => {
+        if (field.type !== 'number') return onChange(e.target.value);
+        const raw = e.target.value.replace(',', '.');
+        if (raw === '') return onChange('');
+        if (!/^-?\d*\.?\d*$/.test(raw)) return;
+        onChange(raw);
+      }}
       placeholder={field.placeholder}
       required={field.required}
       style={{ width: '100%', minHeight: 44 }}

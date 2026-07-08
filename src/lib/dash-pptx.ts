@@ -23,6 +23,14 @@ const fmtInt = (n: number) => n.toLocaleString('es-CO');
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtCOP = (n: number) => `$${fmtInt(n)}M COP`;
 
+/** Mapea la marca del componente al kit final que ve el cliente. */
+function kitLabel(m: string): string {
+  if (m === 'Livoltek') return 'Kit Livoltek + Livoltek';
+  if (m === 'DEYE' || m === 'Deye' || m === 'Deye HV') return 'Kit Deye + Deye';
+  if (m === 'Pylontech') return 'Kit Deye + Pylontech';
+  return m;
+}
+
 /** Título estándar de sección (arriba a la izquierda de cada slide). */
 function addSectionHeader(slide: PptxGenJS.Slide, eyebrow: string, title: string) {
   slide.addText(eyebrow.toUpperCase(), {
@@ -190,8 +198,8 @@ export function generateDashPPTX(r: DashReport): void {
   ]);
   if (r.planeacion.distribucion.length > 0) {
     addTable(s3, 4.1,
-      ['Zona', 'Constructor', 'Casas', 'Marca', 'Fecha'],
-      r.planeacion.distribucion.map((p) => [p.zona, p.constructor, fmtInt(p.casas), p.marca, p.fecha]),
+      ['Zona', 'Constructor', 'Casas', 'Kit', 'Fecha'],
+      r.planeacion.distribucion.map((p) => [p.zona, p.constructor, fmtInt(p.casas), kitLabel(p.marca), p.fecha]),
     );
   }
 
@@ -210,46 +218,64 @@ export function generateDashPPTX(r: DashReport): void {
     );
   }
 
-  // ─── SLIDE 5: POSTVENTA ───
+  // ─── SLIDE 5: POSTVENTA (desde inventario / in_repair) ───
   const s5 = pptx.addSlide();
-  addSectionHeader(s5, 'Postventa', 'Garantías: equipos y retorno a bodega');
+  addSectionHeader(s5, 'Postventa', 'Equipos en garantía / RMA (desde inventario)');
   addStatRow(s5, 1.4, [
-    { label: 'Casos abiertos',       value: fmtInt(r.postventa.abiertos),       hint: 'en garantía esta semana' },
-    { label: 'Equipos en tránsito',  value: fmtInt(r.postventa.enTransito),     hint: 'recolección programada' },
-    { label: 'Resueltos en sitio',   value: fmtInt(r.postventa.resueltosSitio), hint: 'sin retorno a bodega' },
+    { label: 'Casos abiertos',       value: fmtInt(r.postventa.abiertos),       hint: 'items en reparación' },
+    { label: 'En RMA / proveedor',   value: fmtInt(r.postventa.enTransito),     hint: 'items fuera de bodega' },
+    { label: 'Resueltos (30d)',      value: fmtInt(r.postventa.resueltosSitio), hint: 'movimientos repair_end' },
   ]);
   if (r.postventa.detalle.length > 0) {
     addTable(s5, 2.9,
-      ['Marca', 'Equipo', 'Falla', 'Estado', 'Retorno'],
+      ['Marca', 'Equipo', 'Falla / notas', 'Estado', 'Ubicación'],
       r.postventa.detalle.map((g) => [g.marca, g.equipo, g.falla, g.estado, g.retorno]),
     );
+  } else {
+    s5.addText('Sin equipos en garantía actualmente.', {
+      x: 0.4, y: 3.0, w: 12.5, h: 0.4,
+      fontSize: 12, italic: true, color: MUTED, fontFace: 'Inter',
+    });
   }
 
-  // ─── SLIDE 6: LOGÍSTICA ───
+  // ─── SLIDE 6: LOGÍSTICA — STOCK POR BODEGA + KITS ARMABLES ───
   const s6 = pptx.addSlide();
-  addSectionHeader(s6, 'Logística', 'Estado de inventario en bodega');
-  // Tabla stock
-  addTable(s6, 1.4,
-    ['Marca', 'Paneles', 'Inversores', 'Baterías', 'Estructuras'],
-    r.logistica.stock.map((s) => [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias), fmtInt(s.estructuras)]),
-    { x: 0.4, w: 6 },
-  );
-  // Tabla alertas
-  addTable(s6, 1.4,
-    ['Componente', 'Nivel'],
-    r.logistica.alertas.map((a) => [a.componente, a.nivel]),
-    { x: 6.9, w: 6 },
-  );
-  // Kits por bodega (reemplaza la gráfica de cobertura)
+  addSectionHeader(s6, 'Logística', 'Stock por bodega + kits armables');
+  const bodegas = r.logistica.stockPorBodega ?? [];
+  if (bodegas.length > 0) {
+    const marcasUnion = Array.from(new Set(bodegas.flatMap((b) => b.stock.map((s) => s.marca)))).sort();
+    const totalW = 12.6;
+    const gap = 0.2;
+    const numB = bodegas.length;
+    const colW = (totalW - gap * (numB - 1)) / numB;
+    bodegas.forEach((b, i) => {
+      const stockMap = new Map(b.stock.map((s) => [s.marca, s] as const));
+      const rows = marcasUnion.map((marca) => {
+        const s = stockMap.get(marca) ?? { marca, paneles: 0, inversores: 0, baterias: 0, estructuras: 0, cobertura: 0 };
+        return [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias)];
+      });
+      addTable(s6, 1.4,
+        [b.warehouseName, 'Pan.', 'Inv.', 'Bat.'],
+        rows,
+        { x: 0.4 + i * (colW + gap), w: colW },
+      );
+    });
+  } else {
+    addTable(s6, 1.4,
+      ['Marca', 'Paneles', 'Inversores', 'Baterías', 'Estructuras'],
+      r.logistica.stock.map((s) => [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias), fmtInt(s.estructuras)]),
+      { x: 0.4, w: 12.6 },
+    );
+  }
   if ((r.logistica.kitsPorBodega ?? []).length > 0) {
-    s6.addText('KITS SOLARES ARMABLES — SIMULACIÓN', {
+    s6.addText('KITS SOLARES ARMABLES POR BODEGA — SIMULACIÓN', {
       x: 0.4, y: 4.4, w: 12.5, h: 0.3,
       fontSize: 10, bold: true, color: MUTED, fontFace: 'Inter',
     });
     addStatRow(s6, 4.8, r.logistica.kitsPorBodega.map((k) => ({
       label: k.warehouseName,
       value: `${k.totalKits} kits`,
-      hint: `T2: ${k.byTipo.T2} · T3: ${k.byTipo.T3} · T4: ${k.byTipo.T4}`,
+      hint: `T2 ${k.byTipo.T2} · T3 ${k.byTipo.T3} · T4 ${k.byTipo.T4} · prio ${Math.round(k.priority.T2 * 100)}/${Math.round(k.priority.T3 * 100)}/${Math.round(k.priority.T4 * 100)}`,
     })));
   }
 

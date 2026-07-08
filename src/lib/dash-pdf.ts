@@ -15,6 +15,14 @@ const fmtInt = (n: number) => n.toLocaleString('es-CO');
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtCOP = (n: number) => `$${fmtInt(n)}M COP`;
 
+/** Mapea la marca del componente al kit final que ve el cliente. */
+function kitLabel(m: string): string {
+  if (m === 'Livoltek') return 'Kit Livoltek + Livoltek';
+  if (m === 'DEYE' || m === 'Deye' || m === 'Deye HV') return 'Kit Deye + Deye';
+  if (m === 'Pylontech') return 'Kit Deye + Pylontech';
+  return m;
+}
+
 /** Dibuja un ícono de sol vectorial (rayos + disco) — logo de Sunny. */
 function drawSunLogo(doc: jsPDF, cx: number, cy: number, radius: number, color: string = ACCENT) {
   doc.setFillColor(color);
@@ -124,12 +132,6 @@ function drawDetalleSlide(
   const pageW = doc.internal.pageSize.getWidth();
   const y = 44;
   const colW = (pageW - 20 * 2 - 8) / 2;
-  const kitLabel = (m: string): string => {
-    if (m === 'Livoltek') return 'Kit Livoltek + Livoltek';
-    if (m === 'DEYE' || m === 'Deye' || m === 'Deye HV') return 'Kit Deye + Deye';
-    if (m === 'Pylontech') return 'Kit Deye + Pylontech';
-    return m;
-  };
   autoTable(doc, {
     startY: y,
     head: [['Kit', 'Casas', 'kWp', 'kWh']],
@@ -225,72 +227,87 @@ export function generateDashPDF(r: DashReport): void {
     theme: 'grid',
     styles: { lineColor: BORDER, lineWidth: 0.1 },
   });
-  drawFooter(doc, '* Indicadores editables: actualice los valores acumulados y la serie mensual según el cierre real de cada mes.');
+  drawFooter(doc, '* Detalle mensual con instalación acumulada y CAPEX ejecutado.');
 
-  // ─── SLIDE 3 (NUEVA): DETALLE GLOBAL POR MARCA, ZONA Y CONSTRUCTOR ───
+  // ─── SLIDE 2b: AVANCE GLOBAL — RENTABILIDAD USD/Wp ───
+  if (r.global.usdWpBySolucion?.length > 0) {
+    doc.addPage();
+    drawHeader(doc, 'Avance global', 'Rentabilidad · USD/Wp por solución');
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(MUTED);
+    doc.text('TRM operativa: 3.901,29 COP/USD', 20, 44);
+    doc.setFont('helvetica', 'normal');
+    y = 52;
+    y = drawStatRow(doc, y, r.global.usdWpBySolucion.map((s) => ({
+      label: s.solucion,
+      value: `$${fmt1(s.usdWpPromedio)} USD/Wp`,
+      hint: `${s.casas} casa${s.casas === 1 ? '' : 's'}`,
+    })));
+    if (r.global.capexVentaAcumM > 0) {
+      y = drawStatRow(doc, y, [
+        { label: 'CAPEX venta acumulado', value: `$${fmtInt(r.global.capexVentaAcumM)}M COP`, hint: `${r.global.casasAcum} casas · ${fmt1(r.global.kwpAcum)} kWp` },
+      ]);
+    }
+    drawFooter(doc, '* Promedio ponderado por kWp. Valores del CSV de cierre (respetando la TRM del momento contable).');
+  }
+
+  // ─── SLIDE 3: DETALLE GLOBAL POR KIT, ZONA Y CONSTRUCTOR ───
   const dg = r.detalleGlobal ?? r.detalle;
-  drawDetalleSlide(doc, 'Avance global', 'Detalle por marca, zona y constructor',
+  drawDetalleSlide(doc, 'Avance global', 'Detalle por kit, zona y constructor',
     dg.marcas, dg.zonas, dg.constructores);
   drawFooter(doc, '* Detalle acumulado: incluye todas las casas ya instaladas desde inicio de operación.');
 
-  // ─── SLIDE 4: PLANEACIÓN (movido antes del avance semanal) ───
+  // ─── SLIDE 4: WEEKLY CONSTRUCCIÓN (unificado — semana + planeación próxima semana) ───
   doc.addPage();
-  drawHeader(doc, 'Planeación', 'Lo asignado para ejecutar la próxima semana');
+  drawHeader(doc, 'Weekly', 'Construcción');
   y = 44;
   y = drawStatRow(doc, y, [
-    { label: 'Casas asignadas',      value: fmtInt(r.planeacion.casasAsignadas), hint: 'para la próxima semana' },
-    { label: 'kWp planificados',     value: `${fmt1(r.planeacion.kwpPlan)} kWp`, hint: 'estimado' },
-    { label: 'kWh batería planif.',  value: `${fmtInt(r.planeacion.kwhPlan)} kWh`, hint: 'estimado' },
-  ]);
-  y = drawStatRow(doc, y, [
-    { label: 'CAPEX estimado',        value: fmtCOP(r.planeacion.capexPlanM),    hint: 'próxima semana' },
-    { label: 'Constructores activos', value: `${r.planeacion.constructoresActivos}`, hint: r.planeacion.constructoresLista },
-    { label: 'Zonas con actividad',   value: `${r.planeacion.zonasActivas}`,     hint: r.planeacion.zonasLista },
-  ]);
-  autoTable(doc, {
-    startY: y,
-    head: [['Zona', 'Constructor', 'Casas asignadas', 'Marca predominante', 'Fecha estimada de inicio']],
-    body: r.planeacion.distribucion.map((p) => [p.zona, p.constructor, fmtInt(p.casas), p.marca, p.fecha]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20, right: 20 },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
-  drawFooter(doc, '* Indicadores editables. Ajuste fechas, zonas y cantidades según la planificación real de la semana.');
-
-  // ─── SLIDE 5: AVANCE SEMANAL ───
-  doc.addPage();
-  drawHeader(doc, 'Avance semanal', 'Resultados de construcción de esta semana');
-  y = 44;
-  y = drawStatRow(doc, y, [
-    { label: 'Casas instaladas', value: fmtInt(r.semana.casasInstaladas), hint: `de ${r.semana.programadas} programadas` },
-    { label: 'En stand by',      value: fmtInt(r.semana.standBy),          hint: 'ver motivos abajo' },
-    { label: 'Por iniciar',      value: fmtInt(r.semana.porIniciar),       hint: 'ya asignadas' },
+    { label: 'Instaladas esta semana', value: fmtInt(r.semana.casasInstaladas), hint: 'ya operativas' },
+    { label: 'En curso',               value: fmtInt(r.semana.porIniciar),      hint: 'alistamiento o instalación' },
+    { label: 'Próxima semana',         value: fmtInt(r.planeacion.casasAsignadas), hint: 'en gestión + planeadas' },
   ]);
   y = drawStatRow(doc, y, [
     { label: 'kWp solar instalados',    value: `${fmt1(r.semana.kwpSemana)} kWp`, hint: 'esta semana' },
     { label: 'kWh batería instalados', value: `${fmtInt(r.semana.kwhSemana)} kWh`, hint: 'esta semana' },
     { label: 'CAPEX ejecutado',        value: fmtCOP(r.semana.capexSemanaM),      hint: 'acumulado semana' },
   ]);
-  autoTable(doc, {
-    startY: y,
-    head: [['Motivo', 'Casas', 'Acción en curso']],
-    body: r.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20, right: 20 },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
-  drawFooter(doc, '* Indicadores editables: actualice los valores directamente desde la vista Dash.');
+  // Distribución próxima semana (planeación)
+  if (r.planeacion.distribucion.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [['Próxima semana — Zona', 'Constructor', 'Casas', 'Kit', 'Fecha']],
+      body: r.planeacion.distribucion.map((p) => [p.zona, p.constructor, fmtInt(p.casas), kitLabel(p.marca), p.fecha]),
+      headStyles: tableHeaderStyles(),
+      bodyStyles: { fontSize: 9, textColor: TEXT },
+      alternateRowStyles: { fillColor: HEAD_BG },
+      margin: { left: 20, right: 20 },
+      theme: 'grid',
+      styles: { lineColor: BORDER, lineWidth: 0.1 },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    y = (doc as any).lastAutoTable.finalY + 6;
+  }
+  // Motivos de stand by (si hay)
+  if (r.semana.motivos.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [['Motivo (stand by)', 'Casas', 'Acción en curso']],
+      body: r.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion]),
+      headStyles: tableHeaderStyles(),
+      bodyStyles: { fontSize: 9, textColor: TEXT },
+      alternateRowStyles: { fillColor: HEAD_BG },
+      margin: { left: 20, right: 20 },
+      theme: 'grid',
+      styles: { lineColor: BORDER, lineWidth: 0.1 },
+    });
+  }
+  drawFooter(doc, '* Semana actual + planeación próxima semana en un solo panel.');
 
-  // ─── SLIDE 6: DETALLE SEMANAL POR MARCA, ZONA Y CONSTRUCTOR ───
-  drawDetalleSlide(doc, 'Avance semanal', 'Detalle por marca, zona y constructor',
+  // ─── SLIDE 5: DETALLE SEMANAL POR KIT, ZONA Y CONSTRUCTOR ───
+  drawDetalleSlide(doc, 'Weekly', 'Detalle por kit, zona y constructor',
     r.detalle.marcas, r.detalle.zonas, r.detalle.constructores);
-  drawFooter(doc, '* Tabla y gráfico nativos: edite los valores en la vista Dash y el reporte se actualiza.');
+  drawFooter(doc, '* Detalle de la ventana seleccionada. Si no hay instalaciones, esta sección queda vacía.');
 
   // ─── SLIDE 7: LEGALIZACIONES ───
   doc.addPage();
@@ -317,82 +334,110 @@ export function generateDashPDF(r: DashReport): void {
   });
   drawFooter(doc, '* Reemplace "Casa 1, 2, 3..." por el identificador real del cliente o dirección.');
 
-  // ─── SLIDE 7: POSTVENTA ───
+  // ─── SLIDE 6: POSTVENTA (desde inventario / in_repair) ───
   doc.addPage();
-  drawHeader(doc, 'Postventa', 'Garantías: equipos y retorno a bodega');
+  drawHeader(doc, 'Postventa', 'Equipos en garantía / RMA (desde inventario)');
   y = 44;
   y = drawStatRow(doc, y, [
-    { label: 'Casos abiertos',           value: fmtInt(r.postventa.abiertos),       hint: 'en garantía esta semana' },
-    { label: 'Equipos en tránsito',      value: fmtInt(r.postventa.enTransito),     hint: 'recolección programada' },
-    { label: 'Resueltos en sitio',       value: fmtInt(r.postventa.resueltosSitio), hint: 'sin retorno a bodega' },
+    { label: 'Casos abiertos',       value: fmtInt(r.postventa.abiertos),       hint: 'items en reparación' },
+    { label: 'En RMA / proveedor',   value: fmtInt(r.postventa.enTransito),     hint: 'items fuera de bodega' },
+    { label: 'Resueltos (30d)',       value: fmtInt(r.postventa.resueltosSitio), hint: 'movimientos repair_end' },
   ]);
-  autoTable(doc, {
-    startY: y,
-    head: [['Marca', 'Equipo', 'Falla reportada', 'Estado', 'Retorno a bodega']],
-    body: r.postventa.detalle.map((g) => [g.marca, g.equipo, g.falla, g.estado, g.retorno]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20, right: 20 },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
-  drawFooter(doc, '* Actualice estado y fechas de retorno a bodega según el seguimiento con cada fabricante.');
-
-  // ─── SLIDE 8: LOGÍSTICA ───
-  doc.addPage();
-  drawHeader(doc, 'Logística', 'Estado de inventario en bodega');
-  y = 44;
-  const logColW = (pageW - 20 * 2 - 8) / 2;
-  autoTable(doc, {
-    startY: y,
-    head: [['Marca', 'Paneles', 'Inversores', 'Baterías', 'Estructuras']],
-    body: r.logistica.stock.map((s) => [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias), fmtInt(s.estructuras)]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20, right: pageW - 20 - logColW },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
-  autoTable(doc, {
-    startY: y,
-    head: [['Componente', 'Nivel']],
-    body: r.logistica.alertas.map((a) => [a.componente, a.nivel]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20 + logColW + 8, right: 20 },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const y3 = (doc as any).lastAutoTable.finalY + 10;
-  // Barras cobertura estimada
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.setTextColor(MUTED);
-  doc.text('COBERTURA ESTIMADA (SEMANAS DE INSTALACIÓN)', 20, y3);
-  const barsY = y3 + 6;
-  const barsAvail = pageW - 40;
-  const barW = Math.min(28, (barsAvail - (r.logistica.stock.length - 1) * 8) / r.logistica.stock.length);
-  const maxCov = Math.max(...r.logistica.stock.map((s) => s.cobertura), 1);
-  const barMaxH = 40;
-  r.logistica.stock.forEach((s, i) => {
-    const x = 20 + i * (barW + 8);
-    const h = (s.cobertura / maxCov) * barMaxH;
-    doc.setFillColor(ACCENT);
-    doc.rect(x, barsY + (barMaxH - h), barW, h, 'F');
-    doc.setFont('helvetica', 'bold');
+  if (r.postventa.detalle.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [['Marca', 'Equipo', 'Falla / notas', 'Estado', 'Ubicación']],
+      body: r.postventa.detalle.map((g) => [g.marca, g.equipo, g.falla, g.estado, g.retorno]),
+      headStyles: tableHeaderStyles(),
+      bodyStyles: { fontSize: 9, textColor: TEXT },
+      alternateRowStyles: { fillColor: HEAD_BG },
+      margin: { left: 20, right: 20 },
+      theme: 'grid',
+      styles: { lineColor: BORDER, lineWidth: 0.1 },
+    });
+  } else {
+    doc.setFont('helvetica', 'italic');
     doc.setFontSize(10);
-    doc.setTextColor(TEXT);
-    doc.text(String(s.cobertura), x + barW / 2, barsY + (barMaxH - h) - 2, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
     doc.setTextColor(MUTED);
-    doc.text(s.marca, x + barW / 2, barsY + barMaxH + 5, { align: 'center' });
-  });
-  drawFooter(doc, '* Actualice el stock semanalmente con el reporte de bodega.');
+    doc.text('Sin equipos en garantía actualmente.', 20, y + 10);
+  }
+  drawFooter(doc, '* Los tickets se gestionan por equipo desde /inventario (status in_repair / rma).');
+
+  // ─── SLIDE 7: LOGÍSTICA — STOCK POR BODEGA + KITS ARMABLES ───
+  doc.addPage();
+  drawHeader(doc, 'Logística', 'Stock por bodega + kits armables');
+  y = 44;
+  // Stock por bodega: 3 tablas lado a lado (o global si no viene por bodega)
+  const bodegas = r.logistica.stockPorBodega ?? [];
+  if (bodegas.length > 0) {
+    // Union de marcas para que las 3 tablas tengan las mismas filas
+    const marcasUnion = Array.from(new Set(bodegas.flatMap((b) => b.stock.map((s) => s.marca)))).sort();
+    const numBodegas = bodegas.length;
+    const bodColW = (pageW - 20 * 2 - 8 * (numBodegas - 1)) / numBodegas;
+    bodegas.forEach((b, i) => {
+      const xLeft = 20 + i * (bodColW + 8);
+      const stockMap = new Map(b.stock.map((s) => [s.marca, s] as const));
+      const rows = marcasUnion.map((marca) => {
+        const s = stockMap.get(marca) ?? { marca, paneles: 0, inversores: 0, baterias: 0, estructuras: 0, cobertura: 0 };
+        return [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias)];
+      });
+      autoTable(doc, {
+        startY: y,
+        head: [[b.warehouseName, 'Pan.', 'Inv.', 'Bat.']],
+        body: rows,
+        headStyles: tableHeaderStyles(),
+        bodyStyles: { fontSize: 8, textColor: TEXT },
+        alternateRowStyles: { fillColor: HEAD_BG },
+        margin: { left: xLeft, right: pageW - xLeft - bodColW },
+        theme: 'grid',
+        styles: { lineColor: BORDER, lineWidth: 0.1 },
+      });
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    y = (doc as any).lastAutoTable.finalY + 8;
+  } else {
+    autoTable(doc, {
+      startY: y,
+      head: [['Marca', 'Paneles', 'Inversores', 'Baterías', 'Estructuras']],
+      body: r.logistica.stock.map((s) => [s.marca, fmtInt(s.paneles), fmtInt(s.inversores), fmtInt(s.baterias), fmtInt(s.estructuras)]),
+      headStyles: tableHeaderStyles(),
+      bodyStyles: { fontSize: 9, textColor: TEXT },
+      alternateRowStyles: { fillColor: HEAD_BG },
+      margin: { left: 20, right: 20 },
+      theme: 'grid',
+      styles: { lineColor: BORDER, lineWidth: 0.1 },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    y = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // Kits armables por bodega — tabla resumen
+  if ((r.logistica.kitsPorBodega ?? []).length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(MUTED);
+    doc.text('KITS SOLARES ARMABLES POR BODEGA — SIMULACIÓN', 20, y);
+    y += 4;
+    autoTable(doc, {
+      startY: y,
+      head: [['Bodega', 'Prioridad', 'Total', 'T2', 'T3', 'T4']],
+      body: r.logistica.kitsPorBodega.map((k) => [
+        k.warehouseName,
+        `T2 ${Math.round(k.priority.T2 * 100)}% · T3 ${Math.round(k.priority.T3 * 100)}% · T4 ${Math.round(k.priority.T4 * 100)}%`,
+        String(k.totalKits),
+        String(k.byTipo.T2),
+        String(k.byTipo.T3),
+        String(k.byTipo.T4),
+      ]),
+      headStyles: tableHeaderStyles(),
+      bodyStyles: { fontSize: 8.5, textColor: TEXT },
+      alternateRowStyles: { fillColor: HEAD_BG },
+      margin: { left: 20, right: 20 },
+      theme: 'grid',
+      styles: { lineColor: BORDER, lineWidth: 0.1 },
+    });
+  }
+  drawFooter(doc, '* Simulación con stock actual respetando las prioridades por ciudad. Los equipos no se reutilizan entre kits.');
 
   // ─── SLIDE 9: GRACIAS ───
   doc.addPage();

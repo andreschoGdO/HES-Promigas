@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BarChart3, Settings, LogOut, Sun, ClipboardCheck, Package, HardHat, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt, Users, LayoutDashboard } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, ClipboardCheck, Package, HardHat, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt, Users, LayoutDashboard, Sliders } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { readVisibility, fetchVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
 import { getRoleFromEmail, type UserRole } from '@/lib/user-role';
@@ -124,6 +124,7 @@ export function Sidebar() {
 
   const navItemsAll = [
     { id: 'dashboard',   label: 'Head End System', path: '/dashboard', icon: BarChart3 },
+    { id: 'gestion-equipos', label: 'Gestión de Equipos', path: '/gestion-equipos', icon: Sliders },
     { id: 'dash',        label: 'Dash Construcción', path: '/dash', icon: LayoutDashboard },
     { id: 'operaciones', label: 'Construcción', path: '/operaciones', icon: HardHat },
     { id: 'visitas',     label: 'Visitas en Campo', path: '/visitas', icon: ClipboardCheck },

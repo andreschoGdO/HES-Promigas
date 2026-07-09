@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { supabase } from '@/lib/supabase';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { classifyDevice } from '@/lib/classify-device';
 
-type Tab = 'cierres' | 'nar' | 'control';
+type Tab = 'cierres' | 'nar';
 type TypeFilter = 'all' | 'meter' | 'inverter' | 'gateway' | 'other';
 
 interface DeviceOption {
@@ -51,35 +51,35 @@ interface ClosureRow {
   } | null;
 }
 
-// Métricas calculadas por casa por día (Cierre Diario)
+// MÃ©tricas calculadas por casa por dÃ­a (Cierre Diario)
 interface CasaDayMetrics {
   casa: string;
   date: string;
-  generacion_wh: number | null;     // ΔCenergyAE inverter (Wh)
-  importacion_wh: number | null;    // ΔCenergyAI red meter (Wh)
-  excedentes_wh: number | null;     // ΔCenergyAE red meter (Wh)
+  generacion_wh: number | null;     // Î”CenergyAE inverter (Wh)
+  importacion_wh: number | null;    // Î”CenergyAI red meter (Wh)
+  excedentes_wh: number | null;     // Î”CenergyAE red meter (Wh)
   demanda_wh: number;               // Gen + Imp - Exc (Wh)
   gen_dem_pct: number | null;       // %
   exc_gen_pct: number | null;       // %
   imp_dem_pct: number | null;       // %
   yield_real: number | null;        // kWh/kWp
-  desempeno_pct: number | null;     // % vs 4.5 kWh/kWp/día (Cali ref)
+  desempeno_pct: number | null;     // % vs 4.5 kWh/kWp/dÃ­a (Cali ref)
   potencia_kw: number | null;       // suma de inverter capacity
   inverterMetrumId: string | null;
   redMeterMetrumId: string | null;
 }
 
-const YIELD_TEORICO_REF = 4.5; // kWh/kWp/día — referencia Cali / Valle del Cauca
+const YIELD_TEORICO_REF = 4.5; // kWh/kWp/dÃ­a â€” referencia Cali / Valle del Cauca
 
 const fmtEnergy = (wh: number | null, unit = 'Wh') => {
-  if (wh === null || wh === undefined) return '—';
+  if (wh === null || wh === undefined) return 'â€”';
   if (Math.abs(wh) >= 1_000_000) return `${(wh / 1_000_000).toFixed(2)} M${unit}`;
   if (Math.abs(wh) >= 1_000) return `${(wh / 1_000).toFixed(2)} k${unit}`;
   return `${wh.toFixed(2)} ${unit}`;
 };
 
-const fmtPct = (v: number | null) => v === null || !Number.isFinite(v) ? '—' : `${v.toFixed(1)}%`;
-const fmtNum = (v: number | null, decimals = 2) => v === null || !Number.isFinite(v) ? '—' : v.toFixed(decimals);
+const fmtPct = (v: number | null) => v === null || !Number.isFinite(v) ? 'â€”' : `${v.toFixed(1)}%`;
+const fmtNum = (v: number | null, decimals = 2) => v === null || !Number.isFinite(v) ? 'â€”' : v.toFixed(decimals);
 
 // Convierte filas a CSV y dispara descarga en el browser
 const downloadCSV = (filename: string, headers: string[], rows: (string | number | null | undefined)[][]) => {
@@ -89,7 +89,7 @@ const downloadCSV = (filename: string, headers: string[], rows: (string | number
     return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))];
-  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['ï»¿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -115,8 +115,8 @@ const computeCasaMetrics = (closures: ClosureRow[]): CasaDayMetrics[] => {
   type Agg = {
     casa: string;
     date: string;
-    inv_eae: number | null;   // generación
-    red_eai: number | null;   // importación
+    inv_eae: number | null;   // generaciÃ³n
+    red_eai: number | null;   // importaciÃ³n
     red_eae: number | null;   // excedentes
     potencia_kw: number | null;
     inverterMetrumId: string | null;
@@ -157,7 +157,7 @@ const computeCasaMetrics = (closures: ClosureRow[]): CasaDayMetrics[] => {
     }
   }
 
-  // 3. Finalizar cálculos derivados
+  // 3. Finalizar cÃ¡lculos derivados
   const out: CasaDayMetrics[] = [];
   for (const a of byKey.values()) {
     const gen = a.inv_eae;
@@ -197,31 +197,31 @@ const weekAgo = () => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 const today = () => new Date();
 const dateStr = (d: Date) => d.toISOString().slice(0, 10);
 
-// Etiqueta corta para los chips del selector. Identifica qué tipo de equipo
-// es (Medidor RED / Medidor SOLAR / Inversor marca / Pulsar) además del nombre,
+// Etiqueta corta para los chips del selector. Identifica quÃ© tipo de equipo
+// es (Medidor RED / Medidor SOLAR / Inversor marca / Pulsar) ademÃ¡s del nombre,
 // para que cuando una casa tiene varios equipos del mismo tipo nominal el
-// usuario distinga cuál está eligiendo.
-// ─── Keys calculadas (virtuales) ───────────────────────────────────────────
+// usuario distinga cuÃ¡l estÃ¡ eligiendo.
+// â”€â”€â”€ Keys calculadas (virtuales) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Estas keys NO existen en Metrum; se computan en el frontend a partir de las
-// keys reales que sí trae el inversor. Aparecen en la lista de "Keys disponibles"
-// solo si TODAS las dependencias existen para ese device específico.
-// Las descripciones (qué son, cómo se calculan, limitaciones) viven en
-// `variables-dict.ts` — aquí solo definimos las dependencias y la fórmula.
+// keys reales que sÃ­ trae el inversor. Aparecen en la lista de "Keys disponibles"
+// solo si TODAS las dependencias existen para ese device especÃ­fico.
+// Las descripciones (quÃ© son, cÃ³mo se calculan, limitaciones) viven en
+// `variables-dict.ts` â€” aquÃ­ solo definimos las dependencias y la fÃ³rmula.
 interface ComputeContext {
   ts: number;
   hourLocal: number;   // 0-23, hora local Colombia (UTC-5)
-  isDaylight: boolean; // 06:00–18:00 COT
+  isDaylight: boolean; // 06:00â€“18:00 COT
   precomputed?: unknown;
 }
 interface DerivedKeyMeta {
-  // Keys que deben estar en el catálogo del device para que la derivada aparezca.
+  // Keys que deben estar en el catÃ¡logo del device para que la derivada aparezca.
   deps: string[];
   // Subset de `deps` que deben estar presentes en CADA row para computar el valor.
   // Default: igual que `deps`. Para derivadas que solo usan precompute (ej. envelope)
   // y no necesitan dep en la row actual, pasar [].
   perRowDeps?: string[];
   // Paso opcional que recibe TODA la serie del device antes del loop por row.
-  // Útil para agregados (P95 por hora-del-día, baselines, etc.).
+  // Ãštil para agregados (P95 por hora-del-dÃ­a, baselines, etc.).
   precompute?: (rows: Array<{ ts: number; vals: Record<string, number | null> }>) => unknown;
   compute: (vals: Record<string, number>, ctx?: ComputeContext) => number | null;
   appliesToInverter: boolean;
@@ -230,7 +230,7 @@ interface DerivedKeyMeta {
   brand?: 'Livoltek' | 'DEYE';
 }
 
-// Helper: P95 por hora-del-día (COT) sobre los samples disponibles del rango visible.
+// Helper: P95 por hora-del-dÃ­a (COT) sobre los samples disponibles del rango visible.
 // Devuelve array indexado por hora local (0-23). Si una hora no tiene samples, null.
 function envelopeByHour(
   rows: Array<{ ts: number; vals: Record<string, number | null> }>,
@@ -253,19 +253,19 @@ function envelopeByHour(
 }
 
 const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
-  // Envolvente DC ajustada por irradiancia: P95(DC, hora) × GHI_actual / P95(GHI, hora).
-  // El factor "GHI_actual / P95(GHI)" representa qué tan despejado está el cielo HOY
-  // a esa hora vs los días más limpios históricos. Multiplicando el P95 de DC por ese
+  // Envolvente DC ajustada por irradiancia: P95(DC, hora) Ã— GHI_actual / P95(GHI, hora).
+  // El factor "GHI_actual / P95(GHI)" representa quÃ© tan despejado estÃ¡ el cielo HOY
+  // a esa hora vs los dÃ­as mÃ¡s limpios histÃ³ricos. Multiplicando el P95 de DC por ese
   // ratio, el envelope se ajusta a la nubosidad real y deja solo gap por sombra,
-  // suciedad, falla o curtailment. Si no hay GHI (no city, API caído), cae al P95 puro.
+  // suciedad, falla o curtailment. Si no hay GHI (no city, API caÃ­do), cae al P95 puro.
   envelope_dc_LIV: {
     deps: ['powerAEgdc_LV'],
     perRowDeps: [],
     precompute: (rows) => {
       // Calcula 3 cosas:
       //   p95dc[h]  = P95 de powerAEgdc_LV por hora
-      //   p95ghi[h] = P95 de ghi_w_m2 por hora (si está disponible en vals)
-      //   ghiByTs   = mapa ts→ghi del rango visible (para lookup en compute)
+      //   p95ghi[h] = P95 de ghi_w_m2 por hora (si estÃ¡ disponible en vals)
+      //   ghiByTs   = mapa tsâ†’ghi del rango visible (para lookup en compute)
       const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
       const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
       const ghiByTs = new Map<number, number>();
@@ -298,7 +298,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       if (!pc) return null;
       const baseDc = pc.p95dc[ctx.hourLocal];
       if (baseDc === null || baseDc === undefined) return null;
-      // Si tenemos GHI real para este ts + P95(GHI) válido → ajustar
+      // Si tenemos GHI real para este ts + P95(GHI) vÃ¡lido â†’ ajustar
       const ghiNow = pc.ghiByTs.get(ctx.ts);
       const ghiP95 = pc.p95ghi[ctx.hourLocal];
       if (ghiNow !== undefined && ghiP95 !== null && ghiP95 !== undefined && ghiP95 > 0) {
@@ -310,9 +310,9 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     appliesToInverter: true,
     brand: 'Livoltek',
   },
-  // Curtailment DC instantáneo: max(0, envelope_ajustado − real) cuando hay saturación
-  // (batería ≥95% AND no exportando AND de día). En momentos normales = 0.
-  // Usa el MISMO envelope ajustado por irradiancia para mayor precisión.
+  // Curtailment DC instantÃ¡neo: max(0, envelope_ajustado âˆ’ real) cuando hay saturaciÃ³n
+  // (baterÃ­a â‰¥95% AND no exportando AND de dÃ­a). En momentos normales = 0.
+  // Usa el MISMO envelope ajustado por irradiancia para mayor precisiÃ³n.
   curtailment_dc_LIV: {
     deps: ['powerAEgdc_LV', 'BattSOC', 'ExportGrid_LV'],
     precompute: (rows) => {
@@ -356,11 +356,11 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     appliesToInverter: true,
     brand: 'Livoltek',
   },
-  // ───────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Curtailment ACUMULADO en kWh: integra trapezoidal el curtailment_W
   // de cada muestra. Curva monotonamente creciente en el rango. Misma
-  // lógica que el cron NAR (src/lib/curtailment.ts).
-  // ───────────────────────────────────────────────────────────────────
+  // lÃ³gica que el cron NAR (src/lib/curtailment.ts).
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   curtailment_kwh_LIV: {
     deps: ['powerAEgdc_LV', 'BattSOC', 'ExportGrid_LV'],
     perRowDeps: [],
@@ -417,7 +417,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
                 const nextTs = sorted[i + 1]?.ts ?? r.ts;
                 const dtMs = Math.min(nextTs - r.ts, 15 * 60 * 1000);
                 if (dtMs > 0) {
-                  // W × s = J → /3.6M = kWh
+                  // W Ã— s = J â†’ /3.6M = kWh
                   cumKwh += (curtW * (dtMs / 1000)) / 3_600_000;
                 }
               }
@@ -446,7 +446,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
       for (const r of rows) {
         const apg = r.vals.powerAPg;
         const bp = r.vals.BattPower;
-        // DEYE: Pdc = AC − BattPower (convención opuesta a Livoltek)
+        // DEYE: Pdc = AC âˆ’ BattPower (convenciÃ³n opuesta a Livoltek)
         const dcEst = (apg !== null && apg !== undefined && Number.isFinite(apg) && bp !== null && bp !== undefined && Number.isFinite(bp))
           ? Number(apg) - Number(bp)
           : null;
@@ -517,13 +517,13 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     appliesToInverter: true,
     brand: 'DEYE',
   },
-  // ───────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Variables SEPARADAS por marca (Livoltek vs DEYE)
-  // Necesarias porque la convención de signo de BattPower puede diferir
-  // entre marcas. Estas usan el signo `+` (convención estándar internacional:
+  // Necesarias porque la convenciÃ³n de signo de BattPower puede diferir
+  // entre marcas. Estas usan el signo `+` (convenciÃ³n estÃ¡ndar internacional:
   // BattPower > 0 = carga, BattPower < 0 = descarga). En Livoltek se puede
-  // comparar Pdc_LIV vs powerAEgdc_LV para verificar empíricamente.
-  // ───────────────────────────────────────────────────────────────────
+  // comparar Pdc_LIV vs powerAEgdc_LV para verificar empÃ­ricamente.
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Pdc_LIV: {
     deps: ['powerAPg', 'BattPower'],
     compute: (v) => (v.powerAPg ?? 0) + (v.BattPower ?? 0),
@@ -532,7 +532,7 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
   },
   Pdc_DEY: {
     deps: ['powerAPg', 'BattPower'],
-    // DEYE usa convención OPUESTA a Livoltek (verificado en Casa 74): + descarga, − carga.
+    // DEYE usa convenciÃ³n OPUESTA a Livoltek (verificado en Casa 74): + descarga, âˆ’ carga.
     compute: (v) => (v.powerAPg ?? 0) - (v.BattPower ?? 0),
     appliesToInverter: true,
     brand: 'DEYE',
@@ -584,8 +584,8 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     appliesToInverter: true,
     brand: 'Livoltek',
   },
-  // Envolvente DC para DEYE (única opción, no hay powerAEgdc_LV).
-  // DEYE convención: + descarga, − carga → Pdc = AC − BattPower.
+  // Envolvente DC para DEYE (Ãºnica opciÃ³n, no hay powerAEgdc_LV).
+  // DEYE convenciÃ³n: + descarga, âˆ’ carga â†’ Pdc = AC âˆ’ BattPower.
   envelope_dc_DEY: {
     deps: ['powerAPg', 'BattPower'],
     perRowDeps: [],
@@ -633,11 +633,11 @@ const DERIVED_KEYS: Record<string, DerivedKeyMeta> = {
     brand: 'DEYE',
   },
   // Curtailment para DEYE (DEYE no tiene curtailment_dc_LIV porque no expone
-  // powerAEgdc_LV; usa Pdc_DEY como aproximación del DC real)
+  // powerAEgdc_LV; usa Pdc_DEY como aproximaciÃ³n del DC real)
   curtailment_dc_DEY: {
     deps: ['powerAPg', 'BattPower', 'BattSOC', 'ExportGrid_DY'],
     precompute: (rows) => {
-      // Mismo bucle que envelope_dc_DEY (DEYE: Pdc = AC − BattPower)
+      // Mismo bucle que envelope_dc_DEY (DEYE: Pdc = AC âˆ’ BattPower)
       const byHourDc: number[][] = Array.from({ length: 24 }, () => []);
       const byHourGhi: number[][] = Array.from({ length: 24 }, () => []);
       const ghiByTs = new Map<number, number>();
@@ -713,7 +713,7 @@ const deviceLabel = (d: DeviceOption) => {
   else if (t === 'pulsar' || t === 'gateway') tag = 'Pulsar';
   const parts = tag ? [tag, d.name] : [d.name];
   if (d.client) parts.push(`(${d.client})`);
-  return parts.join(' · ');
+  return parts.join(' Â· ');
 };
 
 const distinct = <T,>(arr: T[]): T[] => Array.from(new Set(arr));
@@ -723,7 +723,7 @@ const locationKey = (d: { location: string | null; city: string | null }) =>
 
 const locationLabel = (d: { location: string | null; city: string | null }): string => {
   const parts = [d.location, d.city].filter(Boolean) as string[];
-  return parts.length > 0 ? parts.join(' — ') : '';
+  return parts.length > 0 ? parts.join(' â€” ') : '';
 };
 
 const filterByType = (devices: DeviceOption[], typeFilter: TypeFilter): DeviceOption[] => {
@@ -736,7 +736,7 @@ interface IntervalPreset { label: string; ms: number | null; }
 const PRESETS: IntervalPreset[] = [
   { label: '15 min', ms: 15 * 60 * 1000 },
   { label: '1 hora', ms: 60 * 60 * 1000 },
-  { label: '1 día', ms: 24 * 60 * 60 * 1000 },
+  { label: '1 dÃ­a', ms: 24 * 60 * 60 * 1000 },
 ];
 const COLORS = ['#07c5a8', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#10b981', '#ec4899', '#0ea5e9'];
 
@@ -764,9 +764,9 @@ function SliceDonut({ slices, total }: { slices: Slice[]; total: number }) {
   );
 }
 
-/** Visualizador del diccionario de variables (columna ↔ key Metrum + descripción) */
-// Clasificación de variables para filtros del diccionario.
-// equipo: en qué equipo "vive" la variable; marca: específica de una marca o agnóstica.
+/** Visualizador del diccionario de variables (columna â†” key Metrum + descripciÃ³n) */
+// ClasificaciÃ³n de variables para filtros del diccionario.
+// equipo: en quÃ© equipo "vive" la variable; marca: especÃ­fica de una marca o agnÃ³stica.
 type DictEquipo = 'medidor' | 'inversor' | 'bateria' | 'casa' | 'atributo';
 type DictMarca = 'Livoltek' | 'DEYE' | 'ambas';
 
@@ -776,7 +776,7 @@ const _BATTERY_PREFIX = ['Batt'];
 const _CASA_KEYS = new Set(['generacion_wh', 'importacion_wh', 'excedentes_wh', 'demanda_wh', 'gen_dem_pct', 'exc_gen_pct', 'imp_dem_pct', 'yield_real', 'desempeno_pct', 'imax_a', 'potencia_kw']);
 const _ATTR_KEYS = new Set(['spcus', 'gateway', 'mettype', 'active', 'zone', 'city', 'dept', 'latDev', 'lonDev', 'invbrand', 'invmodel', 'invcap', 'invarray', 'invtype']);
 
-// Keys compartidas entre medidor e inversor (mismo nombre en Metrum, distinto device físico)
+// Keys compartidas entre medidor e inversor (mismo nombre en Metrum, distinto device fÃ­sico)
 const _SHARED_METER_INVERTER = new Set(['currentA', 'currentB', 'currentC', 'CenergyAE', 'CenergyAI', 'CenergyRI', 'CenergyRE', 'frequency']);
 
 function classifyVariable(v: VariableMeta): { equipos: DictEquipo[]; marca: DictMarca } {
@@ -786,7 +786,7 @@ function classifyVariable(v: VariableMeta): { equipos: DictEquipo[]; marca: Dict
   if (k.endsWith('_LV')) marca = 'Livoltek';
   else if (k.endsWith('_DY')) marca = 'DEYE';
 
-  // Equipo (puede ser múltiple para keys compartidas)
+  // Equipo (puede ser mÃºltiple para keys compartidas)
   if (_BATTERY_KEYS.has(k) || _BATTERY_PREFIX.some((p) => k.startsWith(p))) return { equipos: ['bateria'], marca };
   if (_SHARED_METER_INVERTER.has(k)) return { equipos: ['medidor', 'inversor'], marca };
   if (_METER_KEYS.has(k)) return { equipos: ['medidor'], marca };
@@ -799,14 +799,14 @@ function classifyVariable(v: VariableMeta): { equipos: DictEquipo[]; marca: Dict
 const EQUIPO_META: Record<DictEquipo, { label: string; color: string }> = {
   medidor:   { label: 'Medidor',   color: '#3b82f6' },
   inversor:  { label: 'Inversor',  color: '#8b5cf6' },
-  bateria:   { label: 'Batería',   color: '#10b981' },
+  bateria:   { label: 'BaterÃ­a',   color: '#10b981' },
   casa:      { label: 'Casa (agregado)', color: '#f59e0b' },
   atributo:  { label: 'Atributo',  color: '#64748b' },
 };
 const MARCA_META: Record<DictMarca, { label: string; color: string }> = {
   Livoltek: { label: 'Livoltek', color: '#0ea5e9' },
   DEYE:     { label: 'DEYE',     color: '#ec4899' },
-  ambas:    { label: 'Genérica', color: '#94a3b8' },
+  ambas:    { label: 'GenÃ©rica', color: '#94a3b8' },
 };
 
 function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }: { keys?: string[]; title?: string }) {
@@ -817,7 +817,7 @@ function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 10;
 
-  // Anotar todas las variables con su clasificación
+  // Anotar todas las variables con su clasificaciÃ³n
   const annotated = useMemo(() => VARIABLES.map((v) => ({ ...v, ...classifyVariable(v) })), []);
 
   // Aplicar filtros
@@ -885,7 +885,7 @@ function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }
               <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>Buscar</div>
               <input
                 type="text"
-                placeholder="key, label o descripción…"
+                placeholder="key, label o descripciÃ³nâ€¦"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={{ fontSize: '0.78rem', padding: '4px 8px' }}
@@ -893,7 +893,7 @@ function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }
             </div>
           </div>
 
-          {/* Tabla con paginación */}
+          {/* Tabla con paginaciÃ³n */}
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', fontSize: '0.78rem' }}>
               <thead style={{ background: 'var(--bg-elevated)' }}>
@@ -903,8 +903,8 @@ function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }
                   <th style={{ padding: '8px 14px' }}>Columna / UI</th>
                   <th style={{ padding: '8px 14px' }}>Key Metrum</th>
                   <th style={{ padding: '8px 14px' }}>Unidad</th>
-                  <th style={{ padding: '8px 14px' }}>Categoría</th>
-                  <th style={{ padding: '8px 14px' }}>Descripción</th>
+                  <th style={{ padding: '8px 14px' }}>CategorÃ­a</th>
+                  <th style={{ padding: '8px 14px' }}>DescripciÃ³n</th>
                 </tr>
               </thead>
               <tbody>
@@ -928,7 +928,7 @@ function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }
                     </td>
                     <td style={{ padding: '6px 14px', fontWeight: 600 }}>{v.label}</td>
                     <td style={{ padding: '6px 14px', fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem', color: 'var(--accent)' }}>{v.key}</td>
-                    <td style={{ padding: '6px 14px', color: 'var(--text-secondary)' }}>{v.unit || '—'}</td>
+                    <td style={{ padding: '6px 14px', color: 'var(--text-secondary)' }}>{v.unit || 'â€”'}</td>
                     <td style={{ padding: '6px 14px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{v.category}</td>
                     <td style={{ padding: '6px 14px', color: 'var(--text-secondary)', fontSize: '0.74rem', maxWidth: 480, whiteSpace: 'pre-wrap' }}>{v.description}</td>
                   </tr>
@@ -949,17 +949,17 @@ function VariablesDictionary({ keys: _keys, title = 'Diccionario de variables' }
                   disabled={currentPage === 0}
                   className="chip"
                   style={{ fontSize: '0.74rem', padding: '4px 10px', opacity: currentPage === 0 ? 0.4 : 1 }}>
-                  ← Anterior
+                  â† Anterior
                 </button>
                 <span style={{ alignSelf: 'center', fontSize: '0.74rem', color: 'var(--text-secondary)', padding: '0 6px' }}>
-                  Página {currentPage + 1} / {totalPages}
+                  PÃ¡gina {currentPage + 1} / {totalPages}
                 </span>
                 <button
                   onClick={() => setPage(Math.min(totalPages - 1, currentPage + 1))}
                   disabled={currentPage >= totalPages - 1}
                   className="chip"
                   style={{ fontSize: '0.74rem', padding: '4px 10px', opacity: currentPage >= totalPages - 1 ? 0.4 : 1 }}>
-                  Siguiente →
+                  Siguiente â†’
                 </button>
               </div>
             </div>
@@ -1001,7 +1001,7 @@ function BreakdownCard({ title, slices }: { title: string; slices: Slice[] }) {
 const inverterBrand = (d: { type?: string | null; name?: string | null; marca?: string | null; modelo?: string | null }): string => {
   if (d.marca && d.marca.trim()) {
     const m = d.marca.trim();
-    // Normalizar a forma capitalizada estándar
+    // Normalizar a forma capitalizada estÃ¡ndar
     if (/deye/i.test(m)) return 'DEYE';
     if (/livoltek/i.test(m)) return 'Livoltek';
     if (/huawei/i.test(m)) return 'Huawei';
@@ -1070,7 +1070,7 @@ export default function DashboardPage() {
     return total > 0 ? [{ label: 'Inversores', value: total, color: '#07c5a8' }] : [];
   }, [devices]);
 
-  // Módems: En Línea / Sin Conexión via is_active
+  // MÃ³dems: En LÃ­nea / Sin ConexiÃ³n via is_active
   const gatewaySlices = useMemo<Slice[]>(() => {
     let online = 0, offline = 0;
     for (const d of devices) {
@@ -1079,8 +1079,8 @@ export default function DashboardPage() {
       else online++;
     }
     const out: Slice[] = [];
-    if (online > 0)  out.push({ label: 'En Línea',     value: online,  color: ONLINE_COLOR });
-    if (offline > 0) out.push({ label: 'Sin Conexión', value: offline, color: OFFLINE_COLOR });
+    if (online > 0)  out.push({ label: 'En LÃ­nea',     value: online,  color: ONLINE_COLOR });
+    if (offline > 0) out.push({ label: 'Sin ConexiÃ³n', value: offline, color: OFFLINE_COLOR });
     return out;
   }, [devices]);
 
@@ -1091,14 +1091,13 @@ export default function DashboardPage() {
 
   const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof BarChart3; description: string }> = {
     cierres:  { label: 'Vista Granular',         color: '#07c5a8', Icon: Activity,       description: 'Series de tiempo de Metrum por dispositivo. Multi-select de casas, zoom interactivo y tabla diaria/puntos.' },
-    nar:      { label: 'NAR',                    color: '#ef4444', Icon: Bell,            description: 'Notificaciones, Alertas y Recomendaciones de la flota. Incluye análisis de Reactiva CREG.' },
-    control:  { label: 'Control Manual Inversor', color: '#8b5cf6', Icon: Play,           description: 'Envío de comandos al inversor (cos φ, Q, P_max, modo) — stub hasta credenciales OEM.' },
+    nar:      { label: 'NAR',                    color: '#ef4444', Icon: Bell,            description: 'Notificaciones, Alertas y Recomendaciones de la flota. Incluye anÃ¡lisis de Reactiva CREG.' },
   };
   const meta = TAB_META[tab];
 
   const totalDevices = devices.length;
   const gatewayTotal = gatewaySlices.reduce((s, x) => s + x.value, 0);
-  const gatewayOnline = gatewaySlices.find((s) => s.label === 'En Línea')?.value ?? 0;
+  const gatewayOnline = gatewaySlices.find((s) => s.label === 'En LÃ­nea')?.value ?? 0;
 
   return (
     <>
@@ -1109,14 +1108,14 @@ export default function DashboardPage() {
           <h1 style={{ margin: 0 }}>Dashboard</h1>
         </div>
         <p style={{ color: 'var(--text-secondary)', marginTop: 4, fontSize: '0.88rem' }}>
-          Operación diaria del portafolio de 28 instalaciones solares. {totalDevices} dispositivos sincronizados desde Metrum
-          {gatewayTotal > 0 && <> · <strong style={{ color: '#10b981' }}>{gatewayOnline}/{gatewayTotal}</strong> módems en línea</>}.
+          OperaciÃ³n diaria del portafolio de 28 instalaciones solares. {totalDevices} dispositivos sincronizados desde Metrum
+          {gatewayTotal > 0 && <> Â· <strong style={{ color: '#10b981' }}>{gatewayOnline}/{gatewayTotal}</strong> mÃ³dems en lÃ­nea</>}.
         </p>
       </div>
 
-      {/* Estado de flota — 3 cards en grid coherente */}
+      {/* Estado de flota â€” 3 cards en grid coherente */}
       <div className="fleet-grid" style={{ marginBottom: 20 }}>
-        <BreakdownCard title="Módems" slices={gatewaySlices} />
+        <BreakdownCard title="MÃ³dems" slices={gatewaySlices} />
         <BreakdownCard title="Medidores" slices={meterSlices} />
         <BreakdownCard title="Inversores" slices={inverterSlices} />
         <style jsx>{`
@@ -1125,7 +1124,7 @@ export default function DashboardPage() {
         `}</style>
       </div>
 
-      {/* TABS — primary navigation con color por intención */}
+      {/* TABS â€” primary navigation con color por intenciÃ³n */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
         {(Object.keys(TAB_META) as Tab[]).map((k) => {
           const m = TAB_META[k];
@@ -1151,7 +1150,6 @@ export default function DashboardPage() {
 
       {tab === 'cierres' && <CierresGranularTab devices={devices} />}
       {tab === 'nar' && <NarTab />}
-      {tab === 'control' && <ControlManualTab devices={devices} />}
     </>
   );
 }
@@ -1176,11 +1174,11 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const [casaMetricsPrecomputed, setCasaMetricsPrecomputed] = useState<CasaDayMetrics[] | null>(null);
   const [closureLoading, setClosureLoading] = useState(true);
   const [closureError, setClosureError] = useState<string | null>(null);
-  // Corriente máxima por casa|date: undefined=no cargada, 'loading', number=A, null=sin datos
+  // Corriente mÃ¡xima por casa|date: undefined=no cargada, 'loading', number=A, null=sin datos
   const [maxCurrents, setMaxCurrents] = useState<Record<string, number | null | 'loading'>>({});
 
   // --- Estado Granular ---
-  // Keys por device — cada equipo expone sus propias keys (un meter rojo tiene
+  // Keys por device â€” cada equipo expone sus propias keys (un meter rojo tiene
   // voltageA/currentA/powerAI; un inversor tiene CenergyAE/SOC/etc.)
   const [keysByDevice, setKeysByDevice] = useState<Record<string, string[]>>({});
   const [selectedKeysByDevice, setSelectedKeysByDevice] = useState<Record<string, Set<string>>>({});
@@ -1188,10 +1186,10 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const [keysError, setKeysError] = useState<string | null>(null);
   const [intervalLabel, setIntervalLabel] = useState<string>('1 hora');
   const [agg, setAgg] = useState<Agg>('AVG');
-  // Multi-device: el usuario puede graficar varios devices a la vez en la sección granular
+  // Multi-device: el usuario puede graficar varios devices a la vez en la secciÃ³n granular
   const [granularDeviceIds, setGranularDeviceIds] = useState<Set<string>>(new Set());
 
-  // ── Vistas guardadas (compartidas entre usuarios) ──────────────────────
+  // â”€â”€ Vistas guardadas (compartidas entre usuarios) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   interface GranularViewConfig {
     devices: string[];
     keysByDevice: Record<string, string[]>;
@@ -1230,7 +1228,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ views: next }),
       });
-    } catch { /* fire-and-forget; el estado local ya está actualizado */ }
+    } catch { /* fire-and-forget; el estado local ya estÃ¡ actualizado */ }
   };
   // Para diccionario y stats agregados de keys disponibles (union de todos los devices seleccionados)
   const allKeys = useMemo<string[]>(() => {
@@ -1238,19 +1236,19 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     for (const ks of Object.values(keysByDevice)) for (const k of ks) s.add(k);
     return Array.from(s).sort();
   }, [keysByDevice]);
-  // Helper combinado: ¿hay alguna key seleccionada en cualquier device?
+  // Helper combinado: Â¿hay alguna key seleccionada en cualquier device?
   const totalSelectedKeysCount = useMemo(
     () => Object.values(selectedKeysByDevice).reduce((sum, s) => sum + s.size, 0),
     [selectedKeysByDevice],
   );
-  // granData ahora se indexa por deviceId → key → puntos
+  // granData ahora se indexa por deviceId â†’ key â†’ puntos
   const [granData, setGranData] = useState<Record<string, Record<string, { ts: number; value: string | number }[]>>>({});
-  // Irradiancia solar por ciudad — alimentada por /api/solar/irradiance (Open-Meteo).
-  // Key: ciudad normalizada → Map<dateHourKey, ghi_w_m2>
+  // Irradiancia solar por ciudad â€” alimentada por /api/solar/irradiance (Open-Meteo).
+  // Key: ciudad normalizada â†’ Map<dateHourKey, ghi_w_m2>
   // dateHourKey = `YYYY-MM-DD|HH` en hora local Colombia (UTC-5).
   const [cityGhi, setCityGhi] = useState<Map<string, Map<string, number>>>(new Map());
-  // Daily curtailment kWh de NAR por casa — alimenta curtailment_kwh_LIV/DEY en granular.
-  // Key: nombre de casa → Map<YYYY-MM-DD, kWh_acumulado_hasta_ese_día>
+  // Daily curtailment kWh de NAR por casa â€” alimenta curtailment_kwh_LIV/DEY en granular.
+  // Key: nombre de casa â†’ Map<YYYY-MM-DD, kWh_acumulado_hasta_ese_dÃ­a>
   const [casaCurtailmentCumByDay, setCasaCurtailmentCumByDay] = useState<Map<string, Map<string, number>>>(new Map());
   const [granLoading, setGranLoading] = useState(false);
   const [granError, setGranError] = useState<string | null>(null);
@@ -1286,7 +1284,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   }, [filteredDevices, selectedDevice]);
 
   // --- Fetch Cierre ---
-  // 1° intento: leer daily_casa_metrics (pre-computada por /api/cron/sync, incluye imax)
+  // 1Â° intento: leer daily_casa_metrics (pre-computada por /api/cron/sync, incluye imax)
   // Fallback: calcular en vivo desde daily_energy_closures
   const fetchClosures = async () => {
     setClosureLoading(true);
@@ -1365,14 +1363,14 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     }
   };
 
-  // Métricas calculadas por casa+día (usa pre-computada si está disponible, sino calcula en vivo)
+  // MÃ©tricas calculadas por casa+dÃ­a (usa pre-computada si estÃ¡ disponible, sino calcula en vivo)
   const casaMetrics = useMemo<CasaDayMetrics[]>(() => {
     if (casaMetricsPrecomputed) return casaMetricsPrecomputed;
     const all = computeCasaMetrics(closureRows);
     return all.filter((m) => (!startDate || m.date >= startDate) && (!endDate || m.date <= endDate));
   }, [casaMetricsPrecomputed, closureRows, startDate, endDate]);
 
-  // Fetch corriente máxima on-demand para una fila casa+día (max de inversor y red meter)
+  // Fetch corriente mÃ¡xima on-demand para una fila casa+dÃ­a (max de inversor y red meter)
   const fetchMaxCurrent = async (m: CasaDayMetrics) => {
     const key = `${m.casa}|${m.date}`;
     if (maxCurrents[key] === 'loading') return;
@@ -1416,8 +1414,8 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   };
 
   // --- Fetch Granular (multi-device) ---
-  // Cuando el usuario cambia selectedDevice (en el dropdown), lo agregamos automáticamente
-  // a granularDeviceIds para que la primera selección no requiera doble click.
+  // Cuando el usuario cambia selectedDevice (en el dropdown), lo agregamos automÃ¡ticamente
+  // a granularDeviceIds para que la primera selecciÃ³n no requiera doble click.
   useEffect(() => {
     if (selectedDevice && !granularDeviceIds.has(selectedDevice)) {
       setGranularDeviceIds((prev) => new Set(prev).add(selectedDevice));
@@ -1434,13 +1432,13 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       const startTs = new Date(startDate + 'T00:00:00').getTime();
       const endTs = new Date(endDate + 'T23:59:59').getTime();
       if (!Number.isFinite(startTs) || !Number.isFinite(endTs) || startTs >= endTs) {
-        throw new Error('Rango inválido');
+        throw new Error('Rango invÃ¡lido');
       }
       let preset = PRESETS.find((p) => p.label === intervalLabel) ?? PRESETS[1] /* 1 hora fallback */;
 
       // Metrum/ThingsBoard rechaza con 400 si (rango / interval) excede ~700 buckets.
       // Auto-ajustar: si el intervalo elegido excede el cap, promovemos al siguiente
-      // (15min → 1h → 1d) y avisamos al usuario.
+      // (15min â†’ 1h â†’ 1d) y avisamos al usuario.
       const METRUM_BUCKET_CAP = 600; // margen de seguridad bajo los 700 reales
       let promoted = false;
       while (preset.ms !== null && (endTs - startTs) / preset.ms > METRUM_BUCKET_CAP) {
@@ -1450,7 +1448,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         promoted = true;
       }
       if (promoted) {
-        setGranError(`Rango muy largo para ${intervalLabel} (Metrum solo acepta ~${METRUM_BUCKET_CAP} buckets por consulta). Se cambió automáticamente a ${preset.label}. Para ver ${intervalLabel} reduce el rango de fechas.`);
+        setGranError(`Rango muy largo para ${intervalLabel} (Metrum solo acepta ~${METRUM_BUCKET_CAP} buckets por consulta). Se cambiÃ³ automÃ¡ticamente a ${preset.label}. Para ver ${intervalLabel} reduce el rango de fechas.`);
         setIntervalLabel(preset.label);
       }
 
@@ -1463,7 +1461,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         const devKeys = selectedKeysByDevice[devId];
         if (!devKeys || devKeys.size === 0) return; // este device no tiene keys seleccionadas, skip
         // Expandir keys derivadas a sus dependencias antes de pedir a Metrum
-        // (las keys virtuales como Ppv_estimado se calculan después en chartData).
+        // (las keys virtuales como Ppv_estimado se calculan despuÃ©s en chartData).
         const toFetch = new Set<string>();
         for (const k of devKeys) {
           if (isDerivedKey(k)) DERIVED_KEYS[k].deps.forEach((d) => toFetch.add(d));
@@ -1490,10 +1488,10 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       }));
       setGranData(next);
       if (fetchErrors.length > 0 && !promoted) {
-        setGranError(`Metrum rechazó ${fetchErrors.length} consultas. Posibles causas: rango muy largo para el intervalo, key sin datos, o problemas de la API. Detalle: ${fetchErrors[0]}`);
+        setGranError(`Metrum rechazÃ³ ${fetchErrors.length} consultas. Posibles causas: rango muy largo para el intervalo, key sin datos, o problemas de la API. Detalle: ${fetchErrors[0]}`);
       }
 
-      // Fetch irradiancia solar por ciudad — usado por envelope_dc_LIV ajustado.
+      // Fetch irradiancia solar por ciudad â€” usado por envelope_dc_LIV ajustado.
       // Solo dispara si al menos un device seleccionado tiene city y alguna key
       // derivada que la necesite (envelope_dc_LIV, envelope_dc_estimado_LV o curtailment_dc_LIV).
       const citiesNeeded = new Set<string>();
@@ -1509,7 +1507,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         const ghiMap = new Map<string, Map<string, number>>();
         await Promise.all(Array.from(citiesNeeded).map(async (city) => {
           try {
-            // Pedimos también 30 días extra atrás para tener buena muestra del P95(GHI)
+            // Pedimos tambiÃ©n 30 dÃ­as extra atrÃ¡s para tener buena muestra del P95(GHI)
             const fromExtended = new Date(new Date(startDate).getTime() - 30 * 86400000).toISOString().slice(0, 10);
             const r = await fetch(`/api/solar/irradiance?city=${encodeURIComponent(city)}&from=${fromExtended}&to=${endDate}`);
             if (!r.ok) return;
@@ -1542,7 +1540,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
             const j = await r.json();
             type DailyRow = { casa: string; record_date: string; curtailment_kwh: number };
             const daily = (j.daily ?? []) as DailyRow[];
-            // Build acumulado por casa: para cada día, suma kWh de ese día + todos los anteriores
+            // Build acumulado por casa: para cada dÃ­a, suma kWh de ese dÃ­a + todos los anteriores
             const byCasa = new Map<string, Array<{ date: string; kwh: number }>>();
             for (const d of daily) {
               if (!byCasa.has(d.casa)) byCasa.set(d.casa, []);
@@ -1562,7 +1560,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
             setCasaCurtailmentCumByDay(cumMap);
           }
         } catch {
-          // Si falla, granular cae al cómputo local (puede diferir un poco de NAR).
+          // Si falla, granular cae al cÃ³mputo local (puede diferir un poco de NAR).
         }
       } else {
         setCasaCurtailmentCumByDay(new Map());
@@ -1588,13 +1586,13 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDevice, typeFilter, selectedLocation, startDate, endDate]);
 
-  // Load granular keys cuando cambia la selección de devices.
-  // Trae las keys solo para los devices que aún no tenemos cacheados, y elimina
-  // del cache los que ya no están seleccionados. Cada device pide sus keys
-  // específicas (un meter rojo y un inversor exponen variables muy distintas).
+  // Load granular keys cuando cambia la selecciÃ³n de devices.
+  // Trae las keys solo para los devices que aÃºn no tenemos cacheados, y elimina
+  // del cache los que ya no estÃ¡n seleccionados. Cada device pide sus keys
+  // especÃ­ficas (un meter rojo y un inversor exponen variables muy distintas).
   useEffect(() => {
     const currentIds = Array.from(granularDeviceIds);
-    // Limpiar cache de devices que ya no están seleccionados
+    // Limpiar cache de devices que ya no estÃ¡n seleccionados
     setKeysByDevice((prev) => {
       const next: Record<string, string[]> = {};
       for (const id of currentIds) if (prev[id]) next[id] = prev[id];
@@ -1606,7 +1604,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       return next;
     });
 
-    // Cargar keys para devices nuevos en la selección
+    // Cargar keys para devices nuevos en la selecciÃ³n
     const missing = currentIds.filter((id) => !keysByDevice[id]);
     if (missing.length === 0) return;
     setKeysLoading(true);
@@ -1652,7 +1650,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   };
 
   // Granular chart data (puntos crudos como vienen del fetch, ahora multi-device)
-  // Series compuesta = `${deviceShortName} · ${key}` para distinguir varias casas en una sola gráfica
+  // Series compuesta = `${deviceShortName} Â· ${key}` para distinguir varias casas en una sola grÃ¡fica
   const granularDevicesMeta = useMemo(() => {
     return Array.from(granularDeviceIds)
       .map((id) => devices.find((d) => d.id === id))
@@ -1660,11 +1658,11 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   }, [granularDeviceIds, devices]);
 
   // Construye una etiqueta corta que identifica el equipo dentro de la casa:
-  //   - Medidor red → "Medidor RED"
-  //   - Medidor solar → "Medidor SOLAR"
-  //   - Inversor → "Inv <marca> <últimos 6 del serial>" (ej. "Inv LIVOLTEK 290023")
-  //   - Pulsar (gateway) → "Pulsar"
-  //   - Otro → device.name como fallback
+  //   - Medidor red â†’ "Medidor RED"
+  //   - Medidor solar â†’ "Medidor SOLAR"
+  //   - Inversor â†’ "Inv <marca> <Ãºltimos 6 del serial>" (ej. "Inv LIVOLTEK 290023")
+  //   - Pulsar (gateway) â†’ "Pulsar"
+  //   - Otro â†’ device.name como fallback
   const formatDeviceTag = (dev: DeviceOption): string => {
     const t = (dev.type ?? '').toLowerCase();
     if (t === 'red') return 'Medidor RED';
@@ -1681,22 +1679,22 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const seriesKeys = useMemo(() => {
     const out: Array<{ key: string; label: string; deviceId: string; baseKey: string }> = [];
     for (const dev of granularDevicesMeta) {
-      const casa = dev.casa ?? dev.name ?? '—';
+      const casa = dev.casa ?? dev.name ?? 'â€”';
       const tag = formatDeviceTag(dev);
-      const devLabel = `${casa} · ${tag}`;
+      const devLabel = `${casa} Â· ${tag}`;
       const devKeys = selectedKeysByDevice[dev.id];
       if (!devKeys) continue;
       for (const k of devKeys) {
-        out.push({ key: `${dev.id}__${k}`, label: `${devLabel} · ${k}`, deviceId: dev.id, baseKey: k });
+        out.push({ key: `${dev.id}__${k}`, label: `${devLabel} Â· ${k}`, deviceId: dev.id, baseKey: k });
       }
     }
     return out;
   }, [granularDevicesMeta, selectedKeysByDevice]);
 
-  // ── Multi-gráfica: el usuario puede partir las series seleccionadas
-  // en N gráficas, cada una con su propio Y axis (min/max/label).
-  // Gráfica 1 por default muestra TODAS las series (comportamiento previo);
-  // las gráficas extras arrancan vacías y el usuario asigna series con checkboxes.
+  // â”€â”€ Multi-grÃ¡fica: el usuario puede partir las series seleccionadas
+  // en N grÃ¡ficas, cada una con su propio Y axis (min/max/label).
+  // GrÃ¡fica 1 por default muestra TODAS las series (comportamiento previo);
+  // las grÃ¡ficas extras arrancan vacÃ­as y el usuario asigna series con checkboxes.
   interface ChartConfig {
     id: string;
     title: string;
@@ -1706,10 +1704,10 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     yLabel?: string;
   }
   const [charts, setCharts] = useState<ChartConfig[]>([
-    { id: 'chart-1', title: 'Gráfica 1', seriesIncluded: 'all' },
+    { id: 'chart-1', title: 'GrÃ¡fica 1', seriesIncluded: 'all' },
   ]);
 
-  // Refs por chart id para exportar a PNG cada gráfica individual
+  // Refs por chart id para exportar a PNG cada grÃ¡fica individual
   const chartRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const downloadChartPng = async (chartId: string, title: string) => {
@@ -1730,7 +1728,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
 
   const downloadDailyTableCsv = () => {
     if (!dailyData || dailyData.length === 0) return;
-    const headers = ['Día', ...seriesKeys.map((s) => s.label)];
+    const headers = ['DÃ­a', ...seriesKeys.map((s) => s.label)];
     const rows = dailyData.map((d) => {
       const cells: (string | number)[] = [d.dia];
       for (const s of seriesKeys) {
@@ -1746,7 +1744,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const lines = [headers.map(escape).join(','), ...rows.map((r) => r.map(escape).join(','))];
-    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['ï»¿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1758,7 +1756,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
   const addChart = () => {
     setCharts((cur) => [
       ...cur,
-      { id: `chart-${Date.now()}`, title: `Gráfica ${cur.length + 1}`, seriesIncluded: new Set<string>() },
+      { id: `chart-${Date.now()}`, title: `GrÃ¡fica ${cur.length + 1}`, seriesIncluded: new Set<string>() },
     ]);
   };
   const removeChart = (id: string) => {
@@ -1796,12 +1794,12 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         }
       }
     }
-    // 2) Calcular keys derivadas (virtuales) por device, donde el usuario las pidió
+    // 2) Calcular keys derivadas (virtuales) por device, donde el usuario las pidiÃ³
     //    y todas las deps existen en granData. Se inyectan al mismo row del timestamp.
     //    Si la derivada define `precompute`, se ejecuta primero con toda la serie
-    //    del device (útil para envolventes P95 por hora-del-día, baselines, etc.).
+    //    del device (Ãºtil para envolventes P95 por hora-del-dÃ­a, baselines, etc.).
     for (const [devId, selectedSet] of Object.entries(selectedKeysByDevice)) {
-      // Mapa GHI por (date|hour) para este device — solo si su city está en cityGhi.
+      // Mapa GHI por (date|hour) para este device â€” solo si su city estÃ¡ en cityGhi.
       const dev = devices.find((d) => d.id === devId);
       const ghiForDevice = dev?.city ? cityGhi.get(dev.city) : null;
       for (const k of selectedSet) {
@@ -1810,13 +1808,13 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
 
         // Caso especial: curtailment_kwh_* usa los valores PRE-CALCULADOS del
         // backend NAR (daily_curtailment_by_house). Esto garantiza que granular
-        // y el ranking NAR coincidan exactamente — los dos lados leen la misma
+        // y el ranking NAR coincidan exactamente â€” los dos lados leen la misma
         // fuente. La curva se construye desde los daily totals: para cada ts
-        // se busca el acumulado del día correspondiente.
+        // se busca el acumulado del dÃ­a correspondiente.
         if ((k === 'curtailment_kwh_LIV' || k === 'curtailment_kwh_DEY') && dev?.casa) {
           const dailyCum = casaCurtailmentCumByDay.get(dev.casa);
-          // Construir lookup de "último día con cum ≤ ts" para rellenar timestamps
-          // entre los días persistidos en NAR (NAR guarda 1 valor por día, granular
+          // Construir lookup de "Ãºltimo dÃ­a con cum â‰¤ ts" para rellenar timestamps
+          // entre los dÃ­as persistidos en NAR (NAR guarda 1 valor por dÃ­a, granular
           // muestra puntos cada 15 min).
           const sortedDays = dailyCum ? Array.from(dailyCum.keys()).sort() : [];
           for (const [ts, row] of byTs) {
@@ -1826,7 +1824,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
             }
             const d = new Date(ts - 5 * 3600 * 1000);
             const dateLocal = d.toISOString().slice(0, 10);
-            // Buscar el día más reciente <= dateLocal
+            // Buscar el dÃ­a mÃ¡s reciente <= dateLocal
             let cum = 0;
             for (const day of sortedDays) {
               if (day > dateLocal) break;
@@ -1847,7 +1845,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
             const vals: Record<string, number | null> = {};
             for (const dep of meta.deps) vals[dep] = (row[`${devId}__${dep}`] ?? null) as number | null;
             // Inyectar ghi_w_m2 si el device tiene city con GHI cacheado.
-            // Lookup por (date_local, hour_local) — Open-Meteo nos da datos por hora COT.
+            // Lookup por (date_local, hour_local) â€” Open-Meteo nos da datos por hora COT.
             if (ghiForDevice) {
               const d = new Date(ts - 5 * 3600 * 1000);
               const dateLocal = d.toISOString().slice(0, 10);
@@ -1884,7 +1882,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
     return Array.from(byTs.entries()).map(([ts, vals]) => ({ ts, ...vals })).sort((a, b) => a.ts - b.ts);
   }, [granData, selectedKeysByDevice, cityGhi, devices, casaCurtailmentCumByDay]);
 
-  // Agregación diaria (min/avg/max) por device+key
+  // AgregaciÃ³n diaria (min/avg/max) por device+key
   const dailyData = useMemo(() => {
     const dayKey = (ts: number): string => {
       const d = new Date(ts - 5 * 3600 * 1000);
@@ -1940,7 +1938,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
             </div>
           </div>
           <div className="input-group" style={{ marginBottom: 0 }}>
-            <label className="input-label">Ubicación / Ciudad</label>
+            <label className="input-label">UbicaciÃ³n / Ciudad</label>
             <select value={selectedLocation} onChange={(e) => setSelectedLocation(e.target.value)}>
               <option value="">Todas ({locationOptions.length})</option>
               {locationOptions.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -1959,14 +1957,14 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           </div>
         </div>
 
-        {/* Selector multi-device con buscador. Click para añadir/quitar. */}
+        {/* Selector multi-device con buscador. Click para aÃ±adir/quitar. */}
         <div className="input-group" style={{ marginBottom: 0 }}>
           <label className="input-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <span>Dispositivos ({granularDeviceIds.size} seleccionados)</span>
             {granularDeviceIds.size > 0 && (
               <button onClick={() => { setGranularDeviceIds(new Set()); setSelectedDevice(''); }}
                 style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}>
-                Limpiar selección
+                Limpiar selecciÃ³n
               </button>
             )}
           </label>
@@ -1983,18 +1981,18 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                 <div style={{ position: 'relative', marginBottom: 6 }}>
                   <Filter size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input type="text" value={deviceSearch} onChange={(e) => setDeviceSearch(e.target.value)}
-                    placeholder="Buscar por nombre, casa, ciudad, marca, modelo…"
+                    placeholder="Buscar por nombre, casa, ciudad, marca, modeloâ€¦"
                     style={{ width: '100%', paddingLeft: 30, fontSize: '0.8rem' }} />
                   {deviceSearch && (
                     <button onClick={() => setDeviceSearch('')} title="Limpiar"
                       style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1rem', padding: '2px 6px', lineHeight: 1 }}>
-                      ×
+                      Ã—
                     </button>
                   )}
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 200, overflowY: 'auto', padding: 6, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-surface)' }}>
                   {filteredDevices.length === 0 ? (
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: 4 }}>Ajusta los filtros de tipo o ubicación para ver dispositivos</span>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: 4 }}>Ajusta los filtros de tipo o ubicaciÃ³n para ver dispositivos</span>
                   ) : searched.length === 0 ? (
                     <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', padding: 4 }}>Sin resultados para &quot;{deviceSearch}&quot; entre {filteredDevices.length} dispositivos</span>
                   ) : searched.map((d) => {
@@ -2026,13 +2024,13 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
         </div>
       </div>
 
-      {/* Cierre Diario eliminado por petición del usuario — se conserva la lógica
+      {/* Cierre Diario eliminado por peticiÃ³n del usuario â€” se conserva la lÃ³gica
           pero no se renderiza (el bloque queda gated en `false`). Se puede
-          rehabilitar cambiando false → true si se necesita volver a verla. */}
+          rehabilitar cambiando false â†’ true si se necesita volver a verla. */}
       {false && (
       <>
       <VariablesDictionary
-        title="Diccionario — columnas del Cierre Diario"
+        title="Diccionario â€” columnas del Cierre Diario"
         keys={['generacion_wh', 'importacion_wh', 'excedentes_wh', 'demanda_wh', 'gen_dem_pct', 'exc_gen_pct', 'imp_dem_pct', 'yield_real', 'desempeno_pct', 'potencia_kw', 'imax_a']}
       />
       <div className="glass-panel" style={{ padding: 0 }}>
@@ -2040,13 +2038,13 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           <div>
             <h2 className="card-title">Cierre Diario por Casa</h2>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Yield teórico ref.: {YIELD_TEORICO_REF} kWh/kWp/día (Cali) · {casaMetrics.length} filas
+              Yield teÃ³rico ref.: {YIELD_TEORICO_REF} kWh/kWp/dÃ­a (Cali) Â· {casaMetrics.length} filas
             </span>
           </div>
           <button
             className="secondary-btn"
             onClick={() => {
-              const headers = ['Fecha', 'Casa', 'Generación (Wh)', 'Importación (Wh)', 'Excedentes (Wh)', 'Demanda Día (Wh)', 'Gen/Dem (%)', 'Exc/Gen (%)', 'Imp/Dem (%)', 'Yield Real (kWh/kWp)', 'Desempeño (%)', 'Imáx (A)'];
+              const headers = ['Fecha', 'Casa', 'GeneraciÃ³n (Wh)', 'ImportaciÃ³n (Wh)', 'Excedentes (Wh)', 'Demanda DÃ­a (Wh)', 'Gen/Dem (%)', 'Exc/Gen (%)', 'Imp/Dem (%)', 'Yield Real (kWh/kWp)', 'DesempeÃ±o (%)', 'ImÃ¡x (A)'];
               const rows = casaMetrics.map((m) => {
                 const ic = maxCurrents[`${m.casa}|${m.date}`];
                 return [m.date, m.casa, m.generacion_wh, m.importacion_wh, m.excedentes_wh, m.demanda_wh, m.gen_dem_pct?.toFixed(2), m.exc_gen_pct?.toFixed(2), m.imp_dem_pct?.toFixed(2), m.yield_real?.toFixed(3), m.desempeno_pct?.toFixed(2), typeof ic === 'number' ? ic.toFixed(2) : null];
@@ -2066,16 +2064,16 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
               <tr>
                 <th>Fecha</th>
                 <th>Casa</th>
-                <th title="Generación = ΔCenergyAE del inversor">Generación</th>
-                <th title="Importación de red = ΔCenergyAI del medidor rojo">Importación</th>
-                <th title="Excedentes a red = ΔCenergyAE del medidor rojo">Excedentes</th>
-                <th title="Demanda Día = Generación + Importación − Excedentes">Demanda Día</th>
-                <th title="Generación / Demanda">Gen/Dem</th>
-                <th title="Excedentes / Generación">Exc/Gen</th>
-                <th title="Importación / Demanda">Imp/Dem</th>
-                <th title="Yield Real = Generación / Potencia instalada (kWh/kWp)">Yield Real</th>
-                <th title={`Desempeño (PR) = Yield Real / ${YIELD_TEORICO_REF} × 100`}>Desempeño</th>
-                <th title="Corriente Máxima del día (MAX inversor + red meter)">Imáx</th>
+                <th title="GeneraciÃ³n = Î”CenergyAE del inversor">GeneraciÃ³n</th>
+                <th title="ImportaciÃ³n de red = Î”CenergyAI del medidor rojo">ImportaciÃ³n</th>
+                <th title="Excedentes a red = Î”CenergyAE del medidor rojo">Excedentes</th>
+                <th title="Demanda DÃ­a = GeneraciÃ³n + ImportaciÃ³n âˆ’ Excedentes">Demanda DÃ­a</th>
+                <th title="GeneraciÃ³n / Demanda">Gen/Dem</th>
+                <th title="Excedentes / GeneraciÃ³n">Exc/Gen</th>
+                <th title="ImportaciÃ³n / Demanda">Imp/Dem</th>
+                <th title="Yield Real = GeneraciÃ³n / Potencia instalada (kWh/kWp)">Yield Real</th>
+                <th title={`DesempeÃ±o (PR) = Yield Real / ${YIELD_TEORICO_REF} Ã— 100`}>DesempeÃ±o</th>
+                <th title="Corriente MÃ¡xima del dÃ­a (MAX inversor + red meter)">ImÃ¡x</th>
               </tr>
             </thead>
             <tbody>
@@ -2104,7 +2102,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                         {ic === 'loading' ? (
                           <span style={{ color: 'var(--text-muted)' }}>...</span>
                         ) : ic === null ? (
-                          <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          <span style={{ color: 'var(--text-muted)' }}>â€”</span>
                         ) : typeof ic === 'number' ? (
                           `${ic.toFixed(1)} A`
                         ) : (
@@ -2127,15 +2125,15 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
       </>
       )}
 
-      {/* ===== SECCIÓN: GRANULAR (única vista ahora) ===== */}
+      {/* ===== SECCIÃ“N: GRANULAR (Ãºnica vista ahora) ===== */}
       {true && (
       <>
-      {allKeys.length > 0 && <VariablesDictionary title="Diccionario — keys de Metrum disponibles" keys={allKeys} />}
+      {allKeys.length > 0 && <VariablesDictionary title="Diccionario â€” keys de Metrum disponibles" keys={allKeys} />}
       <div className="glass-panel">
         <div className="card-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Activity size={18} style={{ color: 'var(--text-secondary)' }} />
-            <h2 className="card-title">Vista Granular {!selectedMetrumId && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 400 }}>— selecciona un dispositivo arriba</span>}</h2>
+            <h2 className="card-title">Vista Granular {!selectedMetrumId && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 400 }}>â€” selecciona un dispositivo arriba</span>}</h2>
           </div>
           <button
             className="primary-btn"
@@ -2146,14 +2144,14 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
           </button>
         </div>
 
-        {/* Panel de Vistas guardadas — global para todo el equipo */}
+        {/* Panel de Vistas guardadas â€” global para todo el equipo */}
         <div style={{ padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vistas guardadas</span>
             {savedViewsLoading ? (
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>cargando…</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>cargandoâ€¦</span>
             ) : savedViews.length === 0 ? (
-              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin vistas guardadas — crea la primera con &quot;Guardar vista actual&quot;</span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin vistas guardadas â€” crea la primera con &quot;Guardar vista actual&quot;</span>
             ) : (
               savedViews.map((v) => (
                 <span key={v.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
@@ -2185,21 +2183,21 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                   </button>
                   <button
                     onClick={() => {
-                      if (!confirm(`¿Eliminar la vista &quot;${v.name}&quot;? Se borra para todos los usuarios.`)) return;
+                      if (!confirm(`Â¿Eliminar la vista &quot;${v.name}&quot;? Se borra para todos los usuarios.`)) return;
                       void persistViews(savedViews.filter((x) => x.id !== v.id));
                       if (activeViewId === v.id) setActiveViewId(null);
                     }}
                     title="Eliminar vista"
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.8rem', padding: '0 4px', lineHeight: 1 }}
                   >
-                    ×
+                    Ã—
                   </button>
                 </span>
               ))
             )}
             <button
               onClick={() => {
-                const name = prompt('Nombre para esta vista (ej. "Casa 42 — voltajes diarios"):');
+                const name = prompt('Nombre para esta vista (ej. "Casa 42 â€” voltajes diarios"):');
                 if (!name || !name.trim()) return;
                 const newView: SavedView = {
                   id: `view-${Date.now()}`,
@@ -2226,7 +2224,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
               disabled={granularDeviceIds.size === 0 || totalSelectedKeysCount === 0}
               className="secondary-btn"
               style={{ marginLeft: 'auto', fontSize: '0.74rem', padding: '4px 10px' }}
-              title={granularDeviceIds.size === 0 || totalSelectedKeysCount === 0 ? 'Selecciona devices y keys antes de guardar' : 'Guardar la configuración actual como vista reutilizable'}
+              title={granularDeviceIds.size === 0 || totalSelectedKeysCount === 0 ? 'Selecciona devices y keys antes de guardar' : 'Guardar la configuraciÃ³n actual como vista reutilizable'}
             >
               + Guardar vista actual
             </button>
@@ -2252,7 +2250,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
               </div>
             </div>
 
-            {/* Keys disponibles AGRUPADAS POR DEVICE — cada equipo expone sus propias variables */}
+            {/* Keys disponibles AGRUPADAS POR DEVICE â€” cada equipo expone sus propias variables */}
             <div style={{ marginBottom: '16px' }}>
               <label className="input-label" style={{ display: 'block', marginBottom: '8px' }}>
                 Keys disponibles por dispositivo {totalSelectedKeysCount > 0 && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({totalSelectedKeysCount} seleccionadas en total)</span>}
@@ -2260,7 +2258,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
               {keysLoading && <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Cargando keys...</p>}
               {keysError && <div className="alert-error">{keysError}</div>}
               {granularDevicesMeta.length === 0 && !keysLoading && (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Selecciona uno o más dispositivos arriba para ver sus keys.</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>Selecciona uno o mÃ¡s dispositivos arriba para ver sus keys.</p>
               )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {granularDevicesMeta.map((dev) => {
@@ -2272,7 +2270,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                   const derivedAvailable = DERIVED_KEY_LIST.filter((dk) => {
                     const meta = DERIVED_KEYS[dk];
                     if (meta.appliesToInverter && !isInv) return false;
-                    // Filtro por marca: si la derivada es específica a una marca
+                    // Filtro por marca: si la derivada es especÃ­fica a una marca
                     // (Livoltek o DEYE), solo se muestra si la marca del device coincide.
                     if (meta.brand && !devMarca.includes(meta.brand.toLowerCase())) return false;
                     return meta.deps.every((d) => rawKeySet.has(d));
@@ -2286,7 +2284,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                         <div style={{ fontSize: '0.82rem', fontWeight: 600 }}>
                           {devLabel}
                           <span style={{ marginLeft: 6, color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.74rem' }}>
-                            ({devKeys.length} keys · {devSelected.size} seleccionadas)
+                            ({devKeys.length} keys Â· {devSelected.size} seleccionadas)
                           </span>
                         </div>
                         {devKeys.length > 0 && (
@@ -2304,7 +2302,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                       </div>
                       {devKeys.length === 0 ? (
                         <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontStyle: 'italic', margin: 0 }}>
-                          {keysLoading ? 'Cargando…' : 'Este dispositivo no expone keys de timeseries.'}
+                          {keysLoading ? 'Cargandoâ€¦' : 'Este dispositivo no expone keys de timeseries.'}
                         </p>
                       ) : (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 140, overflowY: 'auto' }}>
@@ -2313,13 +2311,13 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                             return (
                               <button key={k} onClick={() => toggleDeviceKey(dev.id, k)}
                                 className={`chip ${devSelected.has(k) ? 'active' : ''}`}
-                                title={derived ? 'Key calculada (estimación, no medición directa)' : undefined}
+                                title={derived ? 'Key calculada (estimaciÃ³n, no mediciÃ³n directa)' : undefined}
                                 style={{
                                   fontSize: '0.72rem',
                                   fontStyle: derived ? 'italic' : undefined,
                                   borderLeft: derived ? '3px solid #f59e0b' : undefined,
                                 }}>
-                                {derived ? `ƒ ${k}` : k}
+                                {derived ? `Æ’ ${k}` : k}
                               </button>
                             );
                           })}
@@ -2333,27 +2331,27 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
 
             {granError && <div className="alert-error">{granError}</div>}
 
-            {/* Diagnóstico: cuántos puntos llegaron tras el último Consultar */}
+            {/* DiagnÃ³stico: cuÃ¡ntos puntos llegaron tras el Ãºltimo Consultar */}
             {!granLoading && Object.keys(granData).length > 0 && (
               <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: 8 }}>
                 {chartData.length === 0 ? (
                   <span style={{ color: '#ef4444' }}>
-                    ⚠ Se recibió respuesta de Metrum pero los datos no se pudieron interpretar (0 puntos en el chart). Revisa la consola del navegador (F12).
+                    âš  Se recibiÃ³ respuesta de Metrum pero los datos no se pudieron interpretar (0 puntos en el chart). Revisa la consola del navegador (F12).
                   </span>
                 ) : (
                   <>
-                    <strong>{chartData.length}</strong> puntos × {seriesKeys.length} serie{seriesKeys.length === 1 ? '' : 's'} cargados ({intervalLabel} agregado por AVG).
+                    <strong>{chartData.length}</strong> puntos Ã— {seriesKeys.length} serie{seriesKeys.length === 1 ? '' : 's'} cargados ({intervalLabel} agregado por AVG).
                   </>
                 )}
               </div>
             )}
 
             {/* Nota informativa cuando se muestra curtailment_kwh: la curva en granular
-                ahora viene de los valores PRE-CALCULADOS de NAR (un valor por día
+                ahora viene de los valores PRE-CALCULADOS de NAR (un valor por dÃ­a
                 escalonado). Coincide al 100% con el ranking NAR. */}
             {chartData.length > 0 && Object.values(selectedKeysByDevice).some((s) => Array.from(s).some((k) => k.startsWith('curtailment_kwh_'))) && (
               <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid #10b981', borderRadius: 8, padding: '8px 14px', marginTop: 10, fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                ℹ️ <strong>curtailment_kwh</strong> usa los daily totales de NAR (mismo número que ves en el ranking). La curva sube en escalones porque NAR persiste 1 valor por día.
+                â„¹ï¸ <strong>curtailment_kwh</strong> usa los daily totales de NAR (mismo nÃºmero que ves en el ranking). La curva sube en escalones porque NAR persiste 1 valor por dÃ­a.
               </div>
             )}
 
@@ -2364,7 +2362,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                   const isFirst = chartIdx === 0;
                   return (
                     <div key={cfg.id} ref={(el) => { chartRefs.current[cfg.id] = el; }} className="glass-panel" style={{ padding: 12, marginBottom: 12 }}>
-                      {/* Header de la gráfica: título editable, controles Y axis, botón eliminar */}
+                      {/* Header de la grÃ¡fica: tÃ­tulo editable, controles Y axis, botÃ³n eliminar */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                         <input
                           value={cfg.title}
@@ -2376,7 +2374,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                         </span>
                         <button
                           onClick={() => downloadChartPng(cfg.id, cfg.title)}
-                          title="Descargar esta gráfica como PNG"
+                          title="Descargar esta grÃ¡fica como PNG"
                           style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '0.72rem', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                           disabled={series.length === 0}
                         >
@@ -2403,15 +2401,15 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                             style={{ width: 130, padding: '3px 6px', fontSize: '0.75rem' }} />
                           {!isFirst && (
                             <button onClick={() => removeChart(cfg.id)}
-                              title="Eliminar gráfica"
+                              title="Eliminar grÃ¡fica"
                               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: '1rem', padding: '0 6px' }}>
-                              ×
+                              Ã—
                             </button>
                           )}
                         </div>
                       </div>
 
-                      {/* Selector de series — click en un chip prende/apaga esa serie en esta gráfica */}
+                      {/* Selector de series â€” click en un chip prende/apaga esa serie en esta grÃ¡fica */}
                       {seriesKeys.length > 0 && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8, padding: '6px 8px', background: 'var(--bg-elevated)', borderRadius: 6, alignItems: 'center' }}>
                           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginRight: 4 }}>Series:</span>
@@ -2419,7 +2417,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                             onClick={() => updateChart(cfg.id, { seriesIncluded: 'all' })}
                             className={`chip ${cfg.seriesIncluded === 'all' ? 'active' : ''}`}
                             style={{ fontSize: '0.68rem', padding: '2px 8px' }}
-                            title="Mostrar todas las series seleccionadas en esta gráfica"
+                            title="Mostrar todas las series seleccionadas en esta grÃ¡fica"
                           >
                             Todas
                           </button>
@@ -2449,7 +2447,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                       {/* Chart */}
                       {series.length === 0 ? (
                         <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', background: 'var(--bg-elevated)', borderRadius: 6 }}>
-                          Sin series asignadas a esta gráfica
+                          Sin series asignadas a esta grÃ¡fica
                         </div>
                       ) : (
                         <div style={{ width: '100%', height: 320 }}>
@@ -2499,16 +2497,16 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                   );
                 })}
 
-                {/* Botón para agregar más gráficas */}
+                {/* BotÃ³n para agregar mÃ¡s grÃ¡ficas */}
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
                   <button onClick={addChart} className="secondary-btn" style={{ fontSize: '0.82rem' }}>
-                    + Nueva gráfica
+                    + Nueva grÃ¡fica
                   </button>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, flexWrap: 'wrap', gap: 10 }}>
                   <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    {chartData.length} puntos · {dailyData.length} día{dailyData.length === 1 ? '' : 's'} · Hover sobre el chart para ver valores · arrastra los bordes del mini-eje inferior para zoom
+                    {chartData.length} puntos Â· {dailyData.length} dÃ­a{dailyData.length === 1 ? '' : 's'} Â· Hover sobre el chart para ver valores Â· arrastra los bordes del mini-eje inferior para zoom
                   </div>
                   <div style={{ display: 'inline-flex', gap: 6 }}>
                     <button onClick={() => setShowDataTable((v) => !v)} className="secondary-btn" style={{ fontSize: '0.74rem', padding: '6px 10px' }}>
@@ -2520,7 +2518,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                           padding: '5px 10px', fontSize: '0.74rem', fontWeight: 600, borderRadius: 4, border: 'none', cursor: 'pointer',
                           background: dataTableMode === 'diario' ? 'var(--bg-surface)' : 'transparent',
                           color: dataTableMode === 'diario' ? 'var(--text-primary)' : 'var(--text-muted)',
-                        }}>Por día</button>
+                        }}>Por dÃ­a</button>
                         <button onClick={() => setDataTableMode('puntos')} style={{
                           padding: '5px 10px', fontSize: '0.74rem', fontWeight: 600, borderRadius: 4, border: 'none', cursor: 'pointer',
                           background: dataTableMode === 'puntos' ? 'var(--bg-surface)' : 'transparent',
@@ -2535,7 +2533,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                   <div className="glass-panel" style={{ padding: 0, marginTop: 12, overflow: 'hidden' }}>
                     <div style={{ padding: '8px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)' }}>
                       <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>
-                        Promedio diario por serie · {dailyData.length} día{dailyData.length === 1 ? '' : 's'}
+                        Promedio diario por serie Â· {dailyData.length} dÃ­a{dailyData.length === 1 ? '' : 's'}
                       </span>
                       <button
                         onClick={downloadDailyTableCsv}
@@ -2550,7 +2548,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                       <table style={{ width: '100%', fontSize: '0.78rem' }}>
                         <thead>
                           <tr>
-                            <th style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'left' }}>Día</th>
+                            <th style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'left' }}>DÃ­a</th>
                             {seriesKeys.map((s) => (
                               <th key={s.key} style={{ position: 'sticky', top: 0, background: 'var(--bg-elevated)', textAlign: 'right', borderLeft: '1px solid var(--border)' }}>
                                 {s.label}
@@ -2566,7 +2564,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                               {seriesKeys.map((s) => {
                                 const cnt = d.count[s.key] ?? 0;
                                 const avg = cnt > 0 ? d.sum[s.key] / cnt : null;
-                                const fmt = (n: number | null) => n === null ? '—' : n.toLocaleString('es-CO', { maximumFractionDigits: 2 });
+                                const fmt = (n: number | null) => n === null ? 'â€”' : n.toLocaleString('es-CO', { maximumFractionDigits: 2 });
                                 return (
                                   <td key={s.key} style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontWeight: 600, borderLeft: '1px solid var(--border)' }}>
                                     {fmt(avg)}
@@ -2603,7 +2601,7 @@ function CierresGranularTab({ devices }: { devices: DeviceOption[] }) {
                                 </td>
                                 {seriesKeys.map((s) => (
                                   <td key={s.key} style={{ textAlign: 'right', fontFamily: 'ui-monospace, monospace' }}>
-                                    {r[s.key] === null || r[s.key] === undefined ? '—' : Number(r[s.key]).toLocaleString('es-CO', { maximumFractionDigits: 3 })}
+                                    {r[s.key] === null || r[s.key] === undefined ? 'â€”' : Number(r[s.key]).toLocaleString('es-CO', { maximumFractionDigits: 3 })}
                                   </td>
                                 ))}
                               </tr>
@@ -2664,11 +2662,11 @@ interface ConsumptionRow {
   client_houses: { casa: string; cliente_id: string } | null;
 }
 
-// Definición de columnas tal como el Excel "Lecturas y consumos mayo"
+// DefiniciÃ³n de columnas tal como el Excel "Lecturas y consumos mayo"
 type Col = { key: keyof ConsumptionRow; label: string; group: string; format?: 'num' | 'pct' | 'int' | 'bool' | 'txt' };
 const COLS: Col[] = [
-  { key: 'dia_consumo',     label: 'dia_consumo',     group: 'Identificación', format: 'txt' },
-  { key: 'fecha_telemetria', label: 'fecha_telemetria', group: 'Identificación', format: 'txt' },
+  { key: 'dia_consumo',     label: 'dia_consumo',     group: 'IdentificaciÃ³n', format: 'txt' },
+  { key: 'fecha_telemetria', label: 'fecha_telemetria', group: 'IdentificaciÃ³n', format: 'txt' },
 
   { key: 'lectura_eai_meter_solar', label: 'lectura_EAI_meter_solar', group: 'Meter Solar', format: 'num' },
   { key: 'eai_meter_solar',         label: 'EAI_meter_solar',         group: 'Meter Solar', format: 'num' },
@@ -2707,7 +2705,7 @@ const COLS: Col[] = [
 ];
 
 const GROUP_COLORS: Record<string, string> = {
-  'Identificación': 'var(--bg-elevated)',
+  'IdentificaciÃ³n': 'var(--bg-elevated)',
   'Meter Solar':    'rgba(245, 158, 11, 0.08)',
   'Meter Red':      'rgba(59, 130, 246, 0.08)',
   'Inverter':       'rgba(7, 197, 168, 0.08)',
@@ -2716,7 +2714,7 @@ const GROUP_COLORS: Record<string, string> = {
 };
 
 const fmtCell = (v: unknown, format?: Col['format']): string => {
-  if (v === null || v === undefined) return '—';
+  if (v === null || v === undefined) return 'â€”';
   if (format === 'bool') return v ? 'true' : 'false';
   if (format === 'txt') return String(v);
   const n = Number(v);
@@ -2726,7 +2724,7 @@ const fmtCell = (v: unknown, format?: Col['format']): string => {
   return n.toLocaleString('es-CO');
 };
 
-// Variables numéricas del daily_consumption para graficar (excluye txt/bool)
+// Variables numÃ©ricas del daily_consumption para graficar (excluye txt/bool)
 const NUMERIC_COLS = COLS.filter((c) => c.format !== 'txt' && c.format !== 'bool');
 
 const SERIES_COLORS = ['#07c5a8', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#10b981', '#ec4899', '#0ea5e9', '#a855f7', '#14b8a6'];
@@ -2741,7 +2739,7 @@ function ConsumosTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Para Gráficas: multi-select casas + multi-select variables
+  // Para GrÃ¡ficas: multi-select casas + multi-select variables
   const [chartCasas, setChartCasas] = useState<Set<string>>(new Set());
   const [chartVars, setChartVars] = useState<Set<string>>(new Set(['generacion_solar_inverter']));
   const [chartRows, setChartRows] = useState<ConsumptionRow[]>([]);
@@ -2818,13 +2816,13 @@ function ConsumosTab() {
     else { groups[groups.length - 1].span++; }
   }
 
-  // Construir chartData: [{ dia_consumo, 'Casa 2 · eai_meter_solar': 123, ... }]
+  // Construir chartData: [{ dia_consumo, 'Casa 2 Â· eai_meter_solar': 123, ... }]
   const chartSeries = useMemo(() => {
     const series: Array<{ key: string; casa: string; variable: string; label: string }> = [];
     for (const casa of chartCasas) {
       for (const v of chartVars) {
         const meta = COLS.find((c) => c.key === v);
-        series.push({ key: `${casa}__${v}`, casa, variable: v, label: `${casa} · ${meta?.label ?? v}` });
+        series.push({ key: `${casa}__${v}`, casa, variable: v, label: `${casa} Â· ${meta?.label ?? v}` });
       }
     }
     return series;
@@ -2848,7 +2846,7 @@ function ConsumosTab() {
 
   return (
     <>
-      {/* ───── Filtros compartidos ───── */}
+      {/* â”€â”€â”€â”€â”€ Filtros compartidos â”€â”€â”€â”€â”€ */}
       <div className="glass-panel">
         <div className="card-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2862,7 +2860,7 @@ function ConsumosTab() {
             <select value={selectedHouse} onChange={(e) => setSelectedHouse(e.target.value)}>
               <option value="">Todas las casas ({houses.length})</option>
               {houses.map((h) => (
-                <option key={h.id} value={h.id}>{h.casa}{h.location ? ` — ${h.location}` : ''}{h.city ? ` (${h.city})` : ''}</option>
+                <option key={h.id} value={h.id}>{h.casa}{h.location ? ` â€” ${h.location}` : ''}{h.city ? ` (${h.city})` : ''}</option>
               ))}
             </select>
           </div>
@@ -2882,21 +2880,21 @@ function ConsumosTab() {
       {/* Sub-tabs */}
       <div className="tabs">
         <button onClick={() => setSubTab('tabla')} className={`tab ${subTab === 'tabla' ? 'active' : ''}`}>Tabla</button>
-        <button onClick={() => setSubTab('graficas')} className={`tab ${subTab === 'graficas' ? 'active' : ''}`}>Gráficas</button>
+        <button onClick={() => setSubTab('graficas')} className={`tab ${subTab === 'graficas' ? 'active' : ''}`}>GrÃ¡ficas</button>
       </div>
 
-      {/* ═══════ SUB-TAB: TABLA ═══════ */}
+      {/* â•â•â•â•â•â•â• SUB-TAB: TABLA â•â•â•â•â•â•â• */}
       {subTab === 'tabla' && (
         <>
           {!loading && rows.length === 0 && (
             <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
-              <strong>Sin consumo cargado.</strong> Usa <em>Sincronizar Metrum</em> en el header para traer la telemetría diaria.
+              <strong>Sin consumo cargado.</strong> Usa <em>Sincronizar Metrum</em> en el header para traer la telemetrÃ­a diaria.
             </div>
           )}
 
           {rows.length > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', flexWrap: 'wrap', gap: 8 }}>
-              <span>{rows.length} filas · scroll horizontal para ver todas las columnas</span>
+              <span>{rows.length} filas Â· scroll horizontal para ver todas las columnas</span>
               <button
                 className="secondary-btn"
                 onClick={() => {
@@ -2949,15 +2947,15 @@ function ConsumosTab() {
                   {loading ? (
                     <tr><td colSpan={COLS.length + 2} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>Cargando...</td></tr>
                   ) : rows.length === 0 ? (
-                    <tr><td colSpan={COLS.length + 2} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>—</td></tr>
+                    <tr><td colSpan={COLS.length + 2} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>â€”</td></tr>
                   ) : (
                     rows.map((r) => (
                       <tr key={r.id}>
                         <td style={{ position: 'sticky', left: 0, zIndex: 10, background: 'var(--bg-surface)', fontWeight: 600, borderRight: '2px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '6px 10px', minWidth: 120 }}>
-                          {r.client_houses?.casa ?? '—'}
+                          {r.client_houses?.casa ?? 'â€”'}
                         </td>
                         <td style={{ background: 'var(--bg-surface)', fontFamily: 'ui-monospace, monospace', fontSize: '0.7rem', color: 'var(--text-muted)', borderRight: '2px solid var(--border)', borderBottom: '1px solid var(--border)', padding: '6px 10px' }}>
-                          {r.client_houses?.cliente_id?.slice(0, 12) ?? '—'}…
+                          {r.client_houses?.cliente_id?.slice(0, 12) ?? 'â€”'}â€¦
                         </td>
                         {COLS.map((c, i) => (
                           <td key={c.key as string}
@@ -2975,13 +2973,13 @@ function ConsumosTab() {
         </>
       )}
 
-      {/* ═══════ SUB-TAB: GRÁFICAS ═══════ */}
+      {/* â•â•â•â•â•â•â• SUB-TAB: GRÃFICAS â•â•â•â•â•â•â• */}
       {subTab === 'graficas' && (
         <>
           <div className="glass-panel">
             <div style={{ marginBottom: 14 }}>
               <label className="input-label" style={{ display: 'block', marginBottom: 8 }}>
-                Casas a comparar <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({chartCasas.size} seleccionadas — máx 6 recomendado)</span>
+                Casas a comparar <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({chartCasas.size} seleccionadas â€” mÃ¡x 6 recomendado)</span>
               </label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 100, overflowY: 'auto' }}>
                 {houses.map((h) => (
@@ -3041,7 +3039,7 @@ function ConsumosTab() {
             ) : (
               <>
                 <div style={{ marginBottom: 10, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                  {chartSeries.length} serie{chartSeries.length !== 1 ? 's' : ''} · {chartData.length} días
+                  {chartSeries.length} serie{chartSeries.length !== 1 ? 's' : ''} Â· {chartData.length} dÃ­as
                 </div>
                 <div style={{ width: '100%', height: 500 }}>
                   <ResponsiveContainer>
@@ -3070,263 +3068,4 @@ function ConsumosTab() {
 
 function NarTab() {
   return <NarFullView hideTopHeader />;
-}
-
-/* ---------------- TAB: Control Manual Inversor ---------------- */
-
-interface InverterCommand {
-  id: string;
-  casa: string;
-  inverter_name: string;
-  marca: string;
-  modelo: string;
-  action: string;
-  target_value: number;
-  target_unit: string;
-  cos_phi_at_send: number | null;
-  status: 'pending' | 'sent' | 'success' | 'failed' | 'mocked';
-  error_message: string | null;
-  sent_by: string;
-  sent_at: string;
-  response_payload: Record<string, unknown> | null;
-}
-
-const CONTROL_ACTIONS: Array<{ key: string; label: string; unit: string; min: number; max: number; step: number; help: string }> = [
-  { key: 'set_power_factor',       label: 'Setear factor de potencia (cos φ)', unit: 'cos φ',   min: 0.80, max: 1.00, step: 0.01, help: 'Valor entre 0.80 y 1.00. La regla CREG exige ≥ 0.9. Recomendado: 0.95 para tener margen.' },
-  { key: 'set_reactive_power',     label: 'Setear potencia reactiva (Q)',       unit: 'kvar',    min: -10,  max: 10,   step: 0.5,  help: 'Negativo = capacitiva, positivo = inductiva. Cuidado: reactiva alta reduce capacidad de activa.' },
-  { key: 'set_active_power_limit', label: 'Limitar potencia activa (P)',        unit: 'kW',      min: 0,    max: 15,   step: 0.5,  help: 'Tope de generación. Útil para evitar exportar más de lo permitido.' },
-  { key: 'set_work_mode',          label: 'Cambiar modo de operación',          unit: 'modo',    min: 0,    max: 5,    step: 1,    help: '0=Auto, 1=Self-consumption, 2=Selling First, 3=Off-grid, 4=Backup, 5=PF Priority. Depende del fabricante.' },
-];
-
-function ControlManualTab({ devices }: { devices: DeviceOption[] }) {
-  const inverters = useMemo(() =>
-    devices
-      .filter((d) => classifyDevice(d) === 'inverter')
-      .sort((a, b) => (a.casa ?? '').localeCompare(b.casa ?? '')),
-    [devices]);
-
-  const [selectedInverterId, setSelectedInverterId] = useState<string>('');
-  const [action, setAction] = useState<string>('set_power_factor');
-  const [value, setValue] = useState<string>('0.95');
-  const [sending, setSending] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null);
-  const [history, setHistory] = useState<InverterCommand[]>([]);
-  const [instantStatus, setInstantStatus] = useState<{ cos_phi_now: number | null; power_active_w: number | null; power_reactive_var: number | null } | null>(null);
-
-  const selectedInverter = inverters.find((d) => d.id === selectedInverterId);
-  const actionMeta = CONTROL_ACTIONS.find((a) => a.key === action)!;
-
-  const loadHistory = async () => {
-    const url = selectedInverter?.casa
-      ? `/api/inverter/command?casa=${encodeURIComponent(selectedInverter.casa)}&limit=30`
-      : '/api/inverter/command?limit=30';
-    const r = await fetch(url);
-    const j = await r.json();
-    setHistory(j.commands ?? []);
-  };
-
-  // Cargar estado instant_metrics del inversor seleccionado
-  useEffect(() => {
-    if (!selectedInverter?.casa) { setInstantStatus(null); return; }
-    (async () => {
-      const { data } = await supabase
-        .from('instant_metrics')
-        .select('cos_phi_now, power_active_w, power_reactive_var, recorded_at')
-        .eq('casa', selectedInverter.casa)
-        .order('recorded_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      setInstantStatus(data ?? null);
-    })();
-    loadHistory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedInverterId]);
-
-  useEffect(() => { loadHistory(); /* eslint-disable-next-line */ }, []);
-
-  const sendCommand = async () => {
-    if (!selectedInverterId) { setMsg({ kind: 'error', text: 'Selecciona un inversor primero' }); return; }
-    const n = Number(value);
-    if (!Number.isFinite(n)) { setMsg({ kind: 'error', text: 'Valor inválido' }); return; }
-    if (n < actionMeta.min || n > actionMeta.max) {
-      setMsg({ kind: 'error', text: `Valor fuera de rango (${actionMeta.min} a ${actionMeta.max} ${actionMeta.unit})` });
-      return;
-    }
-    const confirmMsg = `¿Enviar "${actionMeta.label}" con valor ${n} ${actionMeta.unit} al inversor ${selectedInverter?.name} (${selectedInverter?.casa})?\n\nNota: hoy el comando se REGISTRA pero NO se envía al fabricante (faltan credenciales OEM).`;
-    if (!confirm(confirmMsg)) return;
-    setSending(true);
-    setMsg(null);
-    try {
-      const r = await fetch('/api/inverter/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inverter_id: selectedInverterId, action, value: n, sent_by: 'manual-ui' }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? 'Error');
-      const status = j.status as string;
-      setMsg({
-        kind: status === 'mocked' ? 'info' : status === 'success' ? 'success' : 'error',
-        text: status === 'mocked'
-          ? `📋 Comando registrado en auditoría (status: mocked). ${j.hint ?? ''}`
-          : `Comando ${status}.`,
-      });
-      await loadHistory();
-    } catch (e) {
-      setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Error' });
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const statusColor = (s: string) => ({ success: '#10b981', sent: '#3b82f6', mocked: '#f59e0b', failed: '#ef4444', pending: '#94a3b8' }[s] ?? '#94a3b8');
-
-  return (
-    <>
-      {/* Alerta de estado credenciales */}
-      <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
-        ⚠️ <strong>Modo simulación.</strong> Los comandos se guardan en auditoría pero <strong>NO se envían</strong> al inversor — faltan credenciales OEM (LIVOLTEK_API_KEY o DEYE_CLIENT_ID/SECRET en Vercel). Cuando estén configuradas, el endpoint envía al fabricante automáticamente.
-      </div>
-
-      {/* Selector + estado */}
-      <div className="glass-panel">
-        <h3 style={{ margin: 0, marginBottom: 14, fontSize: '1rem' }}>🎛️ Selector de inversor</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label className="input-label">Inversor a controlar</label>
-            <select value={selectedInverterId} onChange={(e) => setSelectedInverterId(e.target.value)}>
-              <option value="">— Selecciona un inversor —</option>
-              {inverters.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.casa ?? '?'} · {d.name} ({d.marca ?? '?'} {d.modelo ?? ''})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {selectedInverter && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, padding: 14, background: 'var(--bg-elevated)', borderRadius: 10 }}>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Marca / Modelo</div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 600, marginTop: 4 }}>{selectedInverter.marca ?? '—'}</div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{selectedInverter.modelo ?? '—'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Potencia</div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 600, marginTop: 4 }}>{selectedInverter.potencia_kw ?? '—'} kW</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>cos φ ahora</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 700, marginTop: 4, color: (instantStatus?.cos_phi_now ?? 1) < 0.9 ? '#ef4444' : 'var(--text-primary)' }}>
-                  {instantStatus?.cos_phi_now != null ? instantStatus.cos_phi_now.toFixed(3) : '—'}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>P activa</div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 600, marginTop: 4 }}>{instantStatus?.power_active_w != null ? (instantStatus.power_active_w / 1000).toFixed(2) + ' kW' : '—'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Q reactiva</div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 600, marginTop: 4 }}>{instantStatus?.power_reactive_var != null ? (instantStatus.power_reactive_var / 1000).toFixed(2) + ' kvar' : '—'}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estado</div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 600, marginTop: 4, color: selectedInverter.is_active === false ? '#ef4444' : '#10b981' }}>
-                  {selectedInverter.is_active === false ? 'Sin Conexión' : 'En Línea'}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Form de comando */}
-      <div className="glass-panel">
-        <h3 style={{ margin: 0, marginBottom: 14, fontSize: '1rem' }}>📤 Enviar comando</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <div className="input-group" style={{ marginBottom: 0, gridColumn: 'span 2' }}>
-            <label className="input-label">Acción</label>
-            <select value={action} onChange={(e) => { setAction(e.target.value); const a = CONTROL_ACTIONS.find((x) => x.key === e.target.value); if (a) setValue(((a.min + a.max) / 2).toFixed(2)); }}>
-              {CONTROL_ACTIONS.map((a) => <option key={a.key} value={a.key}>{a.label}</option>)}
-            </select>
-            <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.45 }}>💡 {actionMeta.help}</p>
-          </div>
-          <div className="input-group" style={{ marginBottom: 0 }}>
-            <label className="input-label">Valor ({actionMeta.unit})</label>
-            <input
-              type="number"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              min={actionMeta.min}
-              max={actionMeta.max}
-              step={actionMeta.step}
-              placeholder={`${actionMeta.min} a ${actionMeta.max}`}
-            />
-          </div>
-          <div className="input-group" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-            <button className="primary-btn" onClick={sendCommand} disabled={sending || !selectedInverterId} style={{ width: '100%', justifyContent: 'center', padding: '10px' }}>
-              {sending ? 'Enviando...' : '📤 Enviar comando'}
-            </button>
-          </div>
-        </div>
-
-        {msg && (
-          <div className={msg.kind === 'success' ? 'alert-success' : msg.kind === 'error' ? 'alert-error' : 'alert-warning'} style={{ marginTop: 12, fontSize: '0.82rem' }}>
-            {msg.text}
-          </div>
-        )}
-      </div>
-
-      {/* Historial de comandos */}
-      <div className="glass-panel" style={{ padding: 0 }}>
-        <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--border)' }}>
-          <h3 style={{ margin: 0, fontSize: '0.95rem' }}>
-            📜 Historial de comandos
-            {selectedInverter?.casa && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> — {selectedInverter.casa}</span>}
-            <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.78rem' }}> · {history.length} registros</span>
-          </h3>
-        </div>
-        <div className="table-container" style={{ border: 'none', overflowX: 'auto' }}>
-          <table style={{ fontSize: '0.78rem' }}>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Casa</th>
-                <th>Inversor</th>
-                <th>Acción</th>
-                <th>Valor</th>
-                <th>cos φ al enviar</th>
-                <th>Estado</th>
-                <th>Por</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.length === 0 ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Sin comandos enviados todavía.</td></tr>
-              ) : history.map((c) => {
-                const actMeta = CONTROL_ACTIONS.find((a) => a.key === c.action);
-                return (
-                  <tr key={c.id}>
-                    <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.72rem' }}>{new Date(c.sent_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}</td>
-                    <td><strong>{c.casa}</strong></td>
-                    <td style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{c.marca} · {c.inverter_name}</td>
-                    <td style={{ fontSize: '0.78rem' }}>{actMeta?.label ?? c.action}</td>
-                    <td style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>{c.target_value} {c.target_unit}</td>
-                    <td style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{c.cos_phi_at_send?.toFixed(3) ?? '—'}</td>
-                    <td>
-                      <span style={{ padding: '2px 10px', borderRadius: 12, background: statusColor(c.status) + '20', color: statusColor(c.status), fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                        {c.status}
-                      </span>
-                      {c.error_message && <div style={{ fontSize: '0.7rem', color: '#ef4444', marginTop: 2 }}>{c.error_message}</div>}
-                    </td>
-                    <td style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{c.sent_by}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
-  );
 }

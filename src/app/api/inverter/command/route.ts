@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sendDeyeCommand, type DeyeAction } from '@/lib/deye-cloud';
 
 /**
  * POST /api/inverter/command
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
     // Cargar info del inversor + última lectura instant_metrics
     const { data: dev } = await supabaseAdmin
       .from('devices')
-      .select('id, name, casa, house_id, marca, modelo, subtype')
+      .select('id, name, casa, house_id, marca, modelo, subtype, deye_device_sn, deye_station_id')
       .eq('id', body.inverter_id)
       .single();
     if (!dev) return NextResponse.json({ error: 'Inversor no encontrado' }, { status: 404 });
@@ -71,35 +72,58 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
 
-    // ─── STUB: Intentar enviar al fabricante ───
-    // Hoy no tenemos credenciales OEM. Cuando estén:
-    //   if (dev.marca === 'LIVOLTEK') return livoltekSendCommand(...)
-    //   if (dev.marca === 'DEYE')     return deyeSendCommand(...)
-    const LIVOLTEK_KEY = process.env.LIVOLTEK_API_KEY;
-    const DEYE_CLIENT_ID = process.env.DEYE_CLIENT_ID;
-    const haveCredentials = (dev.marca === 'LIVOLTEK' && LIVOLTEK_KEY) || (dev.marca === 'DEYE' && DEYE_CLIENT_ID);
-
+    // ─── Envío al fabricante ───
+    // Router por marca: Deye pasa por src/lib/deye-cloud.ts (esqueleto hoy),
+    // Livoltek queda como TODO hasta que llegue su adapter.
     let status: string;
     let responsePayload: Record<string, unknown> = {};
     let errorMessage: string | null = null;
 
-    if (!haveCredentials) {
+    if (dev.marca === 'DEYE' || dev.marca === 'Deye') {
+      const result = await sendDeyeCommand({
+        deviceSn: dev.deye_device_sn ?? '',
+        stationId: dev.deye_station_id,
+        action: body.action as DeyeAction,
+        value: body.value,
+      });
+      if (result.status === 'sent') {
+        status = 'sent';
+        responsePayload = result.payload;
+      } else if (result.status === 'failed') {
+        status = 'failed';
+        errorMessage = result.error;
+      } else {
+        // unavailable — mock por credenciales / sn / adapter pendiente
+        status = 'mocked';
+        responsePayload = {
+          mock: true,
+          reason: result.reason,
+          message:
+            result.reason === 'no_credentials'
+              ? 'Faltan DEYE_APP_ID / DEYE_APP_SECRET en el entorno.'
+              : result.reason === 'no_device_sn'
+                ? `El inversor ${dev.name} no tiene deye_device_sn configurado.`
+                : 'Adapter Deye en esqueleto; falta implementar el POST /order/control.',
+          would_send: { marca: dev.marca, inverter_name: dev.name, action: body.action, value: body.value, unit: range.unit },
+        };
+      }
+    } else if (dev.marca === 'LIVOLTEK' || dev.marca === 'Livoltek') {
+      // TODO: adapter Livoltek. Por ahora siempre mocked.
       status = 'mocked';
       responsePayload = {
         mock: true,
-        message: `Credenciales OEM ${dev.marca ?? '?'} no configuradas. Comando registrado en auditoría pero no enviado al inversor.`,
-        would_send: {
-          marca: dev.marca,
-          inverter_name: dev.name,
-          action: body.action,
-          value: body.value,
-          unit: range.unit,
-        },
+        reason: 'not_implemented',
+        message: 'Adapter Livoltek aún no implementado. Comando registrado en auditoría.',
+        would_send: { marca: dev.marca, inverter_name: dev.name, action: body.action, value: body.value, unit: range.unit },
       };
     } else {
-      // TODO: implementar adaptadores reales cuando haya credenciales
-      status = 'failed';
-      errorMessage = 'Adaptador del fabricante aún no implementado (TODO).';
+      status = 'mocked';
+      responsePayload = {
+        mock: true,
+        reason: 'unknown_brand',
+        message: `Marca "${dev.marca ?? '?'}" sin adapter definido. Comando registrado en auditoría.`,
+        would_send: { marca: dev.marca, inverter_name: dev.name, action: body.action, value: body.value, unit: range.unit },
+      };
     }
 
     const { data: cmd, error: insErr } = await supabaseAdmin
@@ -132,7 +156,7 @@ export async function POST(request: Request) {
       status,
       command: cmd,
       hint: status === 'mocked'
-        ? 'El comando NO se envió al inversor. Configura LIVOLTEK_API_KEY o DEYE_CLIENT_ID/SECRET para habilitar envío real.'
+        ? 'El comando NO se envió al inversor. Configura DEYE_APP_ID/DEYE_APP_SECRET (+ devices.deye_device_sn) o el adapter Livoltek para habilitar envío real.'
         : undefined,
     });
   } catch (err) {

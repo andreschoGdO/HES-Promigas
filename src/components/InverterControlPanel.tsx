@@ -61,7 +61,11 @@ export function InverterControlPanel({ devices }: { devices: DeviceOption[] }) {
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [history, setHistory] = useState<InverterCommand[]>([]);
-  const [instantStatus, setInstantStatus] = useState<{ cos_phi_now: number | null; power_active_w: number | null; power_reactive_var: number | null } | null>(null);
+  const [instantStatus, setInstantStatus] = useState<{ cos_phi_now: number | null; power_active_w: number | null; power_reactive_var: number | null; recorded_at: string | null } | null>(null);
+  const [apiStatus, setApiStatus] = useState<{ appId: boolean; appSecret: boolean; baseUrl: string | null } | null>(null);
+  const [deyeLink, setDeyeLink] = useState<{ device_sn: string; station_id: string }>({ device_sn: '', station_id: '' });
+  const [linkSaving, setLinkSaving] = useState(false);
+  const [linkMsg, setLinkMsg] = useState<string | null>(null);
 
   const selectedInverter = inverters.find((d) => d.id === selectedInverterId);
   const actionMeta = CONTROL_ACTIONS.find((a) => a.key === action)!;
@@ -76,7 +80,7 @@ export function InverterControlPanel({ devices }: { devices: DeviceOption[] }) {
   };
 
   useEffect(() => {
-    if (!selectedInverter?.casa) { setInstantStatus(null); return; }
+    if (!selectedInverter?.casa) { setInstantStatus(null); setDeyeLink({ device_sn: '', station_id: '' }); return; }
     (async () => {
       const { data } = await supabase
         .from('instant_metrics')
@@ -87,11 +91,63 @@ export function InverterControlPanel({ devices }: { devices: DeviceOption[] }) {
         .maybeSingle();
       setInstantStatus(data ?? null);
     })();
+    (async () => {
+      const { data } = await supabase
+        .from('devices')
+        .select('deye_device_sn, deye_station_id')
+        .eq('id', selectedInverter.id)
+        .maybeSingle();
+      setDeyeLink({ device_sn: data?.deye_device_sn ?? '', station_id: data?.deye_station_id ?? '' });
+      setLinkMsg(null);
+    })();
     loadHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedInverterId]);
 
   useEffect(() => { loadHistory(); /* eslint-disable-next-line */ }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/inverter/config-status');
+        const j = await r.json();
+        setApiStatus(j.deye ?? null);
+      } catch {}
+    })();
+  }, []);
+
+  // Un inversor se considera "En Línea" si su casa tiene una lectura de
+  // instant_metrics reciente (últimos 30 min). is_active del row de devices
+  // no es fiable para inversores: refleja la conectividad del gateway.
+  const ONLINE_THRESHOLD_MIN = 30;
+  const onlineFromInstant = (recordedAt: string | null | undefined): boolean => {
+    if (!recordedAt) return false;
+    const t = new Date(recordedAt).getTime();
+    if (!Number.isFinite(t)) return false;
+    return (Date.now() - t) / 60_000 <= ONLINE_THRESHOLD_MIN;
+  };
+  const isOnline = onlineFromInstant(instantStatus?.recorded_at);
+
+  const saveDeyeLink = async () => {
+    if (!selectedInverter) return;
+    setLinkSaving(true);
+    setLinkMsg(null);
+    try {
+      const { error } = await supabase
+        .from('devices')
+        .update({
+          deye_device_sn: deyeLink.device_sn.trim() || null,
+          deye_station_id: deyeLink.station_id.trim() || null,
+        })
+        .eq('id', selectedInverter.id);
+      if (error) throw error;
+      setLinkMsg('✅ Guardado.');
+    } catch (e) {
+      setLinkMsg(`⚠️ ${e instanceof Error ? e.message : 'Error al guardar.'}`);
+    } finally {
+      setLinkSaving(false);
+    }
+  };
 
   const sendCommand = async () => {
     if (!selectedInverterId) { setMsg({ kind: 'error', text: 'Selecciona un inversor primero' }); return; }
@@ -130,10 +186,67 @@ export function InverterControlPanel({ devices }: { devices: DeviceOption[] }) {
 
   const statusColor = (s: string) => ({ success: '#10b981', sent: '#3b82f6', mocked: '#f59e0b', failed: '#ef4444', pending: '#94a3b8' }[s] ?? '#94a3b8');
 
+  const badge = (ok: boolean) => (
+    <span style={{
+      padding: '2px 8px', borderRadius: 10, fontSize: '0.68rem', fontWeight: 700,
+      textTransform: 'uppercase', letterSpacing: '0.03em',
+      background: (ok ? '#10b981' : '#f59e0b') + '25',
+      color: ok ? '#10b981' : '#f59e0b',
+    }}>{ok ? 'Configurado' : 'Falta'}</span>
+  );
+
   return (
     <>
       <div className="alert-warning" style={{ fontSize: '0.85rem' }}>
         ⚠️ <strong>Modo simulación por defecto.</strong> Los comandos se guardan en auditoría; solo se envían al fabricante cuando el ENV correspondiente está presente (<code>DEYE_APP_ID</code>/<code>DEYE_APP_SECRET</code> para Deye, <code>LIVOLTEK_API_KEY</code> para Livoltek). Sin ellos el status queda como <code>mocked</code>.
+      </div>
+
+      {/* Configuración API Deye Cloud */}
+      <div className="glass-panel">
+        <h3 style={{ margin: 0, marginBottom: 6, fontSize: '1rem' }}>🔑 Configuración API — Deye Cloud</h3>
+        <p style={{ margin: '0 0 12px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+          Campos requeridos para habilitar el envío real de comandos. Los ENV se editan en Vercel (Project → Settings → Environment Variables); los campos por equipo se editan abajo, tras seleccionar un inversor.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 10, marginBottom: 10 }}>
+          <div style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+              <code style={{ fontSize: '0.82rem', fontWeight: 700 }}>DEYE_APP_ID</code>
+              {apiStatus ? badge(apiStatus.appId) : <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>…</span>}
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ENV (Vercel) · App ID emitido por Deye developer console.</div>
+          </div>
+          <div style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+              <code style={{ fontSize: '0.82rem', fontWeight: 700 }}>DEYE_APP_SECRET</code>
+              {apiStatus ? badge(apiStatus.appSecret) : <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>…</span>}
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ENV (Vercel) · Secret de la app. Nunca se expone al cliente.</div>
+          </div>
+          <div style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+              <code style={{ fontSize: '0.82rem', fontWeight: 700 }}>DEYE_BASE_URL</code>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>opcional</span>
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              ENV (Vercel) · default <code>{apiStatus?.baseUrl ?? 'https://eu1-developer.deyecloud.com'}</code>. Sobreescribir si Deye asigna región distinta.
+            </div>
+          </div>
+          <div style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+              <code style={{ fontSize: '0.82rem', fontWeight: 700 }}>devices.deye_device_sn</code>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>por equipo</span>
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Serial del inversor en Deye Cloud. Sin él, el adapter retorna <code>no_device_sn</code>.</div>
+          </div>
+          <div style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+              <code style={{ fontSize: '0.82rem', fontWeight: 700 }}>devices.deye_station_id</code>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>por equipo · opcional</span>
+            </div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID de la planta en Deye Cloud. Útil para consultas por planta (curvas, alarmas).</div>
+          </div>
+        </div>
       </div>
 
       <div className="glass-panel">
@@ -178,14 +291,42 @@ export function InverterControlPanel({ devices }: { devices: DeviceOption[] }) {
               </div>
               <div>
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estado</div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 600, marginTop: 4, color: selectedInverter.is_active === false ? '#ef4444' : '#10b981' }}>
-                  {selectedInverter.is_active === false ? 'Sin Conexión' : 'En Línea'}
+                <div style={{ fontSize: '0.95rem', fontWeight: 600, marginTop: 4, color: isOnline ? '#10b981' : '#ef4444' }}>
+                  {isOnline ? 'En Línea' : 'Sin Conexión'}
+                </div>
+                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: 2 }}>
+                  {instantStatus?.recorded_at
+                    ? `última lectura: ${new Date(instantStatus.recorded_at).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}`
+                    : 'sin lecturas de instant_metrics'}
                 </div>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {selectedInverter && (
+        <div className="glass-panel">
+          <h3 style={{ margin: 0, marginBottom: 4, fontSize: '1rem' }}>🔗 Vinculación con Deye Cloud</h3>
+          <p style={{ margin: '0 0 12px', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+            Ingresa el <code>deviceSn</code> del inversor tal como aparece en el panel developer.deyecloud.com. El <code>stationId</code> es opcional pero recomendado.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 12, alignItems: 'flex-end' }}>
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label className="input-label">deye_device_sn</label>
+              <input type="text" value={deyeLink.device_sn} onChange={(e) => setDeyeLink((s) => ({ ...s, device_sn: e.target.value }))} placeholder="ej. 2305xxxxxxxxx" />
+            </div>
+            <div className="input-group" style={{ marginBottom: 0 }}>
+              <label className="input-label">deye_station_id</label>
+              <input type="text" value={deyeLink.station_id} onChange={(e) => setDeyeLink((s) => ({ ...s, station_id: e.target.value }))} placeholder="ej. 123456" />
+            </div>
+            <button className="primary-btn" onClick={saveDeyeLink} disabled={linkSaving} style={{ padding: '10px 16px' }}>
+              {linkSaving ? 'Guardando…' : 'Guardar'}
+            </button>
+          </div>
+          {linkMsg && <div style={{ marginTop: 8, fontSize: '0.78rem', color: linkMsg.startsWith('✅') ? '#10b981' : '#ef4444' }}>{linkMsg}</div>}
+        </div>
+      )}
 
       <div className="glass-panel">
         <h3 style={{ margin: 0, marginBottom: 14, fontSize: '1rem' }}>📤 Enviar comando</h3>

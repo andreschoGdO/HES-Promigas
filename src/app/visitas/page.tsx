@@ -859,13 +859,12 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
             <FieldsGrid>
               {isInstalacionIdent ? (
                 // Orden pensado para no repetir info: identificación → rango
-                // de fechas → equipo/técnico → presencia cliente → ubicación.
+                // de fechas → técnico → presencia cliente → ubicación.
                 // "Fecha"/"Hora" genéricas se omiten aquí (ver fechaHoraFields)
                 // porque quedan redundantes con "Fecha inicio/fin instalación".
                 <>
                   {casaField}
                   {sec.fields.filter((f) => f.key === 'fecha_inicio_instalacion' || f.key === 'fecha_fin_instalacion').map(renderSchemaField)}
-                  {sec.fields.filter((f) => f.key === 'cuadrilla').map(renderSchemaField)}
                   {technicianField}
                   {contratistaField}
                   {sec.fields.filter((f) => f.key === 'cliente_presente').map(renderSchemaField)}

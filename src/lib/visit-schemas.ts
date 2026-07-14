@@ -162,7 +162,6 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         fields: [
           { key: 'fecha_inicio_instalacion', label: 'Fecha inicio de instalación', type: 'date', required: true },
           { key: 'fecha_fin_instalacion', label: 'Fecha fin de instalación', type: 'date', required: true },
-          { key: 'cuadrilla', label: 'Cuadrilla / equipo técnico', type: 'text' },
           { key: 'cliente_presente', label: 'Cliente presente', type: 'radio', options: ['Sí', 'No'] },
         ],
       },

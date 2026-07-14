@@ -711,6 +711,68 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
   const statusColor = visit.status === 'completed' ? '#10b981' : '#f59e0b';
   const statusLabel = visit.status === 'completed' ? 'Completada' : 'Borrador';
 
+  // Campos de identificación de la visita (Casa, técnico, contratista, fecha,
+  // hora, GPS). Para la mayoría de tipos se muestran en su propio panel fijo;
+  // para "instalación" se fusionan dentro de "I. Identificación de la
+  // instalación" (ver render más abajo) para no duplicar el módulo.
+  const identityFields = (
+    <>
+      {/* Casa — texto libre para TODOS los tipos de acta.
+          Antes: Previa usaba texto libre y los demás tipos usaban un dropdown
+          de client_houses. Ahora todos son input de texto para que el técnico
+          pueda escribir libremente el nombre completo (ej: "Casa 108 - Reserva
+          de Pance") sin depender de que la casa esté cargada previamente. */}
+      <FieldWrapper label="Casa" required>
+        <input type="text"
+          placeholder="Casa 108 - Reserva de Pance"
+          value={visit.casa ?? ''}
+          onChange={(e) => setVisit((v) => v ? { ...v, casa: e.target.value, house_id: null } : v)}
+          style={{ minHeight: 44 }} />
+      </FieldWrapper>
+
+      <FieldWrapper label="Técnico que realiza la visita" required>
+        <input type="text" value={visit.technician_name ?? ''}
+          onChange={(e) => setVisit((v) => v ? { ...v, technician_name: e.target.value } : v)}
+          placeholder="Nombre completo (persona que firma el acta)" />
+      </FieldWrapper>
+
+      <FieldWrapper label="Empresa contratista">
+        <input type="text" value={visit.contratista ?? ''}
+          onChange={(e) => setVisit((v) => v ? { ...v, contratista: e.target.value } : v)}
+          placeholder="Ej. Energía Solar SAS (empresa que ejecuta)" />
+      </FieldWrapper>
+
+      <FieldWrapper label="Fecha">
+        <input type="date" value={visit.visit_date}
+          onChange={(e) => setVisit((v) => v ? { ...v, visit_date: e.target.value } : v)} />
+      </FieldWrapper>
+
+      <FieldWrapper label="Hora">
+        <input type="time" value={visit.visit_time ?? ''}
+          onChange={(e) => setVisit((v) => v ? { ...v, visit_time: e.target.value } : v)} />
+      </FieldWrapper>
+
+      <FieldWrapper label="Ubicación GPS" fullWidth>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={captureGeo} className="secondary-btn" type="button" style={{ flex: 1, minWidth: 200, justifyContent: 'center' }}>
+            <MapPin size={14} /> {visit.lat && visit.lng ? `${visit.lat.toFixed(5)}, ${visit.lng.toFixed(5)}` : 'Capturar ubicación GPS'}
+          </button>
+          {visit.lat !== null && visit.lng !== null && (
+            <a
+              href={`https://www.google.com/maps?q=${visit.lat},${visit.lng}`}
+              target="_blank"
+              rel="noreferrer"
+              className="primary-btn"
+              style={{ justifyContent: 'center', textDecoration: 'none', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <ExternalLink size={14} /> Abrir en Maps
+            </a>
+          )}
+        </div>
+      </FieldWrapper>
+    </>
+  );
+
   return (
     <>
       {/* Volver — botón siempre visible arriba */}
@@ -741,76 +803,30 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
         </div>
       )}
 
-      {/* Identificación general (siempre visible, no colapsable) */}
-      <CollapsibleSection
-        title="Identificación de la visita"
-        open={openSections.__ident ?? true}
-        onToggle={() => toggleSection('__ident')}>
-        <FieldsGrid>
-          {/* Casa — texto libre para TODOS los tipos de acta.
-              Antes: Previa usaba texto libre y los demás tipos usaban un dropdown
-              de client_houses. Ahora todos son input de texto para que el técnico
-              pueda escribir libremente el nombre completo (ej: "Casa 108 - Reserva
-              de Pance") sin depender de que la casa esté cargada previamente. */}
-          <FieldWrapper label="Casa" required>
-            <input type="text"
-              placeholder="Casa 108 - Reserva de Pance"
-              value={visit.casa ?? ''}
-              onChange={(e) => setVisit((v) => v ? { ...v, casa: e.target.value, house_id: null } : v)}
-              style={{ minHeight: 44 }} />
-          </FieldWrapper>
-
-          <FieldWrapper label="Técnico que realiza la visita" required>
-            <input type="text" value={visit.technician_name ?? ''}
-              onChange={(e) => setVisit((v) => v ? { ...v, technician_name: e.target.value } : v)}
-              placeholder="Nombre completo (persona que firma el acta)" />
-          </FieldWrapper>
-
-          <FieldWrapper label="Empresa contratista">
-            <input type="text" value={visit.contratista ?? ''}
-              onChange={(e) => setVisit((v) => v ? { ...v, contratista: e.target.value } : v)}
-              placeholder="Ej. Energía Solar SAS (empresa que ejecuta)" />
-          </FieldWrapper>
-
-          <FieldWrapper label="Fecha">
-            <input type="date" value={visit.visit_date}
-              onChange={(e) => setVisit((v) => v ? { ...v, visit_date: e.target.value } : v)} />
-          </FieldWrapper>
-
-          <FieldWrapper label="Hora">
-            <input type="time" value={visit.visit_time ?? ''}
-              onChange={(e) => setVisit((v) => v ? { ...v, visit_time: e.target.value } : v)} />
-          </FieldWrapper>
-
-          <FieldWrapper label="Ubicación GPS" fullWidth>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={captureGeo} className="secondary-btn" type="button" style={{ flex: 1, minWidth: 200, justifyContent: 'center' }}>
-                <MapPin size={14} /> {visit.lat && visit.lng ? `${visit.lat.toFixed(5)}, ${visit.lng.toFixed(5)}` : 'Capturar ubicación GPS'}
-              </button>
-              {visit.lat !== null && visit.lng !== null && (
-                <a
-                  href={`https://www.google.com/maps?q=${visit.lat},${visit.lng}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="primary-btn"
-                  style={{ justifyContent: 'center', textDecoration: 'none', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                >
-                  <ExternalLink size={14} /> Abrir en Maps
-                </a>
-              )}
-            </div>
-          </FieldWrapper>
-        </FieldsGrid>
-      </CollapsibleSection>
+      {/* Identificación general (siempre visible, no colapsable).
+          Para "instalación" estos campos se fusionan dentro de la sección
+          "I. Identificación de la instalación" del schema (ver más abajo)
+          en vez de mostrarse en un panel aparte. */}
+      {visit.visit_type !== 'instalacion' && (
+        <CollapsibleSection
+          title="Identificación de la visita"
+          open={openSections.__ident ?? true}
+          onToggle={() => toggleSection('__ident')}>
+          <FieldsGrid>
+            {identityFields}
+          </FieldsGrid>
+        </CollapsibleSection>
+      )}
 
       {/* Secciones del schema, colapsables */}
-      {schema.sections.map((sec) => (
+      {schema.sections.map((sec, idx) => (
         <CollapsibleSection
           key={sec.title}
           title={sec.title}
-          open={openSections[sec.title] ?? false}
+          open={openSections[sec.title] ?? (visit.visit_type === 'instalacion' && idx === 0)}
           onToggle={() => toggleSection(sec.title)}>
           <FieldsGrid>
+            {visit.visit_type === 'instalacion' && idx === 0 && identityFields}
             {sec.fields.map((f) => (
               <FieldWrapper key={f.key} label={f.label} required={f.required} unit={f.unit} fullWidth={isFullWidthField(f)} help={f.help}>
                 <FieldInput field={f} value={visit.form_data[f.key]} onChange={(v) => setField(f.key, v)} formData={visit.form_data} />

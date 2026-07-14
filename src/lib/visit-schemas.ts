@@ -160,9 +160,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
       {
         title: 'I. Identificación de la instalación',
         fields: [
-          { key: 'fecha_instalacion', label: 'Fecha de instalación', type: 'date', required: true },
-          { key: 'hora_inicio', label: 'Hora inicio', type: 'time' },
-          { key: 'hora_fin', label: 'Hora finalización', type: 'time' },
+          { key: 'fecha_inicio_instalacion', label: 'Fecha inicio de instalación', type: 'date', required: true },
+          { key: 'fecha_fin_instalacion', label: 'Fecha fin de instalación', type: 'date', required: true },
           { key: 'cuadrilla', label: 'Cuadrilla / equipo técnico', type: 'text' },
           { key: 'cliente_presente', label: 'Cliente presente', type: 'radio', options: ['Sí', 'No'] },
         ],

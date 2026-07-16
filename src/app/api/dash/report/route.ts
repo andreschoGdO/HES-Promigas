@@ -58,6 +58,8 @@ interface CrmProjectRow {
   client_city: string | null;
   code: string | null;
   title: string | null;
+  conjunto: string | null;
+  casa_numero: string | null;
 }
 
 interface FacturaRow { project_id: string; capex: number | null; capex_venta: number | null; usd_wp: number | null; solucion: string | null; }
@@ -179,7 +181,7 @@ export async function GET(request: Request) {
       operativo_at, updated_at, created_at,
       agpe_operador_red, agpe_estado, agpe_fecha_estimada,
       garantia_marca, garantia_equipo, garantia_falla, garantia_estado, garantia_retorno_bodega,
-      client_name, client_city, code, title
+      client_name, client_city, code, title, conjunto, casa_numero
     `);
   if (projErr) return NextResponse.json({ error: projErr.message }, { status: 500 });
   const projects = (projRaw ?? []) as CrmProjectRow[];
@@ -324,9 +326,15 @@ export async function GET(request: Request) {
   );
   const porIniciar = porIniciarProjects.length;
 
-  // Etiqueta legible para tooltip: preferir client_name, sino título del proyecto
-  const casaLabel = (p: CrmProjectRow): string =>
-    p.client_name ?? p.title ?? p.code ?? p.id.slice(0, 8);
+  // Etiqueta legible: "Cliente — Conjunto · Casa N" para poder identificar de
+  // un vistazo quién es, en vez de mostrar solo el código interno PROJ-xxxx.
+  const casaLabel = (p: CrmProjectRow): string => {
+    const cliente = p.client_name ?? p.title ?? p.code ?? p.id.slice(0, 8);
+    const casa = p.conjunto && p.casa_numero
+      ? `${p.conjunto} · Casa ${p.casa_numero}`
+      : (p.casa_numero ? `Casa ${p.casa_numero}` : null);
+    return casa && casa !== cliente ? `${cliente} — ${casa}` : cliente;
+  };
 
   // ─── SLIDE 4: DETALLE POR MARCA, ZONA, CONSTRUCTOR ───
   const marcaGroup = new Map<string, { casas: number; kwp: number; kwh: number }>();
@@ -455,7 +463,7 @@ export async function GET(request: Request) {
   const aprobadas = legalizProjects.filter((p) => p.agpe_estado === 'Aprobado').length;
   const enRevision = legalizProjects.filter((p) => p.agpe_estado === 'En revisión' || p.agpe_estado === 'Radicado').length;
   const legalDetalle = legalizProjects.slice(0, 20).map((p) => ({
-    casa: p.client_name ?? p.code ?? p.title ?? p.id.slice(0, 8),
+    casa: casaLabel(p),
     zona: p.zona ?? '—',
     operador: p.agpe_operador_red ?? '—',
     estado: p.agpe_estado ?? '—',

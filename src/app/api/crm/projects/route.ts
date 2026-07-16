@@ -175,10 +175,11 @@ export async function POST(request: Request) {
       diseno_aprobado_por: str(body.diseno_aprobado_por),
       diseno_aprobado_at: str(body.diseno_aprobado_por) ? new Date().toISOString() : null,
       tipo_red: str(body.tipo_red),
-      // Operación
+      // Operación / cronograma
       contractor_name: str(body.contractor_name),
       contractor_email: str(body.contractor_email),
-      installation_date: str(body.installation_date),
+      cronograma_fecha_inicio: str(body.cronograma_fecha_inicio),
+      installation_date: str(body.installation_date), // = fin de cronograma planeado
       // Metadata
       created_by: str(body.created_by),
       assigned_to: str(body.assigned_to) ?? str(body.created_by),
@@ -253,6 +254,8 @@ const PATCHABLE_COLUMNS = new Set<string>([
   'visita_previa_id', 'visita_instalacion_id', 'reservation_id', 'house_id',
   'contractor_name', 'contractor_email', 'installation_date', 'lectura_inicial_kwh',
   'operativo_at', 'legalizado_at',
+  // Cronograma + checklist de avance físico (Gantt / curva S del Dash)
+  'cronograma_fecha_inicio', 'inst_paneles_dc', 'inst_equipos_ac', 'inst_config_cierre',
   // Metadata editable
   'title', 'assigned_to', 'notes', 'tags',
 ]);

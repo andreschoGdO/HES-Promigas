@@ -186,6 +186,20 @@ export async function POST(request: Request, context: Ctx) {
     // etapa NO cambia y se tagueea el proyecto para que el problema sea visible.
     let preReservation: Awaited<ReturnType<typeof autoReserveInventoryForProject>> = null;
     if (def.action === 'operations_dimensionado_to_alistamiento') {
+      // 0. Cronograma (contratista + fechas planeadas) debe estar cargado —
+      // alimenta el Gantt y la curva S del Dash. Mismo gate duro que los
+      // modelos de catálogo, no solo un campo "requerido" del modal de
+      // creación (que se puede saltar por bulk import u otro flujo).
+      const missingCronograma = await checkCronogramaPresent(id);
+      if (missingCronograma.length > 0) {
+        await addProjectTag(id, 'sin cronograma');
+        return NextResponse.json({
+          error: `Falta cargar: ${missingCronograma.join(', ')}. Abre el proyecto, clic en "Editar" y completa la sección de cronograma antes de alistar.`,
+          missing_fields: missingCronograma,
+        }, { status: 409 });
+      }
+      await removeProjectTag(id, 'sin cronograma');
+
       // 1. Categorías del diseño deben estar seleccionadas — si no, no hay qué reservar.
       const missingCats = await checkDesignCategoriesPresent(id);
       if (missingCats.length > 0) {
@@ -417,6 +431,20 @@ const FAMILY_LABEL: Record<string, string> = {
  * Devuelve los labels de las categorías que faltan en el diseño del proyecto.
  * Solo se exige Inversor (siempre 1) y, si la cantidad es > 0, Baterías y Paneles.
  */
+async function checkCronogramaPresent(projectId: string): Promise<string[]> {
+  const { data: p } = await supabaseAdmin
+    .from('crm_projects')
+    .select('contractor_name, cronograma_fecha_inicio, installation_date')
+    .eq('id', projectId)
+    .single();
+  if (!p) return [];
+  const missing: string[] = [];
+  if (!p.contractor_name) missing.push('Contratista');
+  if (!p.cronograma_fecha_inicio) missing.push('Fecha inicio cronograma');
+  if (!p.installation_date) missing.push('Fecha fin cronograma');
+  return missing;
+}
+
 async function checkDesignCategoriesPresent(projectId: string): Promise<string[]> {
   const { data: p } = await supabaseAdmin
     .from('crm_projects')

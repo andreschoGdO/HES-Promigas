@@ -9,6 +9,10 @@ import {
   transitionsFrom,
 } from '@/lib/crm-stages';
 
+// Campos del form (Record<string,string>) que en realidad son booleanos en BD
+// — se guardan como 'true'/'false' en el estado y se convierten al enviar.
+const BOOLEAN_FIELDS = new Set(['inst_paneles_dc', 'inst_equipos_ac', 'inst_config_cierre']);
+
 interface CrmProject {
   id: string;
   code: string;
@@ -57,8 +61,12 @@ interface CrmProject {
   house_id: string | null;
   contractor_name: string | null;
   contractor_email: string | null;
+  cronograma_fecha_inicio: string | null;
   installation_date: string | null;
   lectura_inicial_kwh: number | null;
+  inst_paneles_dc: boolean;
+  inst_equipos_ac: boolean;
+  inst_config_cierre: boolean;
   legalizado_at: string | null;
   created_at: string;
   updated_at: string;
@@ -493,6 +501,22 @@ function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
         </div>
       )}
 
+      {/* Avance físico (etapa Instalación) */}
+      {stage === 'instalacion' && (() => {
+        const pct = installProgressPct(project);
+        return (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.62rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: 3 }}>
+              <span>Avance instalación</span>
+              <span>{pct}%</span>
+            </div>
+            <div style={{ height: 5, borderRadius: 3, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#10b981' : '#3b82f6', borderRadius: 3, transition: 'width 0.2s' }} />
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Footer con acción */}
       {next && (
         <div style={{
@@ -558,6 +582,12 @@ function timeSince(iso: string): string {
   if (d < 30) return `${d}d`;
   const mo = Math.floor(d / 30);
   return `${mo}mo`;
+}
+
+/** % de avance físico de instalación: 3 hitos, cada uno pesa 1/3. */
+function installProgressPct(p: { inst_paneles_dc: boolean; inst_equipos_ac: boolean; inst_config_cierre: boolean }): number {
+  const done = [p.inst_paneles_dc, p.inst_equipos_ac, p.inst_config_cierre].filter(Boolean).length;
+  return Math.round((done / 3) * 100);
 }
 
 /* ─────────────── TABLE VIEW ─────────────── */
@@ -1033,8 +1063,12 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
     visita_instalacion_id: project.visita_instalacion_id ?? '',
     contractor_name: project.contractor_name ?? '',
     contractor_email: project.contractor_email ?? '',
+    cronograma_fecha_inicio: project.cronograma_fecha_inicio ?? '',
     installation_date: project.installation_date ?? '',
     lectura_inicial_kwh: project.lectura_inicial_kwh != null ? String(project.lectura_inicial_kwh) : '',
+    inst_paneles_dc: project.inst_paneles_dc ? 'true' : 'false',
+    inst_equipos_ac: project.inst_equipos_ac ? 'true' : 'false',
+    inst_config_cierre: project.inst_config_cierre ? 'true' : 'false',
     house_id: project.house_id ?? '',
     notes: project.notes ?? '',
   }), [project]);
@@ -1079,13 +1113,18 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
     diseno_notes: 'dimensionado',
     visita_previa_id: 'dimensionado',
     notes: 'dimensionado',
-    // Alistamiento (contratista + fecha de instalación)
-    contractor_name: 'alistamiento',
-    contractor_email: 'alistamiento',
-    installation_date: 'alistamiento',
-    // Instalación (lectura inicial + acta de instalación)
+    // Cronograma (contratista + fechas planeadas) — se pide desde la
+    // creación de la tarjeta, así que queda editable desde Dimensionado.
+    contractor_name: 'dimensionado',
+    contractor_email: 'dimensionado',
+    cronograma_fecha_inicio: 'dimensionado',
+    installation_date: 'dimensionado',
+    // Instalación (lectura inicial + acta de instalación + checklist de avance físico)
     lectura_inicial_kwh: 'instalacion',
     visita_instalacion_id: 'instalacion',
+    inst_paneles_dc: 'instalacion',
+    inst_equipos_ac: 'instalacion',
+    inst_config_cierre: 'instalacion',
     // Vincular casa (puede hacerse en cualquier etapa pero es obligatorio para Operativo)
     house_id: 'dimensionado',
   };
@@ -1109,7 +1148,7 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
           ignored.push(k);
           continue;
         }
-        delta[k] = after;
+        delta[k] = BOOLEAN_FIELDS.has(k) ? after === 'true' : after;
       }
       if (Object.keys(delta).length === 0) {
         if (ignored.length > 0) setErr('No puedes editar campos de etapas futuras todavía.');
@@ -1197,10 +1236,11 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
           </div>
         </StageSection>
 
-        <StageSection title="Alistamiento (contratista)" stage="alistamiento" canEdit={canEdit('alistamiento')}>
-          <FormField label="Contratista" value={form.contractor_name} onChange={(v) => set('contractor_name', v)} disabled={!canEdit('alistamiento')} />
-          <FormField label="Email contratista" value={form.contractor_email} onChange={(v) => set('contractor_email', v)} disabled={!canEdit('alistamiento')} />
-          <FormField label="Fecha instalación" type="date" value={form.installation_date} onChange={(v) => set('installation_date', v)} disabled={!canEdit('alistamiento')} />
+        <StageSection title="Cronograma de instalación" stage="dimensionado" canEdit={canEdit('dimensionado')}>
+          <FormField label="Contratista" value={form.contractor_name} onChange={(v) => set('contractor_name', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Email contratista" value={form.contractor_email} onChange={(v) => set('contractor_email', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Fecha inicio cronograma" type="date" value={form.cronograma_fecha_inicio} onChange={(v) => set('cronograma_fecha_inicio', v)} disabled={!canEdit('dimensionado')} />
+          <FormField label="Fecha fin cronograma" type="date" value={form.installation_date} onChange={(v) => set('installation_date', v)} disabled={!canEdit('dimensionado')} />
         </StageSection>
 
         <StageSection title="Instalación (puesta en marcha)" stage="instalacion" canEdit={canEdit('instalacion')}>
@@ -1208,6 +1248,12 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
           <div style={{ gridColumn: '1 / -1' }}>
             <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>Acta de visita de instalación</label>
             <LinkedResourcePicker kind="visita_instalacion" casaHint={form.casa_numero || form.client_name || null} value={form.visita_instalacion_id} onChange={(v) => set('visita_instalacion_id', v)} disabled={!canEdit('instalacion')} />
+          </div>
+          <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
+            <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 6 }}>Avance físico (checklist)</label>
+            <FormFieldCheckbox label="Instalación Paneles y Cableado DC" checked={form.inst_paneles_dc === 'true'} onChange={(v) => set('inst_paneles_dc', v ? 'true' : 'false')} disabled={!canEdit('instalacion')} />
+            <FormFieldCheckbox label="Instalación Equipos y Cableado AC" checked={form.inst_equipos_ac === 'true'} onChange={(v) => set('inst_equipos_ac', v ? 'true' : 'false')} disabled={!canEdit('instalacion')} />
+            <FormFieldCheckbox label="Configuración Sistema y cierre constructivo" checked={form.inst_config_cierre === 'true'} onChange={(v) => set('inst_config_cierre', v ? 'true' : 'false')} disabled={!canEdit('instalacion')} />
           </div>
         </StageSection>
 
@@ -1538,6 +1584,10 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
     setErr(null);
     if (!form.title?.trim()) { setErr('Título obligatorio'); return; }
     if (isOps && !form.client_name?.trim()) { setErr('Nombre del cliente obligatorio para crear en Operaciones'); return; }
+    if (isOps && (!form.contractor_name?.trim() || !form.cronograma_fecha_inicio || !form.installation_date)) {
+      setErr('Contratista y fechas de cronograma (inicio/fin) son obligatorias — el proyecto no podrá pasar a Alistamiento sin ellas.');
+      return;
+    }
     setSaving(true);
     try {
       // Un solo POST con module=operations + stage=dimensionado + todos los campos.
@@ -1645,6 +1695,16 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
               </p>
             </FormSection>
 
+            <FormSection title="Cronograma de instalación">
+              <FormField label="Contratista" required value={form.contractor_name ?? ''} onChange={(v) => set('contractor_name', v)} placeholder="Energía Solar SAS" />
+              <FormField label="Email del contratista" value={form.contractor_email ?? ''} onChange={(v) => set('contractor_email', v)} placeholder="contacto@contratista.com" />
+              <FormField label="Fecha inicio cronograma" required type="date" value={form.cronograma_fecha_inicio ?? ''} onChange={(v) => set('cronograma_fecha_inicio', v)} />
+              <FormField label="Fecha fin cronograma" required type="date" value={form.installation_date ?? ''} onChange={(v) => set('installation_date', v)} />
+              <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                Fechas planeadas de obra — alimentan el Gantt y la curva S del Dash de Construcción. El proyecto no puede pasar a Alistamiento sin estos 3 datos (se pueden editar después si cambian).
+              </p>
+            </FormSection>
+
             <FormSection title="Origen del diseño (acta de previa)">
               <div style={{ gridColumn: '1 / -1' }}>
                 <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>
@@ -1688,6 +1748,14 @@ function FormField({ label, value, onChange, required, placeholder, type, fullWi
       <label className="input-label" style={{ fontSize: '0.74rem' }}>{label}{required && <span style={{ color: '#ef4444' }}> *</span>}</label>
       <input type={type === 'number' ? 'text' : (type ?? 'text')} inputMode={type === 'number' ? 'decimal' : undefined} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} />
     </div>
+  );
+}
+function FormFieldCheckbox({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.82rem', padding: '4px 0', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1 }}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} style={{ width: 16, height: 16 }} />
+      {label}
+    </label>
   );
 }
 function FormFieldSelect({ label, value, onChange, options, fullWidth, disabled }: { label: string; value: string; onChange: (v: string) => void; options: string[]; fullWidth?: boolean; disabled?: boolean }) {

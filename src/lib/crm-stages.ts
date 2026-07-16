@@ -98,11 +98,11 @@ export const TRANSITIONS: TransitionDef[] = [
     label: 'Iniciar instalación',
     buttonLabel: 'Instalar →',
     fromModule: 'operations', fromStage: 'alistamiento', toModule: 'operations', toStage: 'instalacion',
-    requiredFields: [
-      f('contractor_name', 'Contratista', 'text'),
-      f('contractor_email', 'Email del contratista', 'email', false),
-      f('installation_date', 'Fecha de instalación', 'date'),
-    ],
+    // Contratista + cronograma ya se piden y se validan al crear el proyecto
+    // (ver checkCronogramaPresent en transition/route.ts) — no se vuelven a
+    // pedir acá, quedan editables desde el detalle del proyecto.
+    requiredFields: [],
+    noteTemplate: 'Cronograma confirmado. Iniciando instalación.',
   },
   {
     action: 'operations_to_operativo',

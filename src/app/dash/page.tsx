@@ -5,6 +5,7 @@ import { Download, Sun, RefreshCw } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LabelList,
+  LineChart, Line, CartesianGrid,
 } from 'recharts';
 import { generateDashPDF } from '@/lib/dash-pdf';
 import { generateDashPPTX } from '@/lib/dash-pptx';
@@ -83,6 +84,23 @@ const fmtLabel = (v: unknown): string => {
   return Number.isFinite(n) && n > 0 ? String(n) : '';
 };
 
+/* ─────────────── GANTT + CURVA S — helpers y tipos ─────────────── */
+const DAY_MS = 24 * 60 * 60 * 1000;
+const daysBetween = (a: string, b: string) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / DAY_MS);
+const addDaysLabel = (iso: string, n: number) => {
+  const d = new Date(iso);
+  d.setDate(d.getDate() + n);
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+};
+
+interface GanttRow {
+  id: string; cliente_casa: string; zona: string; constructor: string; conjunto: string;
+  cronograma_fecha_inicio: string; cronograma_fecha_fin: string;
+  operations_stage: string; inst_progreso_pct: number; operativo_at: string | null;
+}
+interface ScurvePoint { week: string; planeado: number; real: number; }
+interface ScurveResp { total: number; from: string; to: string; points: ScurvePoint[]; }
+
 function SectionHeader({ eyebrow, title, size = 'normal' }: { eyebrow: string; title: string; size?: 'normal' | 'large' }) {
   const titleSize = size === 'large' ? '2.2rem' : '1.4rem';
   const eyebrowSize = size === 'large' ? '0.82rem' : '0.72rem';
@@ -146,6 +164,46 @@ export default function DashPage() {
   };
 
   useEffect(() => { void load(from, to); }, [from, to]);
+
+  // ─── GANTT ───
+  const [ganttRows, setGanttRows] = useState<GanttRow[]>([]);
+  const [ganttLoading, setGanttLoading] = useState(true);
+  const [ganttZona, setGanttZona] = useState('');
+  const [ganttConstructor, setGanttConstructor] = useState('');
+  const [ganttConjunto, setGanttConjunto] = useState('');
+  useEffect(() => {
+    void (async () => {
+      setGanttLoading(true);
+      try {
+        const r = await fetch('/api/dash/gantt');
+        if (r.ok) { const j = await r.json(); setGanttRows(j.rows ?? []); }
+      } catch (e) { console.error('[dash] gantt load fallo', e); }
+      finally { setGanttLoading(false); }
+    })();
+  }, []);
+
+  // ─── CURVA S ───
+  const [scurve, setScurve] = useState<ScurveResp | null>(null);
+  const [scurveLoading, setScurveLoading] = useState(true);
+  const [scurveFrom, setScurveFrom] = useState('');
+  const [scurveTo, setScurveTo] = useState('');
+  const loadScurve = async (f: string, t: string) => {
+    setScurveLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (f) params.set('from', f);
+      if (t) params.set('to', t);
+      const r = await fetch(`/api/dash/scurve?${params}`);
+      if (r.ok) {
+        const j = await r.json();
+        setScurve(j);
+        setScurveFrom(j.from);
+        setScurveTo(j.to);
+      }
+    } catch (e) { console.error('[dash] scurve load fallo', e); }
+    finally { setScurveLoading(false); }
+  };
+  useEffect(() => { void loadScurve('', ''); }, []);
 
   const [downloadingPptx, setDownloadingPptx] = useState(false);
   const handleDownload = async () => {
@@ -480,6 +538,51 @@ export default function DashPage() {
             />
           </div>
         )}
+      </section>
+
+      {/* ─── GANTT DE OBRA ─── */}
+      <section className="card">
+        <SectionHeader eyebrow="Cronograma" title="Gantt de obra" size="large" />
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: -8, marginBottom: 16 }}>
+          Casas activas con cronograma cargado (inicio → fin planeados). El relleno de la barra
+          muestra el avance físico real durante la etapa de Instalación.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          <select value={ganttZona} onChange={(e) => setGanttZona(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }}>
+            <option value="">Todas las zonas</option>
+            {Array.from(new Set(ganttRows.map((r) => r.zona))).sort().map((z) => <option key={z} value={z}>{z}</option>)}
+          </select>
+          <select value={ganttConstructor} onChange={(e) => setGanttConstructor(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }}>
+            <option value="">Todos los constructores</option>
+            {Array.from(new Set(ganttRows.map((r) => r.constructor))).sort().map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={ganttConjunto} onChange={(e) => setGanttConjunto(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }}>
+            <option value="">Todos los conjuntos</option>
+            {Array.from(new Set(ganttRows.map((r) => r.conjunto))).sort().map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <GanttChart rows={ganttRows} loading={ganttLoading} zona={ganttZona} constructor={ganttConstructor} conjunto={ganttConjunto} />
+      </section>
+
+      {/* ─── CURVA S ─── */}
+      <section className="card">
+        <SectionHeader eyebrow="Cronograma" title="Curva S — planeado vs real" size="large" />
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: -8, marginBottom: 16 }}>
+          % acumulado de casas con fin de cronograma planeado en el rango, comparado contra cuándo
+          quedaron realmente operativas.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+          <input type="date" value={scurveFrom} onChange={(e) => void loadScurve(e.target.value, scurveTo)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }} />
+          <span style={{ color: 'var(--text-muted)' }}>→</span>
+          <input type="date" value={scurveTo} onChange={(e) => void loadScurve(scurveFrom, e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }} />
+          {scurve && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{scurve.total} casas con fin de cronograma en el rango</span>}
+        </div>
+        <SCurveChart scurve={scurve} loading={scurveLoading} />
       </section>
 
       {/* ─── SLIDE 7: LEGALIZACIONES ─── */}
@@ -835,6 +938,103 @@ function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][]
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+const GANTT_MAX_ROWS = 25;
+
+/** Colores del segmento "hecho" / "restante" de cada barra, según etapa. */
+function ganttColors(row: GanttRow): { done: string; remaining: string } {
+  if (row.operativo_at || row.operations_stage === 'operativo') return { done: '#10b981', remaining: '#10b98130' };
+  if (row.operations_stage === 'instalacion') return { done: '#3b82f6', remaining: '#bfdbfe' };
+  return { done: '#94a3b8', remaining: '#e2e8f0' }; // dimensionado/alistamiento — obra sin arrancar
+}
+
+function GanttChart({ rows, loading, zona, constructor, conjunto }: {
+  rows: GanttRow[]; loading: boolean; zona: string; constructor: string; conjunto: string;
+}) {
+  const filtered = rows.filter((r) =>
+    (!zona || r.zona === zona) && (!constructor || r.constructor === constructor) && (!conjunto || r.conjunto === conjunto),
+  );
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
+  if (filtered.length === 0) return <div className="alert-warning" style={{ fontSize: '0.85rem' }}>No hay casas con cronograma cargado para estos filtros.</div>;
+
+  const truncated = filtered.length > GANTT_MAX_ROWS;
+  const shown = filtered.slice(0, GANTT_MAX_ROWS);
+  const minDate = shown.reduce((min, r) => r.cronograma_fecha_inicio < min ? r.cronograma_fecha_inicio : min, shown[0].cronograma_fecha_inicio);
+
+  const data = shown.map((r) => {
+    const offset = daysBetween(minDate, r.cronograma_fecha_inicio);
+    const duration = Math.max(1, daysBetween(r.cronograma_fecha_inicio, r.cronograma_fecha_fin));
+    const doneFrac = r.operativo_at || r.operations_stage === 'operativo' ? 1 : (r.operations_stage === 'instalacion' ? r.inst_progreso_pct / 100 : 0);
+    const done = Math.round(duration * doneFrac);
+    const { done: doneColor, remaining: remainingColor } = ganttColors(r);
+    return {
+      name: r.cliente_casa, offset, done, remaining: duration - done,
+      doneColor, remainingColor,
+      inicio: r.cronograma_fecha_inicio, fin: r.cronograma_fecha_fin,
+      etapa: r.operations_stage, pct: r.inst_progreso_pct,
+    };
+  });
+  const maxDay = Math.max(...data.map((d) => d.offset + d.done + d.remaining), 1);
+
+  return (
+    <>
+      {truncated && (
+        <div className="alert-warning" style={{ fontSize: '0.8rem', marginBottom: 10 }}>
+          Mostrando las primeras {GANTT_MAX_ROWS} de {filtered.length} — usa los filtros para acotar.
+        </div>
+      )}
+      <div style={{ height: Math.max(220, data.length * 34) }}>
+        <ResponsiveContainer>
+          <BarChart data={data} layout="vertical" margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+            <XAxis type="number" domain={[0, maxDay]} tickFormatter={(v) => addDaysLabel(minDate, Number(v))} tick={{ fontSize: 10 }} />
+            <YAxis type="category" dataKey="name" width={190} tick={{ fontSize: 11 }} />
+            <Tooltip
+              formatter={(_v, key, entry) => {
+                const d = entry.payload as typeof data[number];
+                if (key === 'done' || key === 'remaining') return [`${d.inicio} → ${d.fin} · ${d.etapa}${d.etapa === 'instalacion' ? ` (${d.pct}%)` : ''}`, 'Cronograma'];
+                return [String(_v), String(key)];
+              }}
+            />
+            <Bar dataKey="offset" stackId="gantt" fill="transparent" isAnimationActive={false} />
+            <Bar dataKey="done" stackId="gantt" isAnimationActive={false}>
+              {data.map((d, i) => <Cell key={i} fill={d.doneColor} />)}
+            </Bar>
+            <Bar dataKey="remaining" stackId="gantt" isAnimationActive={false}>
+              {data.map((d, i) => <Cell key={i} fill={d.remainingColor} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 10, fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#94a3b8', marginRight: 4 }} />Dimensionado / Alistamiento</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#3b82f6', marginRight: 4 }} />Instalación (avance real)</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#10b981', marginRight: 4 }} />Operativo</span>
+      </div>
+    </>
+  );
+}
+
+function SCurveChart({ scurve, loading }: { scurve: ScurveResp | null; loading: boolean }) {
+  if (loading) return <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
+  if (!scurve || scurve.total === 0) return <div className="alert-warning" style={{ fontSize: '0.85rem' }}>No hay proyectos con cronograma en este rango de fechas.</div>;
+
+  return (
+    <div style={{ height: 300 }}>
+      <ResponsiveContainer>
+        <LineChart data={scurve.points} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+          <XAxis dataKey="week" tick={{ fontSize: 10 }} tickFormatter={(v) => new Date(String(v)).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })} />
+          <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+          <Tooltip labelFormatter={(v) => new Date(String(v)).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })} formatter={(v: unknown) => `${v}%`} />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Line type="monotone" dataKey="planeado" name="Planeado" stroke="#94a3b8" strokeDasharray="5 4" dot={false} strokeWidth={2} />
+          <Line type="monotone" dataKey="real" name="Real" stroke={ACCENT} dot={false} strokeWidth={2.5} />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }

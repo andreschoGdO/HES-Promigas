@@ -3281,6 +3281,17 @@ interface Reservation {
       stock_quantity: number;
     } | null;
   }>;
+  /** Reserva por cantidad (mig. 44 — usada por el CRM al pasar Dimensionado
+   *  → Alistamiento). No aparta seriales: solo categoría × bodega × cantidad. */
+  inventory_reservation_lines?: Array<{
+    id: string;
+    category_id: string;
+    warehouse_id: string | null;
+    qty_reserved: number;
+    qty_delivered: number;
+    inventory_categories: { name: string; family: string } | null;
+    warehouses: { code: string; name: string } | null;
+  }>;
 }
 
 const RESV_STATUS_META: Record<string, { label: string; color: string; Icon: typeof Cpu }> = {
@@ -3355,6 +3366,7 @@ function ReservasTab({ userEmail }: { userEmail: string }) {
           {items.map((r) => {
             const meta = RESV_STATUS_META[r.status];
             const lines = r.inventory_reservation_items ?? [];
+            const qtyLines = r.inventory_reservation_lines ?? [];
             return (
               <div key={r.id} className="glass-panel" style={{ padding: 14, borderLeft: `4px solid ${meta.color}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
@@ -3409,10 +3421,22 @@ function ReservasTab({ userEmail }: { userEmail: string }) {
                     )}
                   </div>
                 </div>
-                {lines.length === 0 && (r.inventory_reservation_consumables?.length ?? 0) === 0 ? (
+                {lines.length === 0 && qtyLines.length === 0 && (r.inventory_reservation_consumables?.length ?? 0) === 0 ? (
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>Sin items asignados.</div>
                 ) : (
                   <>
+                    {qtyLines.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: lines.length > 0 ? 6 : 0 }}>
+                        {qtyLines.map((ql) => (
+                          <div key={ql.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: '0.74rem', borderLeft: '3px solid #3b82f6' }}>
+                            <span style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>{ql.qty_reserved}</span>
+                            <span>{FAMILY_LABELS[ql.inventory_categories?.family ?? ''] ?? ql.inventory_categories?.name ?? 'Equipos'}</span>
+                            {ql.warehouses && <><span style={{ color: 'var(--text-muted)' }}>·</span><span style={{ color: 'var(--text-muted)' }}>{ql.warehouses.name}</span></>}
+                            {ql.qty_delivered > 0 && <span style={{ color: 'var(--text-muted)' }}>({ql.qty_delivered} entregados)</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {lines.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {lines.map((line) => {

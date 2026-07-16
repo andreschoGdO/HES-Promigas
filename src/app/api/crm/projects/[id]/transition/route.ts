@@ -702,7 +702,7 @@ async function autoReserveInventoryForProject(
   actorEmail: string | null,
 ): Promise<null | {
   reservation_id: string;
-  reserved: Array<{ family: string; qty: number; category_id: string }>;
+  reserved: Array<{ family: string; family_label: string; qty: number; category_id: string }>;
   shortages: Array<{ family: string; needed: number; available: number }>;
   reused?: boolean;
 }> {
@@ -727,7 +727,8 @@ async function autoReserveInventoryForProject(
           reservation_id: existingResv.id,
           reserved: ((lines ?? []) as unknown as LineRow[]).map((l) => {
             const cat = Array.isArray(l.inventory_categories) ? l.inventory_categories[0] : l.inventory_categories;
-            return { family: cat?.family ?? 'unknown', qty: Number(l.qty_reserved), category_id: l.category_id };
+            const family = cat?.family ?? 'unknown';
+            return { family, family_label: FAMILY_LABEL[family] ?? family, qty: Number(l.qty_reserved), category_id: l.category_id };
           }),
           shortages: [],
           reused: true,
@@ -836,7 +837,10 @@ async function autoReserveInventoryForProject(
 
   return {
     reservation_id: resv.id,
-    reserved: requirements.map((req) => ({ family: req.family, qty: req.qty, category_id: req.categoryId! })),
+    reserved: requirements.map((req) => ({
+      family: req.family, family_label: FAMILY_LABEL[req.family] ?? req.family,
+      qty: req.qty, category_id: req.categoryId!,
+    })),
     shortages: [],
   };
 }

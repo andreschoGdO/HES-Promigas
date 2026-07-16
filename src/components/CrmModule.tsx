@@ -1372,9 +1372,10 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
     const sideMessages: string[] = [];
     const se = j.side_effects ?? {};
     if (se.reservation) {
-      const r = se.reservation as { reserved: Array<{ family: string; serial: string }>; shortages: Array<{ family: string; needed: number; available: number }> };
+      const r = se.reservation as { reserved: Array<{ family: string; family_label?: string; qty: number }>; shortages: Array<{ family: string; needed: number; available: number }> };
       if (r.reserved.length > 0) {
-        sideMessages.push(`Reservados ${r.reserved.length} equipos en bodega: ${r.reserved.map((x) => x.serial).join(', ')}`);
+        const detail = r.reserved.map((x) => `${x.qty} ${x.family_label ?? x.family}`).join(' · ');
+        sideMessages.push(`Reservados en bodega: ${detail}`);
       }
       if (r.shortages.length > 0) {
         const lines = r.shortages.map((s) => `${s.family}: necesario ${s.needed}, disponibles ${s.available}`);

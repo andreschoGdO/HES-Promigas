@@ -14,8 +14,9 @@ export async function GET(request: Request) {
 
   // Intentar con consumibles (requiere migration 23). Si la tabla aún no
   // existe en BD, fallback a la query previa sin consumibles.
-  const SELECT_WITH_CONSUMABLES = '*, field_visits(visit_type, casa, visit_date), inventory_reservation_items(id, picked_at, inventory_items(id, serial_number, brand, model, status, inventory_categories(name, family))), inventory_reservation_consumables(id, quantity, fulfilled_at, inventory_consumables(id, name, sku, unit, stock_quantity))';
-  const SELECT_LEGACY          = '*, field_visits(visit_type, casa, visit_date), inventory_reservation_items(id, picked_at, inventory_items(id, serial_number, brand, model, status, inventory_categories(name, family)))';
+  const RESERVATION_LINES_SELECT = 'inventory_reservation_lines(id, category_id, warehouse_id, qty_reserved, qty_delivered, inventory_categories(name, family), warehouses(code, name))';
+  const SELECT_WITH_CONSUMABLES = `*, field_visits(visit_type, casa, visit_date), inventory_reservation_items(id, picked_at, inventory_items(id, serial_number, brand, model, status, inventory_categories(name, family))), inventory_reservation_consumables(id, quantity, fulfilled_at, inventory_consumables(id, name, sku, unit, stock_quantity)), ${RESERVATION_LINES_SELECT}`;
+  const SELECT_LEGACY          = `*, field_visits(visit_type, casa, visit_date), inventory_reservation_items(id, picked_at, inventory_items(id, serial_number, brand, model, status, inventory_categories(name, family))), ${RESERVATION_LINES_SELECT}`;
 
   const buildQuery = (selectStr: string) => {
     let q = supabaseAdmin

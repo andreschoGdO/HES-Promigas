@@ -422,6 +422,11 @@ function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
 
   const next = availableTransitions[0];
 
+  // Avance físico de instalación (3 preguntas → 0/33/66/100%), solo relevante
+  // mientras el proyecto está en la etapa Instalación.
+  const instChecks = [project.inst_paneles_dc, project.inst_equipos_ac, project.inst_config_cierre];
+  const instPct = stage === 'instalacion' ? Math.round((instChecks.filter(Boolean).length / 3) * 100) : null;
+
   return (
     <div
       onClick={onOpen}
@@ -462,6 +467,19 @@ function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <Avatar name={project.client_name} />
           <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.client_name}</div>
+        </div>
+      )}
+
+      {/* Avance físico de instalación */}
+      {instPct !== null && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.66rem', color: 'var(--text-muted)', marginBottom: 3 }}>
+            <span>Avance instalación</span>
+            <span style={{ fontWeight: 700 }}>{instPct}%</span>
+          </div>
+          <div style={{ height: 5, borderRadius: 3, background: 'var(--bg-elevated)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${instPct}%`, borderRadius: 3, background: instPct === 100 ? '#10b981' : '#3b82f6', transition: 'width 0.2s' }} />
+          </div>
         </div>
       )}
 

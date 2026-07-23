@@ -141,6 +141,54 @@ const drawSectionTitle = (doc: jsPDF, y: number, title: string): number => {
   return y + 6;
 };
 
+/**
+ * Bloque para campos `serial_list`: título horizontal de ancho completo
+ * arriba (en vez de compartir una celda angosta "label | valor") y cada
+ * serial en su propia línea debajo — antes iban todos en un párrafo
+ * separado por comas que se veía amontonado. El caller debe verificar
+ * antes que haya espacio suficiente (usa `serialListHeight`).
+ */
+const serialListHeight = (count: number): number => 5.5 + Math.max(1, count) * 4.2 + 3;
+
+const drawSerialListBlock = (doc: jsPDF, startY: number, label: string, serials: string[]): number => {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 12;
+  const values = serials.filter((s) => s && s.trim() !== '');
+  const headerH = 5.5;
+  const rowH = 4.2;
+  const blockTop = startY;
+  let y = startY;
+
+  doc.setFillColor(BG_HEAD);
+  doc.setDrawColor(BORDER);
+  doc.rect(margin, y, pageWidth - margin * 2, headerH, 'FD');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(TEXT);
+  doc.text(label, margin + 2, y + 3.8);
+  y += headerH;
+
+  doc.setFontSize(8);
+  if (values.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(MUTED);
+    doc.text('—', margin + 4, y + 3);
+    y += rowH;
+  } else {
+    values.forEach((serial, i) => {
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(MUTED);
+      doc.text(`${i + 1}.`, margin + 3, y + 3);
+      doc.setTextColor(TEXT);
+      doc.text(serial, margin + 10, y + 3);
+      y += rowH;
+    });
+  }
+  doc.setDrawColor(BORDER);
+  doc.rect(margin, blockTop, pageWidth - margin * 2, y - blockTop);
+  return y + 1;
+};
+
 // Convierte un campo (key/label/value) en filas estilizadas para autotable
 const fieldToRow = (field: VisitField, formData: Record<string, unknown>): [string, string] => {
   const raw = formData[field.key];
@@ -266,10 +314,32 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
       : sec.fields;
     const formData = isInstalacionIdent ? { ...visit.form_data, __casa: visit.casa } : visit.form_data;
 
-    // Decidir 1 o 2 columnas según cantidad de fields
-    const cols: 1 | 2 = fields.length > 4 ? 2 : 1;
-    y = drawFieldsTable(doc, y, fields, formData, { columns: cols });
-    y += 2;
+    // Los campos serial_list (listas de seriales) van en su propio bloque de
+    // ancho completo (ver drawSerialListBlock) en vez de compartir una celda
+    // angosta de la tabla label|valor — se ven amontonados ahí.
+    const gridFields = fields.filter((f) => f.type !== 'serial_list');
+    const serialFields = fields.filter((f) => f.type === 'serial_list');
+
+    if (gridFields.length > 0) {
+      const cols: 1 | 2 = gridFields.length > 4 ? 2 : 1;
+      y = drawFieldsTable(doc, y, gridFields, formData, { columns: cols });
+      y += 2;
+    }
+
+    for (const sf of serialFields) {
+      const raw = formData[sf.key];
+      const values = Array.isArray(raw)
+        ? raw.map(String)
+        : (typeof raw === 'string' && raw ? raw.split(',').map((s) => s.trim()) : []);
+      const label = sf.unit ? `${sf.label} (${sf.unit})` : sf.label;
+      const neededH = serialListHeight(values.length);
+      if (y + neededH > pageHeight - margin) {
+        doc.addPage();
+        y = drawHeader(doc, schema, visit);
+      }
+      y = drawSerialListBlock(doc, y, label, values);
+      y += 2;
+    }
   });
 
   // Sección observaciones (caja grande con texto libre)
@@ -288,25 +358,31 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
     y += boxHeight + 3;
   }
 
-  // Quien realiza la visita + contratista (footer firma)
+  // Quien realiza la visita + contratista (footer firma) — 2 columnas lado a lado
   const tecnico = String(visit.form_data?.quien_realiza_visita ?? visit.technician_name ?? '');
   const contratistaStr = visit.contratista ?? '';
   if (y > pageHeight - 24) { doc.addPage(); y = drawHeader(doc, schema, visit); }
+  const pageWidthFooter = doc.internal.pageSize.getWidth();
+  const sigColWidth = (pageWidthFooter - margin * 2) / 2;
+  const sigLeftX = margin;
+  const sigRightX = margin + sigColWidth;
   doc.setFontSize(8);
   doc.setTextColor(MUTED);
-  doc.text('Quien realiza la visita:', doc.internal.pageSize.getWidth() - margin - 70, y + 5);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Quien realiza la visita:', sigLeftX, y + 5);
   doc.setTextColor(TEXT);
   doc.setFont('helvetica', 'bold');
-  doc.text(tecnico || '—', doc.internal.pageSize.getWidth() - margin - 70, y + 10);
+  doc.text(tecnico || '—', sigLeftX, y + 10);
   if (contratistaStr) {
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(MUTED);
-    doc.text('Contratista:', doc.internal.pageSize.getWidth() - margin - 70, y + 15);
+    doc.text('Contratista:', sigRightX, y + 5);
     doc.setTextColor(TEXT);
     doc.setFont('helvetica', 'bold');
-    doc.text(contratistaStr, doc.internal.pageSize.getWidth() - margin - 70, y + 20);
+    doc.text(contratistaStr, sigRightX, y + 10);
   }
   doc.setFont('helvetica', 'normal');
+  y += 15;
 
   // ───── Página(s) de fotos ─────
   if (photos.length > 0) {

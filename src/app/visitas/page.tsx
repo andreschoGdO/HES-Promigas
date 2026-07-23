@@ -578,9 +578,9 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
       if (!v) return v;
       const next = { ...v, form_data: { ...v.form_data, [key]: value } };
       // Instalación no muestra un campo "Fecha" genérico aparte (ver
-      // identityFields más abajo) — "Fecha de instalación" hace las
+      // identityFields más abajo) — "Fecha inicio de obra" hace las
       // veces de fecha oficial de la visita, usada en el PDF y en listados.
-      if (v.visit_type === 'instalacion' && key === 'fecha_instalacion' && typeof value === 'string' && value) {
+      if (v.visit_type === 'instalacion' && key === 'fecha_inicio_obra' && typeof value === 'string' && value) {
         next.visit_date = value;
       }
       return next;
@@ -725,9 +725,9 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
   // hora, GPS). Para la mayoría de tipos se muestran en su propio panel fijo,
   // en un solo bloque (identityFields). Para "instalación" se fusionan dentro
   // de "I. Identificación de la instalación" (ver render más abajo) pero SIN
-  // "Fecha"/"Hora" genéricas: esas quedarían redundantes con "Fecha de
-  // instalación" del schema, así que se omiten ahí (ver setField, que
-  // sincroniza fecha_instalacion → visit.visit_date automáticamente).
+  // "Fecha"/"Hora" genéricas: esas quedarían redundantes con "Fecha inicio/
+  // fin de obra" del schema, así que se omiten ahí (ver setField, que
+  // sincroniza fecha_inicio_obra → visit.visit_date automáticamente).
   const casaField = (
     // Casa — texto libre para TODOS los tipos de acta.
     // Antes: Previa usaba texto libre y los demás tipos usaban un dropdown
@@ -858,13 +858,13 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
             onToggle={() => toggleSection(sec.title)}>
             <FieldsGrid>
               {isInstalacionIdent ? (
-                // Orden pensado para no repetir info: identificación → fecha
-                // → técnico → presencia cliente → ubicación.
+                // Orden pensado para no repetir info: identificación → fechas
+                // de obra → técnico → presencia cliente → ubicación.
                 // "Fecha"/"Hora" genéricas se omiten aquí (ver fechaHoraFields)
-                // porque quedan redundantes con "Fecha de instalación".
+                // porque quedan redundantes con "Fecha inicio/fin de obra".
                 <>
                   {casaField}
-                  {sec.fields.filter((f) => f.key === 'fecha_instalacion').map(renderSchemaField)}
+                  {sec.fields.filter((f) => f.key === 'fecha_inicio_obra' || f.key === 'fecha_fin_obra').map(renderSchemaField)}
                   {technicianField}
                   {contratistaField}
                   {sec.fields.filter((f) => f.key === 'cliente_presente').map(renderSchemaField)}

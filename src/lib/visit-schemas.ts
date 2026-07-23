@@ -198,7 +198,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'batt_cantidad', label: 'Cantidad de baterías', type: 'number', inputMode: 'numeric' },
           { key: 'batt_serials', label: 'Seriales de baterías', type: 'serial_list', qtyKey: 'batt_cantidad', serialFamily: 'battery', help: 'Un input por batería. Debe coincidir con "Cantidad de baterías".' },
           { key: 'bms_marca', label: 'Marca del BMS', type: 'text' },
-          { key: 'bms_serial', label: 'Seriales del BMS', type: 'textarea', help: 'Battery Management System — uno por línea si hay más de uno.' },
+          { key: 'bms_cantidad', label: 'Cantidad de BMS', type: 'number', inputMode: 'numeric' },
+          { key: 'bms_serials', label: 'Seriales de BMS', type: 'serial_list', qtyKey: 'bms_cantidad', qtyFallback: 1, help: 'Un input por BMS. Normalmente 1 por banco de baterías.' },
         ],
       },
       {

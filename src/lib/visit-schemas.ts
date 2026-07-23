@@ -160,8 +160,7 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
       {
         title: 'I. Identificación de la instalación',
         fields: [
-          { key: 'fecha_inicio_instalacion', label: 'Fecha inicio de instalación', type: 'date', required: true },
-          { key: 'fecha_fin_instalacion', label: 'Fecha fin de instalación', type: 'date', required: true },
+          { key: 'fecha_instalacion', label: 'Fecha de instalación', type: 'date', required: true },
           { key: 'cliente_presente', label: 'Cliente presente', type: 'radio', options: ['Sí', 'No'] },
         ],
       },
@@ -197,6 +196,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'batt_capacidad_kwh', label: 'Capacidad por batería', type: 'number', inputMode: 'decimal', unit: 'kWh' },
           { key: 'batt_cantidad', label: 'Cantidad de baterías', type: 'number', inputMode: 'numeric' },
           { key: 'batt_serials', label: 'Seriales de baterías', type: 'serial_list', qtyKey: 'batt_cantidad', serialFamily: 'battery', help: 'Un input por batería. Debe coincidir con "Cantidad de baterías".' },
+          { key: 'bms_marca', label: 'Marca del BMS', type: 'text' },
+          { key: 'bms_serial', label: 'Serial del BMS', type: 'text', help: 'Battery Management System — normalmente uno solo por banco de baterías.' },
         ],
       },
       {

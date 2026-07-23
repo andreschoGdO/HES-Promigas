@@ -14,6 +14,11 @@ import { loginToMetrum, getTimeseries } from '@/lib/metrum-api';
  *   3. /api/sync/all         → daily_energy_closures por device
  *   4. /api/sync/consumption → daily_consumption por casa
  *   5. computeCasaMetrics    → daily_casa_metrics (incluye imax)
+ *   6. /api/alerts/evaluate  → evalúa alertas
+ *   7. /api/cron/import-activecampaign → importa deals "Contrato firmado"
+ *      (solo en modo full — Vercel Hobby limita a 2 cron jobs propios, así
+ *      que este paso vive acá en vez de tener su propia entrada en
+ *      vercel.json — ver docs/superpowers/specs/2026-07-21-activecampaign-import-design.md)
  *
  * Auth: header X-Cron-Secret debe coincidir con CRON_SECRET (Vercel Cron lo añade
  * automáticamente vía vercel.json). En dev se puede omitir.
@@ -31,6 +36,7 @@ interface AuditSteps {
   consumo?: { inserted: number; days: number };
   casa_metrics?: { upserted: number; range_days: number };
   alerts?: { evaluated: number; fired: number };
+  activecampaign?: { imported: number; linked: number; skipped: number; errors: number };
 }
 
 export async function GET(request: Request) {
@@ -127,8 +133,26 @@ export async function GET(request: Request) {
       errors.push(`alerts: ${e instanceof Error ? e.message : e}`);
     }
 
+    // 7. Importar deals "Contrato firmado" de ActiveCampaign — solo en modo
+    // full (no crítico en tiempo, y el quick=1 ya está apretado de 60s).
+    if (!quick) {
+      try {
+        const j = (await callInternal('/api/cron/import-activecampaign')) as {
+          imported?: number; linked_to_existing?: number; skipped?: number; errors?: unknown[];
+        };
+        steps.activecampaign = {
+          imported: j.imported ?? 0,
+          linked: j.linked_to_existing ?? 0,
+          skipped: j.skipped ?? 0,
+          errors: j.errors?.length ?? 0,
+        };
+      } catch (e) {
+        errors.push(`activecampaign: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+
     // Update audit
-    const finalStatus = errors.length === 0 ? 'success' : errors.length === 6 ? 'error' : 'partial';
+    const finalStatus = errors.length === 0 ? 'success' : errors.length === 7 ? 'error' : 'partial';
     if (auditId) {
       await supabaseAdmin
         .from('cron_runs')

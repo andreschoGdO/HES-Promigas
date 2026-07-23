@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/compute-curtailment",
       "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/cron/import-activecampaign",
-      "schedule": "0 8 * * *"
     }
   ]
 }

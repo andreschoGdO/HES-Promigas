@@ -15,8 +15,15 @@ import { mapDealToProject } from '@/lib/activecampaign-mapping';
  *
  * Ver docs/superpowers/specs/2026-07-21-activecampaign-import-design.md
  *
- * Auth: misma convención que los demás crons — Authorization Bearer
- * CRON_SECRET, o header x-trigger: manual desde la UI interna.
+ * No tiene entrada propia en vercel.json — Vercel Hobby limita a 2 cron
+ * jobs y ya estaban ocupados por /api/cron/sync y /api/cron/compute-
+ * curtailment. En su lugar, /api/cron/sync lo llama como un paso más de
+ * su cascada diaria (header x-internal-cron). Se puede seguir invocando
+ * suelto para pruebas manuales (x-trigger: manual) o vía Vercel Cron si
+ * el plan cambia a Pro y se le agrega su propia entrada.
+ *
+ * Auth: Authorization Bearer CRON_SECRET, x-trigger: manual (UI interna),
+ * o x-internal-cron: 1 (llamada same-origin desde /api/cron/sync).
  */
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -29,7 +36,8 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   const auth = request.headers.get('authorization') ?? '';
   const isInternalUI = (request.headers.get('x-trigger') ?? 'cron') === 'manual';
-  if (secret && auth !== `Bearer ${secret}` && !isInternalUI) {
+  const isInternalCascade = request.headers.get('x-internal-cron') === '1';
+  if (secret && auth !== `Bearer ${secret}` && !isInternalUI && !isInternalCascade) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 

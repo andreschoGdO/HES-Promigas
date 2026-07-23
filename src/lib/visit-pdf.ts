@@ -165,10 +165,17 @@ const drawFieldsTable = (doc: jsPDF, startY: number, fields: VisitField[], formD
       theme: 'grid',
       styles: { fontSize: 8, cellPadding: 1.5, lineColor: BORDER, lineWidth: 0.2, textColor: TEXT },
       columnStyles: {
+        // Anchos fijos (no 'auto'): con 'auto', jspdf-autotable calcula el
+        // ancho de cada columna mirando el contenido más angosto de TODAS
+        // las filas de esa posición — como esta tabla mezcla valores cortos
+        // ("7", "4.16") y largos ("JA SOLAR", "1 SERIE") en la misma
+        // columna, terminaba calculando un ancho tan chico que el texto se
+        // partía letra por letra en vez de por palabra. Fijo = 186mm
+        // (ancho útil de la página) repartido 48/45/48/45.
         0: { fontStyle: 'normal', fillColor: '#fafafa', cellWidth: 48 },
-        1: { cellWidth: 'auto' },
+        1: { cellWidth: 45 },
         2: { fontStyle: 'normal', fillColor: '#fafafa', cellWidth: 48 },
-        3: { cellWidth: 'auto' },
+        3: { cellWidth: 45 },
       },
       margin: { left: 12, right: 12 },
     });

@@ -100,10 +100,10 @@ export async function POST(request: Request) {
           reason: result.reason,
           message:
             result.reason === 'no_credentials'
-              ? 'Faltan DEYE_APP_ID / DEYE_APP_SECRET en el entorno.'
+              ? 'Faltan DEYE_APP_ID / DEYE_APP_SECRET / DEYE_ACCOUNT_EMAIL / DEYE_ACCOUNT_PASSWORD en el entorno.'
               : result.reason === 'no_device_sn'
                 ? `El inversor ${dev.name} no tiene deye_device_sn configurado.`
-                : 'Adapter Deye en esqueleto; falta implementar el POST /order/control.',
+                : 'Lectura de Deye Cloud ya funciona; el envío de comandos de control sigue sin implementar (permiso de escritura sin confirmar).',
           would_send: { marca: dev.marca, inverter_name: dev.name, action: body.action, value: body.value, unit: range.unit },
         };
       }

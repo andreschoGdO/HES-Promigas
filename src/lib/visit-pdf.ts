@@ -238,9 +238,9 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
   }
 
   // Cada sección del schema → título + tabla
-  for (const sec of schema.sections) {
+  schema.sections.forEach((sec, idx) => {
     // Saltar la sección de "Registro fotográfico" (las fotos van aparte)
-    if (sec.title.toLowerCase().includes('registro fotográfico') || sec.title.toLowerCase().includes('observaciones') || sec.title.toLowerCase().includes('aprobación')) continue;
+    if (sec.title.toLowerCase().includes('registro fotográfico') || sec.title.toLowerCase().includes('observaciones') || sec.title.toLowerCase().includes('aprobación')) return;
 
     // Si no cabe el título + 1 fila → nueva página
     if (y > pageHeight - 40) {
@@ -250,11 +250,20 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
 
     y = drawSectionTitle(doc, y, sec.title);
 
+    // Para "instalación", la Casa vive en la misma sección fusionada que en
+    // pantalla (I. Identificación de la instalación) aunque no sea un campo
+    // del schema — se inyecta como fila sintética al frente de la tabla.
+    const isInstalacionIdent = visit.visit_type === 'instalacion' && idx === 0;
+    const fields = isInstalacionIdent
+      ? [{ key: '__casa', label: 'Casa', type: 'text' } as VisitField, ...sec.fields]
+      : sec.fields;
+    const formData = isInstalacionIdent ? { ...visit.form_data, __casa: visit.casa } : visit.form_data;
+
     // Decidir 1 o 2 columnas según cantidad de fields
-    const cols: 1 | 2 = sec.fields.length > 4 ? 2 : 1;
-    y = drawFieldsTable(doc, y, sec.fields, visit.form_data, { columns: cols });
+    const cols: 1 | 2 = fields.length > 4 ? 2 : 1;
+    y = drawFieldsTable(doc, y, fields, formData, { columns: cols });
     y += 2;
-  }
+  });
 
   // Sección observaciones (caja grande con texto libre)
   const obsSection = schema.sections.find((s) => s.title.toLowerCase().includes('observaciones'));

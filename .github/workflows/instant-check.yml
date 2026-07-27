@@ -12,10 +12,12 @@ name: Instant Check (15min control loop)
 #   (debe coincidir con CRON_SECRET en las env vars de Vercel)
 
 on:
-  schedule:
-    # Cada 15 minutos. Cron de GitHub Actions tiene mínimo de 5 min en teoría,
-    # pero por load del scheduler suele ejecutar con ±2-5 min de drift.
-    - cron: '*/15 * * * *'
+  # Desactivado: el job fallaba en ~5s cada corrida (ver historial de Actions).
+  # Para reactivar, descomentar el bloque `schedule` de abajo.
+  # schedule:
+  #   # Cada 15 minutos. Cron de GitHub Actions tiene mínimo de 5 min en teoría,
+  #   # pero por load del scheduler suele ejecutar con ±2-5 min de drift.
+  #   - cron: '*/15 * * * *'
   workflow_dispatch: {}
 
 permissions:

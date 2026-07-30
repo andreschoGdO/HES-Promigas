@@ -41,7 +41,7 @@ export const ALWAYS_VISIBLE_IDS: ReadonlySet<string> = new Set();
 
 /** Catálogo completo de items que se pueden mostrar/ocultar */
 export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: string; group: 'general' | 'sistema' }> = [
-  { id: 'funnel-topleads', label: 'Funnel TopLeads',       group: 'general' },
+  { id: 'funnel-topleads', label: 'Funnel Comercial (TopLeads)', group: 'general' },
   { id: 'operaciones',   label: 'Construcción',            group: 'general' },
   { id: 'planner',       label: 'Planner',                 group: 'general' },
   { id: 'ordenes-compra', label: 'Órdenes de Compra',      group: 'general' },

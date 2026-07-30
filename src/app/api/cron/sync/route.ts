@@ -39,7 +39,7 @@ interface AuditSteps {
   casa_metrics?: { upserted: number; range_days: number };
   alerts?: { evaluated: number; fired: number };
   activecampaign?: { imported: number; linked: number; skipped: number; errors: number };
-  topleads_funnel?: { funnel_deals: number; construccion_deals: number };
+  topleads_funnel?: { funnel_deals: number };
 }
 
 export async function GET(request: Request) {
@@ -153,15 +153,14 @@ export async function GET(request: Request) {
         errors.push(`activecampaign: ${e instanceof Error ? e.message : e}`);
       }
 
-      // 8. Foto diaria del funnel de TopLeads + BD Clientes Firmados Construcción.
+      // 8. Foto diaria del funnel de ventas de TopLeads. La BD Clientes
+      // Firmados Construcción se consulta en vivo desde crm_projects, no
+      // necesita snapshot (ver /api/topleads/construccion).
       try {
         const j = (await callInternal('/api/cron/topleads-funnel')) as {
-          funnel_stages?: number; funnel_deals?: number; construccion_deals?: number;
+          funnel_stages?: number; funnel_deals?: number;
         };
-        steps.topleads_funnel = {
-          funnel_deals: j.funnel_deals ?? 0,
-          construccion_deals: j.construccion_deals ?? 0,
-        };
+        steps.topleads_funnel = { funnel_deals: j.funnel_deals ?? 0 };
       } catch (e) {
         errors.push(`topleads_funnel: ${e instanceof Error ? e.message : e}`);
       }

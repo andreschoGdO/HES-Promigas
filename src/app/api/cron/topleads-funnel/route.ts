@@ -1,19 +1,21 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { listPipelines, listAllDealStages, listDealsByGroup, getContact } from '@/lib/activecampaign';
+import { listPipelines, listAllDealStages, listDealsByGroup } from '@/lib/activecampaign';
 
-const PIPELINE_VENTAS_ID = '1';   // "Prospectos Sunny"
-const PIPELINE_CONSTRUCCION_ID = '4'; // "Constructoras" — el "CRM de construcción"
+const PIPELINE_VENTAS_ID = '1'; // "Prospectos Sunny"
 
 /**
  * GET /api/cron/topleads-funnel
  *
- * Foto diaria (reemplaza todo) de:
- *  1. El funnel de ventas (pipeline "Prospectos Sunny"): conteo + valor
- *     por etapa → topleads_funnel_snapshot.
- *  2. Todos los deals del pipeline "Constructoras" (el CRM de
- *     construcción) → topleads_construccion_deals — la "BD Clientes
- *     Firmados Construcción".
+ * Foto diaria (reemplaza todo) del funnel de ventas de TopLeads (pipeline
+ * "Prospectos Sunny"): conteo + valor por etapa, solo deals abiertos →
+ * topleads_funnel_snapshot.
+ *
+ * La "BD Clientes Firmados Construcción" NO vive acá — sale de nuestro
+ * propio crm_projects, en vivo (ver /api/topleads/construccion). La
+ * primera versión de este cron asumía que salía del pipeline
+ * "Constructoras" de TopLeads; corregido en migración 61 al comparar
+ * contra el Excel real de referencia.
  *
  * No tiene entrada propia en vercel.json (mismo motivo que
  * import-activecampaign — Vercel Hobby limita a 2 crons): lo llama
@@ -41,7 +43,6 @@ export async function GET(request: Request) {
       .filter((s) => s.group === PIPELINE_VENTAS_ID)
       .sort((a, b) => Number(a.order) - Number(b.order));
 
-    // ---- 1. Funnel de ventas ----
     // Solo deals ABIERTOS (status '0') — igual que la vista Kanban de
     // TopLeads, que por defecto filtra "Estado: Abierto". Un deal Ganado o
     // Perdido queda con la última etapa guardada, pero ya no cuenta como
@@ -71,44 +72,10 @@ export async function GET(request: Request) {
       if (error) throw error;
     }
 
-    // ---- 2. BD Clientes Firmados Construcción (pipeline "Constructoras") ----
-    const construccionDeals = await listDealsByGroup(PIPELINE_CONSTRUCCION_ID);
-    const stageTitleById = new Map(stages.map((s) => [s.id, s.title]));
-
-    // Resolver contactos una sola vez por id (varios deals comparten el mismo contacto/constructora).
-    const contactIds = Array.from(new Set(construccionDeals.map((d) => d.contact).filter(Boolean)));
-    const contactById = new Map<string, { firstName: string; lastName: string; email: string; phone: string } | null>();
-    for (const cid of contactIds) {
-      contactById.set(cid, await getContact(cid));
-    }
-
-    const construccionRows = construccionDeals.map((d) => {
-      const contact = contactById.get(d.contact) ?? null;
-      return {
-        ac_deal_id: d.id,
-        title: d.title,
-        stage_id: d.stage,
-        stage_title: stageTitleById.get(d.stage) ?? d.stage,
-        contact_name: contact ? `${contact.firstName} ${contact.lastName}`.trim() : null,
-        contact_email: contact?.email ?? null,
-        contact_phone: contact?.phone ?? null,
-        value: Number(d.value ?? 0),
-        ac_created_at: d.cdate ? new Date(d.cdate).toISOString() : null,
-        ac_updated_at: d.mdate ? new Date(d.mdate).toISOString() : null,
-      };
-    });
-
-    await supabaseAdmin.from('topleads_construccion_deals').delete().neq('ac_deal_id', '');
-    if (construccionRows.length > 0) {
-      const { error } = await supabaseAdmin.from('topleads_construccion_deals').insert(construccionRows);
-      if (error) throw error;
-    }
-
     return NextResponse.json({
       ok: true,
       funnel_stages: funnelRows.length,
       funnel_deals: ventasDeals.length,
-      construccion_deals: construccionRows.length,
     });
   } catch (err) {
     return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : 'Error' }, { status: 500 });

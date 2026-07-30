@@ -13,37 +13,44 @@ interface FunnelStage {
   deals_value_total: number;
 }
 
-interface ConstruccionDeal {
-  id: string;
-  ac_deal_id: string;
-  title: string;
-  stage_title: string;
-  contact_name: string | null;
-  contact_email: string | null;
-  contact_phone: string | null;
-  value: number;
-  ac_created_at: string | null;
-  ac_updated_at: string | null;
+interface ConstruccionRow {
+  numero: number;
+  fecha_firma: string | null;
+  dias_desde_firma: number | null;
+  titulo: string;
+  ciudad: string | null;
+  conjunto_residencial: string | null;
+  casa: string | null;
+  nombre_completo: string | null;
+  fecha_estimada_inicio: string | null;
+  dias_para_inicio: number | null;
+  estudio_estructural: string;
+  instalacion: string | null;
+  zona: 'Valle' | 'Costa';
 }
 
+type ZonaFiltro = 'todas' | 'Valle' | 'Costa';
+
 const fmtCOP = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
-const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-CO') : '—');
+const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-CO') : 'NO FECHA');
 const fmtDateTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-CO') : 'nunca');
 
 export default function FunnelTopLeadsPage() {
   const [stages, setStages] = useState<FunnelStage[]>([]);
   const [funnelCapturedAt, setFunnelCapturedAt] = useState<string | null>(null);
-  const [deals, setDeals] = useState<ConstruccionDeal[]>([]);
+  const [deals, setDeals] = useState<ConstruccionRow[]>([]);
   const [dealsCapturedAt, setDealsCapturedAt] = useState<string | null>(null);
+  const [zona, setZona] = useState<ZonaFiltro>('todas');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (zonaFiltro: ZonaFiltro) => {
     setLoading(true);
+    const qs = zonaFiltro === 'todas' ? '' : `?zona=${zonaFiltro}`;
     const [fRes, dRes] = await Promise.all([
       fetch('/api/topleads/funnel'),
-      fetch('/api/topleads/construccion'),
+      fetch(`/api/topleads/construccion${qs}`),
     ]);
     const fJson = await fRes.json();
     const dJson = await dRes.json();
@@ -54,7 +61,7 @@ export default function FunnelTopLeadsPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(zona); }, [load, zona]);
 
   const refreshNow = async () => {
     setRefreshing(true);
@@ -62,17 +69,18 @@ export default function FunnelTopLeadsPage() {
     const res = await fetch('/api/cron/topleads-funnel', { headers: { 'x-trigger': 'manual' } });
     const json = await res.json();
     if (!res.ok || !json.ok) { setError(json.error ?? 'No se pudo refrescar'); setRefreshing(false); return; }
-    await load();
+    await load(zona);
     setRefreshing(false);
   };
 
   const downloadDeals = () => {
     downloadCSV(
-      `bd-clientes-firmados-construccion-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Proyecto', 'Etapa', 'Contacto', 'Email', 'Teléfono', 'Valor', 'Creado', 'Actualizado'],
+      `bd-clientes-firmados-construccion-${zona === 'todas' ? 'todas' : zona.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`,
+      ['#', 'Fecha de firma', 'Días', 'Título', 'CIUDAD', 'Conjunto Residencial', 'Casa', 'Nombre Completo', 'Fecha estimada inicio', 'DÍAS', 'Estudio estructural', 'Instalación', 'Zona'],
       deals.map((d) => [
-        d.title, d.stage_title, d.contact_name ?? '', d.contact_email ?? '', d.contact_phone ?? '',
-        d.value, fmtDate(d.ac_created_at), fmtDate(d.ac_updated_at),
+        d.numero, fmtDate(d.fecha_firma), d.dias_desde_firma ?? '', d.titulo, d.ciudad ?? '',
+        d.conjunto_residencial ?? '', d.casa ?? '', d.nombre_completo ?? '', fmtDate(d.fecha_estimada_inicio),
+        d.dias_para_inicio ?? 'NO FECHA', d.estudio_estructural, d.instalacion ?? '', d.zona,
       ]),
     );
   };
@@ -99,7 +107,7 @@ export default function FunnelTopLeadsPage() {
       {error && <div className="alert-error">{error}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-        <StatCard label="Deals en el funnel" value={String(totalDeals)} hint="pipeline Prospectos Sunny" />
+        <StatCard label="Deals en el funnel" value={String(totalDeals)} hint="pipeline Prospectos Sunny, abiertos" />
         <StatCard label="Valor total en pipeline" value={fmtCOP(totalValue)} hint="suma de todas las etapas" />
         <StatCard label="Contrato firmado" value={String(firmados)} hint="etapa de conversión" />
       </div>
@@ -135,7 +143,7 @@ export default function FunnelTopLeadsPage() {
               </div>
             ))}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 6 }}>
-              <TrendingDown size={13} /> Orden = el mismo de las etapas del pipeline en TopLeads.
+              <TrendingDown size={13} /> Orden = el mismo de las etapas del pipeline en TopLeads. Solo deals abiertos (no Ganados/Perdidos).
             </div>
           </div>
         )}
@@ -149,31 +157,46 @@ export default function FunnelTopLeadsPage() {
           </button>
         </div>
         <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 0 }}>
-          Todos los proyectos del pipeline &ldquo;Constructoras&rdquo; de TopLeads (el CRM de construcción) — actualizado {fmtDateTime(dealsCapturedAt)}.
+          Casas con contrato firmado en zona Valle o Costa — en vivo desde el CRM, {fmtDateTime(dealsCapturedAt)}.
         </p>
+        <div className="tabs" style={{ marginBottom: 14 }}>
+          {(['todas', 'Valle', 'Costa'] as ZonaFiltro[]).map((z) => (
+            <button key={z} className={`tab ${zona === z ? 'active' : ''}`} onClick={() => setZona(z)}>
+              {z === 'todas' ? 'Todas' : z}
+            </button>
+          ))}
+        </div>
         {loading ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
         ) : deals.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin datos todavía.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin casas firmadas en esta zona todavía.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
               <thead>
                 <tr style={{ background: 'var(--bg-elevated)', textAlign: 'left' }}>
-                  {['Proyecto', 'Etapa', 'Contacto', 'Valor', 'Creado', 'Actualizado'].map((h) => (
-                    <th key={h} style={{ padding: '8px 10px', fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>
+                  {['#', 'Fecha de firma', 'Días', 'Título', 'CIUDAD', 'Conjunto', 'Casa', 'Nombre completo', 'Fecha est. inicio', 'DÍAS', 'Estudio estructural', 'Instalación'].map((h) => (
+                    <th key={h} style={{ padding: '7px 9px', fontSize: '0.64rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {deals.map((d) => (
-                  <tr key={d.id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: 8, fontWeight: 600 }}>{d.title}</td>
-                    <td style={{ padding: 8 }}><span className="badge-warning">{d.stage_title}</span></td>
-                    <td style={{ padding: 8 }}>{d.contact_name ?? '—'}</td>
-                    <td style={{ padding: 8 }}>{fmtCOP(d.value)}</td>
-                    <td style={{ padding: 8 }}>{fmtDate(d.ac_created_at)}</td>
-                    <td style={{ padding: 8 }}>{fmtDate(d.ac_updated_at)}</td>
+                  <tr key={d.numero} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: 7 }}>{d.numero}</td>
+                    <td style={{ padding: 7 }}>{fmtDate(d.fecha_firma)}</td>
+                    <td style={{ padding: 7 }}>{d.dias_desde_firma ?? '—'}</td>
+                    <td style={{ padding: 7, fontWeight: 600, maxWidth: 260 }}>{d.titulo}</td>
+                    <td style={{ padding: 7 }}>{d.ciudad ?? '—'}</td>
+                    <td style={{ padding: 7 }}>{d.conjunto_residencial ?? '—'}</td>
+                    <td style={{ padding: 7 }}>{d.casa ?? '—'}</td>
+                    <td style={{ padding: 7 }}>{d.nombre_completo ?? '—'}</td>
+                    <td style={{ padding: 7 }}>{fmtDate(d.fecha_estimada_inicio)}</td>
+                    <td style={{ padding: 7 }}>{d.dias_para_inicio ?? 'NO FECHA'}</td>
+                    <td style={{ padding: 7 }}>
+                      <span className={d.estudio_estructural === 'APROBADO' ? 'badge-success' : 'badge-warning'}>{d.estudio_estructural}</span>
+                    </td>
+                    <td style={{ padding: 7 }}>{d.instalacion ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

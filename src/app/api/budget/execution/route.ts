@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { isExecutedStage, computeOcPricing, PURCHASE_ORDER_CATEGORIES, CONSTRUCTION_CATEGORIES } from '@/lib/purchase-orders';
+import { isExecutedStage, computeOcPricing, resolvePrecioKwp, PURCHASE_ORDER_CATEGORIES, CONSTRUCTION_CATEGORIES } from '@/lib/purchase-orders';
 
 const CONSTRUCTION_SET = new Set(CONSTRUCTION_CATEGORIES);
 
@@ -21,18 +21,20 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const anio = Number(url.searchParams.get('anio') ?? new Date().getFullYear());
 
-  const [{ data: budgetItems, error: bErr }, { data: ocs, error: ocErr }, { data: items, error: itErr }, { data: assignments, error: aErr }] = await Promise.all([
+  const [{ data: budgetItems, error: bErr }, { data: ocs, error: ocErr }, { data: items, error: itErr }, { data: assignments, error: aErr }, { data: solutionPrices, error: spErr }] = await Promise.all([
     supabaseAdmin.from('budget_items').select('grupo_nombre, precio_total').eq('anio', anio),
     supabaseAdmin.from('purchase_orders').select('id, kwp_total, valor_total, fecha_documento'),
     supabaseAdmin.from('purchase_order_items').select('oc_id, categoria, valor_total'),
-    supabaseAdmin.from('purchase_order_house_assignments').select('oc_id, kwp_asignado, monto_fijo, project:crm_projects(operations_stage)'),
+    supabaseAdmin.from('purchase_order_house_assignments').select('oc_id, kwp_asignado, monto_fijo, solucion, project:crm_projects(operations_stage)'),
+    supabaseAdmin.from('purchase_order_solution_prices').select('oc_id, solucion, precio_kwp'),
   ]);
   if (bErr) return NextResponse.json({ error: bErr.message }, { status: 500 });
   if (ocErr) return NextResponse.json({ error: ocErr.message }, { status: 500 });
   if (itErr) return NextResponse.json({ error: itErr.message }, { status: 500 });
   if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 });
+  if (spErr) return NextResponse.json({ error: spErr.message }, { status: 500 });
 
-  type Assignment = { oc_id: string; kwp_asignado: number | null; monto_fijo: number | null; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
+  type Assignment = { oc_id: string; kwp_asignado: number | null; monto_fijo: number | null; solucion: number | null; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
 
   const ejecutadoPorCategoria = new Map<string, number>();
 
@@ -42,18 +44,18 @@ export async function GET(request: Request) {
 
     const ocItems = (items ?? []).filter((i) => i.oc_id === oc.id);
     const { precioKwpConstruccion, construccionSubtotal, flatSubtotal } = computeOcPricing(ocItems, oc.kwp_total);
+    const ocSolutionPrices = (solutionPrices ?? []).filter((sp) => sp.oc_id === oc.id);
 
     const ocAssignments = ((assignments ?? []) as Assignment[]).filter((a) => a.oc_id === oc.id);
-    let kwpEjecutado = 0;
-    let montoFijoEjecutado = 0;
+    let costoConstruccionEjecutado = 0;
+    let costoFlatEjecutado = 0;
     for (const a of ocAssignments) {
       const stage = Array.isArray(a.project) ? a.project[0]?.operations_stage : a.project?.operations_stage;
       if (!isExecutedStage(stage)) continue;
-      kwpEjecutado += Number(a.kwp_asignado ?? 0);
-      montoFijoEjecutado += Number(a.monto_fijo ?? 0);
+      const precio = resolvePrecioKwp(a.solucion, ocSolutionPrices, precioKwpConstruccion);
+      costoConstruccionEjecutado += Number(a.kwp_asignado ?? 0) * precio;
+      costoFlatEjecutado += Number(a.monto_fijo ?? 0);
     }
-    const costoConstruccionEjecutado = kwpEjecutado * precioKwpConstruccion;
-    const costoFlatEjecutado = montoFijoEjecutado;
 
     for (const item of ocItems) {
       const esConstruccion = CONSTRUCTION_SET.has(item.categoria);

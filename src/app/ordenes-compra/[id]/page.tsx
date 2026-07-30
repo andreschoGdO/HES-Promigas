@@ -233,7 +233,13 @@ export default function OrdenDeCompraDetallePage() {
           </div>
         </div>
         <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 0 }}>
-          Si esta OC cobra distinto según la solución de la casa (1-4), definilo acá. Dejalo vacío para un precio único (kWp de la OC = valor total / kWp total).
+          Si esta OC cobra distinto según la solución de la casa (1-4), definilo acá — el precio de la solución
+          de la casa asignada manda sobre el promedio de las líneas de construcción. Dejalo vacío para usar el
+          promedio (suma de líneas de construcción / kWp total).
+          <br />
+          <strong>Ojo con la unidad:</strong> si el PDF de la OC trae el precio por Watt (ej. &ldquo;$1.590/UN&rdquo;
+          con Cantidad en Wp, como Shuman Solar 4800015213), acá va por <strong>kWp</strong> — multiplicá ×1.000
+          (ej. $1.590/Wp → $1.590.000/kWp).
         </p>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
           <thead>

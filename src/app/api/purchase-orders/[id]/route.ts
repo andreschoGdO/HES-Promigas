@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { isExecutedStage, computeOcPricing, computeAssignmentCost } from '@/lib/purchase-orders';
+import { isExecutedStage, computeOcPricing, computeAssignmentCost, resolvePrecioKwp } from '@/lib/purchase-orders';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -27,12 +27,14 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
   if (ocErr || !oc) return NextResponse.json({ error: 'Orden de compra no encontrada' }, { status: 404 });
 
-  type Assignment = { kwp_asignado: number | null; monto_fijo: number | null; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
+  type Assignment = { kwp_asignado: number | null; monto_fijo: number | null; solucion: number | null; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
   const { precioKwpConstruccion, construccionSubtotal, flatSubtotal } = computeOcPricing(items ?? [], oc.kwp_total);
   const kwpAsignado = (assignments ?? []).reduce((sum, a) => sum + Number(a.kwp_asignado ?? 0), 0);
   const costoEjecutado = (assignments ?? []).reduce((sum, a: Assignment) => {
     const stage = Array.isArray(a.project) ? a.project[0]?.operations_stage : a.project?.operations_stage;
-    return isExecutedStage(stage) ? sum + computeAssignmentCost(a.kwp_asignado, a.monto_fijo, precioKwpConstruccion) : sum;
+    if (!isExecutedStage(stage)) return sum;
+    const precio = resolvePrecioKwp(a.solucion, solutionPrices ?? [], precioKwpConstruccion);
+    return sum + computeAssignmentCost(a.kwp_asignado, a.monto_fijo, precio);
   }, 0);
 
   return NextResponse.json({

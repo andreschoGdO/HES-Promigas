@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { isExecutedStage, computeOcPricing, computeAssignmentCost } from '@/lib/purchase-orders';
+import { isExecutedStage, computeOcPricing, computeAssignmentCost, resolvePrecioKwp } from '@/lib/purchase-orders';
 
 /**
  * GET /api/purchase-orders
@@ -13,18 +13,20 @@ import { isExecutedStage, computeOcPricing, computeAssignmentCost } from '@/lib/
  * líneas de otro tema (ej. medidores), y esas no se prorratean por kWp.
  */
 export async function GET() {
-  const [{ data: ocs, error: ocErr }, { data: items, error: itErr }, { data: assignments, error: aErr }, { data: addenda, error: adErr }] = await Promise.all([
+  const [{ data: ocs, error: ocErr }, { data: items, error: itErr }, { data: assignments, error: aErr }, { data: addenda, error: adErr }, { data: solutionPrices, error: spErr }] = await Promise.all([
     supabaseAdmin.from('purchase_orders').select('*').order('fecha_documento', { ascending: false }),
     supabaseAdmin.from('purchase_order_items').select('oc_id, categoria, valor_total'),
     supabaseAdmin
       .from('purchase_order_house_assignments')
       .select('oc_id, project_id, kwp_asignado, monto_fijo, solucion, project:crm_projects(operations_stage)'),
     supabaseAdmin.from('purchase_order_addenda').select('id, oc_id'),
+    supabaseAdmin.from('purchase_order_solution_prices').select('oc_id, solucion, precio_kwp'),
   ]);
   if (ocErr) return NextResponse.json({ error: ocErr.message }, { status: 500 });
   if (itErr) return NextResponse.json({ error: itErr.message }, { status: 500 });
   if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 });
   if (adErr) return NextResponse.json({ error: adErr.message }, { status: 500 });
+  if (spErr) return NextResponse.json({ error: spErr.message }, { status: 500 });
 
   type AssignmentRow = { oc_id: string; project_id: string; kwp_asignado: number | null; monto_fijo: number | null; solucion: number | null; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
 
@@ -36,13 +38,17 @@ export async function GET() {
   const enriched = (ocs ?? []).map((oc) => {
     const ocItems = (items ?? []).filter((i) => i.oc_id === oc.id);
     const { precioKwpConstruccion } = computeOcPricing(ocItems, oc.kwp_total);
+    const ocSolutionPrices = (solutionPrices ?? []).filter((sp) => sp.oc_id === oc.id);
     const ocAssignments = ((assignments ?? []) as AssignmentRow[]).filter((a) => a.oc_id === oc.id);
     const kwpAsignado = ocAssignments.reduce((sum, a) => sum + Number(a.kwp_asignado ?? 0), 0);
 
     let costoEjecutado = 0;
     for (const a of ocAssignments) {
       const stage = Array.isArray(a.project) ? a.project[0]?.operations_stage : a.project?.operations_stage;
-      if (isExecutedStage(stage)) costoEjecutado += computeAssignmentCost(a.kwp_asignado, a.monto_fijo, precioKwpConstruccion);
+      if (isExecutedStage(stage)) {
+        const precio = resolvePrecioKwp(a.solucion, ocSolutionPrices, precioKwpConstruccion);
+        costoEjecutado += computeAssignmentCost(a.kwp_asignado, a.monto_fijo, precio);
+      }
     }
 
     return {

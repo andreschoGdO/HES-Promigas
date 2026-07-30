@@ -77,16 +77,42 @@ export function computeOcPricing(items: PoItemLike[], kwpTotal: number | null): 
   return { construccionSubtotal, flatSubtotal, precioKwpConstruccion };
 }
 
+export interface SolutionPriceLike {
+  solucion: number | null;
+  precio_kwp: number;
+}
+
+/**
+ * Algunas OC (ej. Shuman Solar 4800015213) traen una línea de mano de obra
+ * POR solución (1, 2, 3...), cada una con su propio $/kWp — no un precio
+ * promedio de toda la OC. Si la casa tiene `solucion` asignada y esa OC
+ * tiene un precio cargado para esa solución específica en
+ * `purchase_order_solution_prices`, ese precio manda sobre el promedio
+ * derivado de `computeOcPricing`.
+ */
+export function resolvePrecioKwp(
+  solucion: number | null | undefined,
+  solutionPrices: SolutionPriceLike[],
+  precioKwpConstruccion: number,
+): number {
+  if (solucion != null) {
+    const match = solutionPrices.find((sp) => sp.solucion === solucion);
+    if (match) return Number(match.precio_kwp);
+  }
+  return precioKwpConstruccion;
+}
+
 /**
  * Costo total que le corresponde a una casa asignada a una OC: su parte de
- * construcción (kwp_asignado × $/kWp derivado de las líneas de
- * construcción) más su monto fijo (capturado a mano, para líneas de "otro
- * tema" como medidores — no hay regla automática de reparto para esas).
+ * construcción (kwp_asignado × $/kWp — el de su solución si esa OC tiene
+ * precio por solución, si no el promedio de las líneas de construcción)
+ * más su monto fijo (capturado a mano, para líneas de "otro tema" como
+ * medidores — no hay regla automática de reparto para esas).
  */
 export function computeAssignmentCost(
   kwpAsignado: number | null | undefined,
   montoFijo: number | null | undefined,
-  precioKwpConstruccion: number,
+  precioKwp: number,
 ): number {
-  return Number(kwpAsignado ?? 0) * precioKwpConstruccion + Number(montoFijo ?? 0);
+  return Number(kwpAsignado ?? 0) * precioKwp + Number(montoFijo ?? 0);
 }

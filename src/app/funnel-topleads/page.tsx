@@ -26,7 +26,15 @@ interface ConstruccionRow {
   dias_para_inicio: number | null;
   estudio_estructural: string;
   instalacion: string | null;
-  zona: 'Valle' | 'Costa';
+  zona: 'Valle' | 'Costa' | 'Sin zona';
+  operations_stage: string;
+}
+
+interface ConstruccionSummary {
+  por_instalar: number;
+  en_instalacion: number;
+  instalados: number;
+  legalizandose: number;
 }
 
 type ZonaFiltro = 'todas' | 'Valle' | 'Costa';
@@ -40,28 +48,51 @@ export default function FunnelTopLeadsPage() {
   const [funnelCapturedAt, setFunnelCapturedAt] = useState<string | null>(null);
   const [deals, setDeals] = useState<ConstruccionRow[]>([]);
   const [dealsCapturedAt, setDealsCapturedAt] = useState<string | null>(null);
+  const [construccionSummary, setConstruccionSummary] = useState<ConstruccionSummary>({ por_instalar: 0, en_instalacion: 0, instalados: 0, legalizandose: 0 });
   const [zona, setZona] = useState<ZonaFiltro>('todas');
-  const [loading, setLoading] = useState(true);
+  const [funnelLoading, setFunnelLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (zonaFiltro: ZonaFiltro) => {
-    setLoading(true);
-    const qs = zonaFiltro === 'todas' ? '' : `?zona=${zonaFiltro}`;
-    const [fRes, dRes] = await Promise.all([
-      fetch('/api/topleads/funnel'),
-      fetch(`/api/topleads/construccion${qs}`),
-    ]);
-    const fJson = await fRes.json();
-    const dJson = await dRes.json();
-    setStages(fJson.stages ?? []);
-    setFunnelCapturedAt(fJson.capturedAt ?? null);
-    setDeals(dJson.deals ?? []);
-    setDealsCapturedAt(dJson.capturedAt ?? null);
-    setLoading(false);
+  const loadFunnel = useCallback(async () => {
+    setFunnelLoading(true);
+    try {
+      const fRes = await fetch('/api/topleads/funnel', { cache: 'no-store' });
+      const fJson = await fRes.json();
+      setStages(fJson.stages ?? []);
+      setFunnelCapturedAt(fJson.capturedAt ?? null);
+    } finally {
+      setFunnelLoading(false);
+    }
   }, []);
 
-  useEffect(() => { load(zona); }, [load, zona]);
+  const loadDeals = useCallback(async (zonaFiltro: ZonaFiltro) => {
+    setTableLoading(true);
+    const qs = zonaFiltro === 'todas' ? '' : `?zona=${zonaFiltro}`;
+    try {
+      const dRes = await fetch(`/api/topleads/construccion${qs}`, { cache: 'no-store' });
+      const dJson = await dRes.json();
+      setDeals(dJson.deals ?? []);
+      setConstruccionSummary(dJson.summary ?? { por_instalar: 0, en_instalacion: 0, instalados: 0, legalizandose: 0 });
+      setDealsCapturedAt(dJson.capturedAt ?? null);
+    } finally {
+      setTableLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadFunnel(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadFunnel]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadDeals(zona); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadDeals, zona]);
+  useEffect(() => {
+    const interval = window.setInterval(() => { loadDeals(zona); }, 60_000);
+    return () => window.clearInterval(interval);
+  }, [loadDeals, zona]);
 
   const refreshNow = async () => {
     setRefreshing(true);
@@ -69,7 +100,7 @@ export default function FunnelTopLeadsPage() {
     const res = await fetch('/api/cron/topleads-funnel', { headers: { 'x-trigger': 'manual' } });
     const json = await res.json();
     if (!res.ok || !json.ok) { setError(json.error ?? 'No se pudo refrescar'); setRefreshing(false); return; }
-    await load(zona);
+    await loadFunnel();
     setRefreshing(false);
   };
 
@@ -94,7 +125,7 @@ export default function FunnelTopLeadsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.3rem' }}>Funnel TopLeads</h1>
+          <h1 style={{ margin: 0, fontSize: '1.3rem' }}>Funnel Comercial</h1>
           <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             Pipeline de ventas &ldquo;Prospectos Sunny&rdquo; — actualizado {fmtDateTime(funnelCapturedAt)}.
           </p>
@@ -114,7 +145,7 @@ export default function FunnelTopLeadsPage() {
 
       <section className="card">
         <div className="card-header"><span className="card-title">Funnel por etapa</span></div>
-        {loading ? (
+        {funnelLoading ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
         ) : stages.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
@@ -150,14 +181,27 @@ export default function FunnelTopLeadsPage() {
       </section>
 
       <section className="card">
+        <div className="card-header"><span className="card-title">Estado real de Construcción</span></div>
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 0 }}>
+          Datos vivos del CRM: obras por instalar, en ejecución, instaladas y en legalización.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 12 }}>
+          <StatCard label="Por instalar" value={String(construccionSummary.por_instalar)} hint="dimensionado o alistamiento" />
+          <StatCard label="En instalación" value={String(construccionSummary.en_instalacion)} hint="obra en curso" />
+          <StatCard label="Instalados" value={String(construccionSummary.instalados)} hint="operativos" />
+          <StatCard label="Legalizándose" value={String(construccionSummary.legalizandose)} hint="trámite AGPE" />
+        </div>
+      </section>
+
+      <section className="card">
         <div className="card-header">
-          <span className="card-title">BD Clientes Firmados Construcción</span>
+          <span className="card-title">Obras activas de Construcción</span>
           <button className="secondary-btn" onClick={downloadDeals} disabled={deals.length === 0}>
             <Download size={14} /> Descargar
           </button>
         </div>
         <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 0 }}>
-          Casas con contrato firmado en zona Valle o Costa — en vivo desde el CRM, {fmtDateTime(dealsCapturedAt)}.
+          Datos en vivo del CRM de Construcción; esta tabla se actualiza sola cada minuto, {fmtDateTime(dealsCapturedAt)}.
         </p>
         <div className="tabs" style={{ marginBottom: 14 }}>
           {(['todas', 'Valle', 'Costa'] as ZonaFiltro[]).map((z) => (
@@ -166,10 +210,10 @@ export default function FunnelTopLeadsPage() {
             </button>
           ))}
         </div>
-        {loading ? (
+        {tableLoading ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
         ) : deals.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin casas firmadas en esta zona todavía.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin obras activas de Construcción en esta zona todavía.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>

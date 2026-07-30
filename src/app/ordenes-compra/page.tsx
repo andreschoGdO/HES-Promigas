@@ -13,10 +13,10 @@ interface PurchaseOrder {
   numero_oc: string;
   proveedor: string;
   fecha_documento: string | null;
-  kwp_total: number;
+  kwp_total: number | null;
   valor_total: number;
   kwp_asignado: number;
-  pct_kwp_asignado: number;
+  pct_kwp_asignado: number | null;
   costo_ejecutado: number;
   costo_no_ejecutado: number;
   casas_count: number;
@@ -54,8 +54,8 @@ export default function OrdenesDeCompraPage() {
       `ordenes-de-compra-${new Date().toISOString().slice(0, 10)}.csv`,
       ['Numero OC', 'Proveedor', 'Fecha', 'kWp OC', 'kWp asignado', '% asignado', 'Valor total', 'Costo ejecutado', 'Costo no ejecutado', 'Casas asignadas', 'Adicionales'],
       ocs.map((o) => [
-        o.numero_oc, o.proveedor, o.fecha_documento ?? '', o.kwp_total, o.kwp_asignado.toFixed(2),
-        fmtPct(o.pct_kwp_asignado), o.valor_total, Math.round(o.costo_ejecutado), Math.round(o.costo_no_ejecutado),
+        o.numero_oc, o.proveedor, o.fecha_documento ?? '', o.kwp_total ?? '', o.kwp_asignado.toFixed(2),
+        o.pct_kwp_asignado != null ? fmtPct(o.pct_kwp_asignado) : '', o.valor_total, Math.round(o.costo_ejecutado), Math.round(o.costo_no_ejecutado),
         o.casas_count, o.tiene_adicionales ? `Sí (${o.adicionales_count})` : 'No',
       ]),
     );
@@ -115,8 +115,8 @@ export default function OrdenesDeCompraPage() {
               <Link key="n" href={`/ordenes-compra/${o.id}`} style={{ fontWeight: 700, color: 'var(--accent)' }}>{o.numero_oc}</Link>,
               o.proveedor,
               o.casas_count,
-              `${o.kwp_total.toLocaleString('es-CO')} kWp`,
-              fmtPct(o.pct_kwp_asignado),
+              o.kwp_total != null ? `${o.kwp_total.toLocaleString('es-CO')} kWp` : '—',
+              o.pct_kwp_asignado != null ? fmtPct(o.pct_kwp_asignado) : '—',
               fmtCOP(o.costo_ejecutado),
               fmtCOP(o.costo_no_ejecutado),
               o.tiene_adicionales
@@ -166,7 +166,7 @@ function ImportOcModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
           fecha_documento: form.fecha_documento || null,
           fecha_entrega: form.fecha_entrega || null,
           condiciones_pago: form.condiciones_pago || null,
-          kwp_total: Number(form.kwp_total),
+          kwp_total: form.kwp_total ? Number(form.kwp_total) : null,
           valor_total: Number(form.valor_total),
           observaciones: form.observaciones || null,
         }),
@@ -199,7 +199,7 @@ function ImportOcModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
           <Field label="Proveedor *"><input value={form.proveedor} onChange={(e) => set('proveedor', e.target.value)} placeholder="ESTRUCCON INGENIERIA SAS" /></Field>
           <Field label="Fecha documento"><input type="date" value={form.fecha_documento} onChange={(e) => set('fecha_documento', e.target.value)} /></Field>
           <Field label="Fecha entrega"><input type="date" value={form.fecha_entrega} onChange={(e) => set('fecha_entrega', e.target.value)} /></Field>
-          <Field label="kWp total OC *"><input type="number" value={form.kwp_total} onChange={(e) => set('kwp_total', e.target.value)} placeholder="205.28" /></Field>
+          <Field label="kWp total OC (si aplica)"><input type="number" value={form.kwp_total} onChange={(e) => set('kwp_total', e.target.value)} placeholder="205.28 — dejalo vacío si la OC no es de construcción" /></Field>
           <Field label="Valor total (COP) *"><input type="number" value={form.valor_total} onChange={(e) => set('valor_total', e.target.value)} placeholder="472650198" /></Field>
           <Field label="Condiciones de pago"><input value={form.condiciones_pago} onChange={(e) => set('condiciones_pago', e.target.value)} placeholder="Dentro de los 30 días sin DPP" /></Field>
           <Field label="PDF de la OC"><input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
@@ -212,7 +212,7 @@ function ImportOcModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
           <button
             className="primary-btn"
             onClick={submit}
-            disabled={saving || !form.numero_oc || !form.proveedor || !form.kwp_total || !form.valor_total}
+            disabled={saving || !form.numero_oc || !form.proveedor || !form.valor_total}
           >
             <FileText size={14} /> {saving ? 'Guardando…' : 'Crear OC'}
           </button>

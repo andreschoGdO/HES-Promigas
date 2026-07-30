@@ -1,15 +1,21 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { isExecutedStage, PURCHASE_ORDER_CATEGORIES } from '@/lib/purchase-orders';
+import { isExecutedStage, computeOcPricing, PURCHASE_ORDER_CATEGORIES, CONSTRUCTION_CATEGORIES } from '@/lib/purchase-orders';
+
+const CONSTRUCTION_SET = new Set(CONSTRUCTION_CATEGORIES);
 
 /**
  * GET /api/budget/execution?anio=2026
  *
  * Presupuestado vs ejecutado por categoría, agregado — SIN vínculo línea a
- * línea con las OC (decisión tomada: ver plan). "Ejecutado" de una línea de
- * OC/adicional se prorratea con el mismo % ejecutado de su OC (el kWp de
- * las casas ya en instalación+ sobre el kWp total de esa OC), y solo se
- * cuenta si `fecha_documento` de la OC cae en el año consultado.
+ * línea con las OC (ver plan). Por cada OC del año consultado:
+ *   - la porción "construcción" ejecutada (kWp de casas en instalación+
+ *     × $/kWp de esa OC) se reparte entre sus líneas de construcción,
+ *     proporcional al peso de cada línea;
+ *   - la porción "otro tema" ejecutada (monto_fijo de casas en
+ *     instalación+) se reparte entre sus líneas de otro tema, igual.
+ * Así una OC mixta (ej. mano de obra + medidores, ver Estruccon
+ * 4200028778) no infla "Medidores" con el % de avance de la construcción.
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -19,34 +25,45 @@ export async function GET(request: Request) {
     supabaseAdmin.from('budget_items').select('grupo_nombre, precio_total').eq('anio', anio),
     supabaseAdmin.from('purchase_orders').select('id, kwp_total, valor_total, fecha_documento'),
     supabaseAdmin.from('purchase_order_items').select('oc_id, categoria, valor_total'),
-    supabaseAdmin.from('purchase_order_house_assignments').select('oc_id, kwp_asignado, project:crm_projects(operations_stage)'),
+    supabaseAdmin.from('purchase_order_house_assignments').select('oc_id, kwp_asignado, monto_fijo, project:crm_projects(operations_stage)'),
   ]);
   if (bErr) return NextResponse.json({ error: bErr.message }, { status: 500 });
   if (ocErr) return NextResponse.json({ error: ocErr.message }, { status: 500 });
   if (itErr) return NextResponse.json({ error: itErr.message }, { status: 500 });
   if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 });
 
-  type Assignment = { oc_id: string; kwp_asignado: number; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
+  type Assignment = { oc_id: string; kwp_asignado: number | null; monto_fijo: number | null; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
 
-  // % ejecutado por OC (mismo cálculo que /api/purchase-orders)
-  const pctEjecutadoPorOc = new Map<string, number>();
+  const ejecutadoPorCategoria = new Map<string, number>();
+
   for (const oc of ocs ?? []) {
     const anioOc = oc.fecha_documento ? new Date(oc.fecha_documento).getFullYear() : null;
     if (anioOc !== anio) continue; // solo OC del año consultado
-    const ocAssignments = ((assignments ?? []) as Assignment[]).filter((a) => a.oc_id === oc.id);
-    const kwpEjecutado = ocAssignments.reduce((sum, a) => {
-      const stage = Array.isArray(a.project) ? a.project[0]?.operations_stage : a.project?.operations_stage;
-      return isExecutedStage(stage) ? sum + Number(a.kwp_asignado) : sum;
-    }, 0);
-    pctEjecutadoPorOc.set(oc.id, oc.kwp_total > 0 ? kwpEjecutado / oc.kwp_total : 0);
-  }
 
-  const ejecutadoPorCategoria = new Map<string, number>();
-  for (const item of items ?? []) {
-    const pct = pctEjecutadoPorOc.get(item.oc_id);
-    if (pct == null) continue; // OC no es del año consultado
-    const actual = ejecutadoPorCategoria.get(item.categoria) ?? 0;
-    ejecutadoPorCategoria.set(item.categoria, actual + Number(item.valor_total) * pct);
+    const ocItems = (items ?? []).filter((i) => i.oc_id === oc.id);
+    const { precioKwpConstruccion, construccionSubtotal, flatSubtotal } = computeOcPricing(ocItems, oc.kwp_total);
+
+    const ocAssignments = ((assignments ?? []) as Assignment[]).filter((a) => a.oc_id === oc.id);
+    let kwpEjecutado = 0;
+    let montoFijoEjecutado = 0;
+    for (const a of ocAssignments) {
+      const stage = Array.isArray(a.project) ? a.project[0]?.operations_stage : a.project?.operations_stage;
+      if (!isExecutedStage(stage)) continue;
+      kwpEjecutado += Number(a.kwp_asignado ?? 0);
+      montoFijoEjecutado += Number(a.monto_fijo ?? 0);
+    }
+    const costoConstruccionEjecutado = kwpEjecutado * precioKwpConstruccion;
+    const costoFlatEjecutado = montoFijoEjecutado;
+
+    for (const item of ocItems) {
+      const esConstruccion = CONSTRUCTION_SET.has(item.categoria);
+      const share = esConstruccion
+        ? (construccionSubtotal > 0 ? Number(item.valor_total) / construccionSubtotal : 0)
+        : (flatSubtotal > 0 ? Number(item.valor_total) / flatSubtotal : 0);
+      const costoEjecutadoOc = esConstruccion ? costoConstruccionEjecutado : costoFlatEjecutado;
+      const actual = ejecutadoPorCategoria.get(item.categoria) ?? 0;
+      ejecutadoPorCategoria.set(item.categoria, actual + costoEjecutadoOc * share);
+    }
   }
 
   const presupuestadoPorGrupo = new Map<string, number>();

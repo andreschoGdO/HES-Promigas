@@ -7,7 +7,8 @@ interface RouteContext {
 
 interface AssignmentInput {
   oc_id: string;
-  kwp_asignado: number;
+  kwp_asignado?: number | null;
+  monto_fijo?: number | null;
   solucion?: number | null;
 }
 
@@ -29,10 +30,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
 /**
  * PUT /api/crm/projects/[id]/oc-assignments
  * Reemplaza TODA la lista de OC asignadas a esta casa (mismo patrón
- * "reemplazar todo" que consumables de inventario). Valida:
+ * "reemplazar todo" que consumables de inventario). Cada fila lleva
+ * kwp_asignado (parte de construcción) y/o monto_fijo (parte de "otro
+ * tema", ej. medidores — capturado a mano). Valida:
  *   1. La suma de kwp_asignado de esta casa no supera su diseno_kwp.
- *   2. Cada OC individual sigue teniendo cupo (kwp_total - lo ya asignado
- *      a OTRAS casas) para el kwp que le estamos pidiendo acá.
+ *   2. Cada OC individual sigue teniendo cupo de kWp (si se pide kWp).
  */
 export async function PUT(request: Request, { params }: RouteContext) {
   try {
@@ -46,7 +48,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const { data: project, error: pErr } = await supabaseAdmin.from('crm_projects').select('diseno_kwp').eq('id', id).single();
     if (pErr || !project) return NextResponse.json({ error: 'Proyecto no encontrado' }, { status: 404 });
 
-    const sumaCasa = rows.reduce((sum, r) => sum + Number(r.kwp_asignado), 0);
+    const sumaCasa = rows.reduce((sum, r) => sum + Number(r.kwp_asignado ?? 0), 0);
     if (project.diseno_kwp != null && sumaCasa > Number(project.diseno_kwp) + 1e-9) {
       return NextResponse.json(
         { error: `La suma de kWp asignados (${sumaCasa.toFixed(2)}) supera el kWp diseñado de la casa (${project.diseno_kwp}).` },
@@ -55,11 +57,18 @@ export async function PUT(request: Request, { params }: RouteContext) {
     }
 
     for (const [i, row] of rows.entries()) {
-      if (!row.oc_id || !(Number(row.kwp_asignado) > 0)) {
-        return NextResponse.json({ error: `Fila ${i + 1}: oc_id y kwp_asignado (>0) son requeridos` }, { status: 400 });
+      const hasKwp = row.kwp_asignado != null && Number(row.kwp_asignado) > 0;
+      const hasMonto = row.monto_fijo != null && Number(row.monto_fijo) >= 0;
+      if (!row.oc_id || (!hasKwp && !hasMonto)) {
+        return NextResponse.json({ error: `Fila ${i + 1}: oc_id y (kwp_asignado y/o monto_fijo) son requeridos` }, { status: 400 });
       }
+      if (!hasKwp) continue; // sin parte de kWp, nada que validar contra el cupo de la OC
+
       const { data: oc, error: ocErr } = await supabaseAdmin.from('purchase_orders').select('kwp_total').eq('id', row.oc_id).single();
       if (ocErr || !oc) return NextResponse.json({ error: `Fila ${i + 1}: OC no encontrada` }, { status: 404 });
+      if (!(oc.kwp_total > 0)) {
+        return NextResponse.json({ error: `Fila ${i + 1}: esa OC no tiene kwp_total definido, no se le puede asignar kWp` }, { status: 400 });
+      }
 
       const { data: others, error: othErr } = await supabaseAdmin
         .from('purchase_order_house_assignments')
@@ -68,7 +77,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
         .neq('project_id', id);
       if (othErr) throw othErr;
 
-      const yaAsignadoOtras = (others ?? []).reduce((sum, a) => sum + Number(a.kwp_asignado), 0);
+      const yaAsignadoOtras = (others ?? []).reduce((sum, a) => sum + Number(a.kwp_asignado ?? 0), 0);
       const disponible = Number(oc.kwp_total) - yaAsignadoOtras;
       if (Number(row.kwp_asignado) > disponible + 1e-9) {
         return NextResponse.json(
@@ -86,7 +95,8 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const insertRows = rows.map((r) => ({
       oc_id: r.oc_id,
       project_id: id,
-      kwp_asignado: Number(r.kwp_asignado),
+      kwp_asignado: r.kwp_asignado != null && Number(r.kwp_asignado) > 0 ? Number(r.kwp_asignado) : null,
+      monto_fijo: r.monto_fijo != null && Number(r.monto_fijo) >= 0 ? Number(r.monto_fijo) : null,
       solucion: r.solucion ?? null,
     }));
     const { data, error: insErr } = await supabaseAdmin

@@ -13,6 +13,7 @@ interface Item {
   id?: string;
   posicion: number;
   categoria: string;
+  codigo_servicio: string | null;
   descripcion: string;
   cantidad: number | null;
   unidad: string | null;
@@ -25,7 +26,8 @@ interface SolutionPrice { id?: string; solucion: number | null; precio_kwp: numb
 interface Assignment {
   id: string;
   project_id: string;
-  kwp_asignado: number;
+  kwp_asignado: number | null;
+  monto_fijo: number | null;
   solucion: number | null;
   project: { id: string; title: string; conjunto: string | null; casa_numero: string | null; diseno_kwp: number | null; operations_stage: string | null };
 }
@@ -123,7 +125,7 @@ export default function OrdenDeCompraDetallePage() {
     load();
   };
 
-  const ocData = oc as { numero_oc: string; proveedor: string; fecha_documento: string | null; fecha_entrega: string | null; kwp_total: number; valor_total: number; kwp_asignado: number; pct_kwp_asignado: number; costo_ejecutado: number; costo_no_ejecutado: number; observaciones: string | null; pdf_storage_path: string | null };
+  const ocData = oc as { numero_oc: string; proveedor: string; fecha_documento: string | null; fecha_entrega: string | null; kwp_total: number | null; valor_total: number; kwp_asignado: number; pct_kwp_asignado: number | null; costo_ejecutado: number; costo_no_ejecutado: number; observaciones: string | null; pdf_storage_path: string | null; construccion_subtotal: number; flat_subtotal: number };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -142,9 +144,14 @@ export default function OrdenDeCompraDetallePage() {
         <div className="grid grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, fontSize: '0.85rem' }}>
           <Kv label="Fecha documento" value={ocData.fecha_documento ?? '—'} />
           <Kv label="Fecha entrega" value={ocData.fecha_entrega ?? '—'} />
-          <Kv label="kWp total" value={`${ocData.kwp_total} kWp`} />
-          <Kv label="kWp asignado" value={`${ocData.kwp_asignado.toFixed(2)} kWp (${ocData.pct_kwp_asignado.toFixed(1)}%)`} />
+          <Kv label="kWp total" value={ocData.kwp_total != null ? `${ocData.kwp_total} kWp` : 'No aplica (sin líneas de construcción)'} />
+          <Kv
+            label="kWp asignado"
+            value={ocData.kwp_total != null ? `${ocData.kwp_asignado.toFixed(2)} kWp (${(ocData.pct_kwp_asignado ?? 0).toFixed(1)}%)` : '—'}
+          />
           <Kv label="Valor total" value={fmtCOP(ocData.valor_total)} />
+          <Kv label="· Construcción (por kWp)" value={fmtCOP(ocData.construccion_subtotal ?? 0)} />
+          <Kv label="· Otro tema (monto fijo por casa)" value={fmtCOP(ocData.flat_subtotal ?? 0)} />
           <Kv label="Costo ejecutado" value={fmtCOP(ocData.costo_ejecutado)} />
           <Kv label="Costo no ejecutado" value={fmtCOP(ocData.costo_no_ejecutado)} />
         </div>
@@ -162,17 +169,20 @@ export default function OrdenDeCompraDetallePage() {
         <div className="card-header">
           <span className="card-title">Líneas de detalle</span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="secondary-btn" onClick={() => setItems((it) => [...it, { posicion: it.length + 1, categoria: CATEGORIAS[0], descripcion: '', cantidad: null, unidad: null, precio_unitario: null, valor_total: 0 }])}>
+            <button className="secondary-btn" onClick={() => setItems((it) => [...it, { posicion: it.length + 1, categoria: CATEGORIAS[0], codigo_servicio: null, descripcion: '', cantidad: null, unidad: null, precio_unitario: null, valor_total: 0 }])}>
               <Plus size={14} /> Agregar línea
             </button>
             <button className="primary-btn" onClick={saveItems} disabled={savingItems}><Save size={14} /> {savingItems ? 'Guardando…' : 'Guardar líneas'}</button>
           </div>
         </div>
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 0 }}>
+          Una OC puede mezclar líneas de <strong>construcción</strong> (Inversor, Batería, BMS, Paneles, Puntos de anclaje, Análisis estructural, Mano de obra — se reparten entre casas por kWp) con líneas de <strong>otro tema</strong> (Medidores, Modem, Equipos adicionales, Factibilidad, Otro — se reparten con un monto fijo por casa, en &ldquo;Casas asignadas&rdquo; abajo).
+        </p>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
             <thead>
               <tr style={{ background: 'var(--bg-elevated)', textAlign: 'left' }}>
-                {['Categoría', 'Descripción', 'Cantidad', 'Unidad', 'Precio unit.', 'Valor total', ''].map((h) => (
+                {['Categoría', 'Código de servicio', 'Descripción', 'Cantidad', 'Unidad', 'Precio unit.', 'Valor total', ''].map((h) => (
                   <th key={h} style={{ padding: '8px 10px', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>
                 ))}
               </tr>
@@ -184,6 +194,9 @@ export default function OrdenDeCompraDetallePage() {
                     <select value={it.categoria} onChange={(e) => setItems((rows) => rows.map((r, j) => j === i ? { ...r, categoria: e.target.value } : r))}>
                       {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
+                  </td>
+                  <td style={{ padding: 6 }}>
+                    <input value={it.codigo_servicio ?? ''} onChange={(e) => setItems((rows) => rows.map((r, j) => j === i ? { ...r, codigo_servicio: e.target.value } : r))} style={{ width: 100 }} placeholder="70000018" />
                   </td>
                   <td style={{ padding: 6 }}>
                     <input value={it.descripcion} onChange={(e) => setItems((rows) => rows.map((r, j) => j === i ? { ...r, descripcion: e.target.value } : r))} style={{ minWidth: 180 }} />
@@ -205,7 +218,7 @@ export default function OrdenDeCompraDetallePage() {
                   </td>
                 </tr>
               ))}
-              {items.length === 0 && <tr><td colSpan={7} style={{ padding: 12, color: 'var(--text-muted)' }}>Sin líneas todavía.</td></tr>}
+              {items.length === 0 && <tr><td colSpan={8} style={{ padding: 12, color: 'var(--text-muted)' }}>Sin líneas todavía.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -258,20 +271,21 @@ export default function OrdenDeCompraDetallePage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
           <thead>
             <tr style={{ background: 'var(--bg-elevated)', textAlign: 'left' }}>
-              <th style={{ padding: 8 }}>Casa</th><th style={{ padding: 8 }}>kWp asignado</th><th style={{ padding: 8 }}>Solución</th><th style={{ padding: 8 }}>Etapa</th><th></th>
+              <th style={{ padding: 8 }}>Casa</th><th style={{ padding: 8 }}>kWp (construcción)</th><th style={{ padding: 8 }}>Monto fijo (otro tema)</th><th style={{ padding: 8 }}>Solución</th><th style={{ padding: 8 }}>Etapa</th><th></th>
             </tr>
           </thead>
           <tbody>
             {assignments.map((a) => (
               <tr key={a.id} style={{ borderTop: '1px solid var(--border)' }}>
                 <td style={{ padding: 8 }}>{a.project.title} {a.project.conjunto ? `— ${a.project.conjunto} #${a.project.casa_numero ?? ''}` : ''}</td>
-                <td style={{ padding: 8 }}>{a.kwp_asignado} kWp</td>
+                <td style={{ padding: 8 }}>{a.kwp_asignado != null ? `${a.kwp_asignado} kWp` : '—'}</td>
+                <td style={{ padding: 8 }}>{a.monto_fijo != null ? fmtCOP(a.monto_fijo) : '—'}</td>
                 <td style={{ padding: 8 }}>{a.solucion ?? '—'}</td>
                 <td style={{ padding: 8 }}><span className="badge-warning">{a.project.operations_stage ?? '—'}</span></td>
                 <td style={{ padding: 8 }}><button className="icon-btn" onClick={() => unassign(a.project_id)} aria-label="Quitar"><Trash2 size={13} /></button></td>
               </tr>
             ))}
-            {assignments.length === 0 && <tr><td colSpan={5} style={{ padding: 12, color: 'var(--text-muted)' }}>Sin casas asignadas todavía.</td></tr>}
+            {assignments.length === 0 && <tr><td colSpan={6} style={{ padding: 12, color: 'var(--text-muted)' }}>Sin casas asignadas todavía.</td></tr>}
           </tbody>
         </table>
       </section>
@@ -318,6 +332,7 @@ function AssignHouseModal({ ocId, onClose, onSuccess }: { ocId: string; onClose:
   const [options, setOptions] = useState<CasaOption[]>([]);
   const [selected, setSelected] = useState<CasaOption | null>(null);
   const [kwp, setKwp] = useState('');
+  const [montoFijo, setMontoFijo] = useState('');
   const [solucion, setSolucion] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -333,13 +348,18 @@ function AssignHouseModal({ ocId, onClose, onSuccess }: { ocId: string; onClose:
   }, [q]);
 
   const submit = async () => {
-    if (!selected || !kwp) return;
+    if (!selected || (!kwp && !montoFijo)) return;
     setSaving(true);
     setError(null);
     const res = await fetch(`/api/purchase-orders/${ocId}/assignments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project_id: selected.id, kwp_asignado: Number(kwp), solucion: solucion ? Number(solucion) : null }),
+      body: JSON.stringify({
+        project_id: selected.id,
+        kwp_asignado: kwp ? Number(kwp) : null,
+        monto_fijo: montoFijo ? Number(montoFijo) : null,
+        solucion: solucion ? Number(solucion) : null,
+      }),
     });
     const json = await res.json();
     if (!res.ok) { setError(json.error); setSaving(false); return; }
@@ -372,7 +392,9 @@ function AssignHouseModal({ ocId, onClose, onSuccess }: { ocId: string; onClose:
             <button className="icon-btn" onClick={() => setSelected(null)} aria-label="Cambiar"><Trash2 size={13} /></button>
           </div>
         )}
-        <Field label="kWp asignado a esta casa *"><input type="number" value={kwp} onChange={(e) => setKwp(e.target.value)} /></Field>
+        <Field label="kWp asignado (parte de construcción)"><input type="number" value={kwp} onChange={(e) => setKwp(e.target.value)} placeholder="ej. 5.5" /></Field>
+        <Field label="Monto fijo COP (parte de otro tema, ej. medidor)"><input type="number" value={montoFijo} onChange={(e) => setMontoFijo(e.target.value)} placeholder="ej. 5000000" /></Field>
+        <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '-6px 0 0' }}>Al menos uno de los dos. Podés cargar ambos si la casa recibe plata de las dos partes de esta OC.</p>
         <Field label="Solución (opcional)">
           <select value={solucion} onChange={(e) => setSolucion(e.target.value)}>
             <option value="">Sin especificar</option>
@@ -381,7 +403,7 @@ function AssignHouseModal({ ocId, onClose, onSuccess }: { ocId: string; onClose:
         </Field>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="secondary-btn" onClick={onClose}>Cancelar</button>
-          <button className="primary-btn" onClick={submit} disabled={saving || !selected || !kwp}>{saving ? 'Asignando…' : 'Asignar'}</button>
+          <button className="primary-btn" onClick={submit} disabled={saving || !selected || (!kwp && !montoFijo)}>{saving ? 'Asignando…' : 'Asignar'}</button>
         </div>
       </div>
     </ModalShell>
@@ -435,7 +457,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-interface AddendumItem { id?: string; posicion: number; categoria: string; descripcion: string; cantidad: number | null; unidad: string | null; precio_unitario: number | null; valor_total: number; }
+interface AddendumItem { id?: string; posicion: number; categoria: string; codigo_servicio: string | null; descripcion: string; cantidad: number | null; unidad: string | null; precio_unitario: number | null; valor_total: number; }
 interface AddendumAssignment { id: string; project_id: string; porcentaje: number; detalle: string | null; project: { title: string; conjunto: string | null; casa_numero: string | null } }
 
 /**
@@ -500,7 +522,7 @@ function AddendumRow({ addendum }: { addendum: Addendum }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <strong style={{ fontSize: '0.82rem' }}>Líneas de detalle</strong>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button className="secondary-btn" onClick={() => setItems((it) => [...it, { posicion: it.length + 1, categoria: CATEGORIAS[0], descripcion: '', cantidad: null, unidad: null, precio_unitario: null, valor_total: 0 }])}>
+                    <button className="secondary-btn" onClick={() => setItems((it) => [...it, { posicion: it.length + 1, categoria: CATEGORIAS[0], codigo_servicio: null, descripcion: '', cantidad: null, unidad: null, precio_unitario: null, valor_total: 0 }])}>
                       <Plus size={12} /> Línea
                     </button>
                     <button className="primary-btn" onClick={saveItems} disabled={savingItems}><Save size={12} /> Guardar</button>
@@ -515,12 +537,13 @@ function AddendumRow({ addendum }: { addendum: Addendum }) {
                             {CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
                           </select>
                         </td>
+                        <td style={{ padding: 4 }}><input value={it.codigo_servicio ?? ''} onChange={(e) => setItems((rows) => rows.map((r, j) => j === i ? { ...r, codigo_servicio: e.target.value } : r))} style={{ width: 90 }} placeholder="Código" /></td>
                         <td style={{ padding: 4 }}><input value={it.descripcion} onChange={(e) => setItems((rows) => rows.map((r, j) => j === i ? { ...r, descripcion: e.target.value } : r))} style={{ minWidth: 160 }} /></td>
                         <td style={{ padding: 4 }}><input type="number" value={it.valor_total} onChange={(e) => setItems((rows) => rows.map((r, j) => j === i ? { ...r, valor_total: Number(e.target.value) } : r))} style={{ width: 110 }} /></td>
                         <td style={{ padding: 4 }}><button className="icon-btn" onClick={() => setItems((rows) => rows.filter((_, j) => j !== i))} aria-label="Quitar"><Trash2 size={12} /></button></td>
                       </tr>
                     ))}
-                    {items.length === 0 && <tr><td colSpan={4} style={{ padding: 8, color: 'var(--text-muted)' }}>Sin líneas.</td></tr>}
+                    {items.length === 0 && <tr><td colSpan={5} style={{ padding: 8, color: 'var(--text-muted)' }}>Sin líneas.</td></tr>}
                   </tbody>
                 </table>
               </div>

@@ -1333,8 +1333,8 @@ function DetailSection({ title, children }: { title: string; children: React.Rea
   );
 }
 
-interface OcOption { id: string; numero_oc: string; proveedor: string; kwp_total: number; }
-interface OcAssignmentRow { oc_id: string; kwp_asignado: number; solucion: number | null; purchaseOrder?: { numero_oc: string; proveedor: string } }
+interface OcOption { id: string; numero_oc: string; proveedor: string; kwp_total: number | null; }
+interface OcAssignmentRow { oc_id: string; kwp_asignado: number | null; monto_fijo: number | null; solucion: number | null; purchaseOrder?: { numero_oc: string; proveedor: string } }
 
 /**
  * Reparte el kWp diseñado de esta casa entre una o varias Órdenes de
@@ -1359,7 +1359,7 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
       ]);
       const aJson = await aRes.json();
       const ocJson = await ocRes.json();
-      setRows((aJson.assignments ?? []).map((a: { oc_id: string; kwp_asignado: number; solucion: number | null; purchaseOrder: { numero_oc: string; proveedor: string } }) => ({ oc_id: a.oc_id, kwp_asignado: a.kwp_asignado, solucion: a.solucion, purchaseOrder: a.purchaseOrder })));
+      setRows((aJson.assignments ?? []).map((a: { oc_id: string; kwp_asignado: number | null; monto_fijo: number | null; solucion: number | null; purchaseOrder: { numero_oc: string; proveedor: string } }) => ({ oc_id: a.oc_id, kwp_asignado: a.kwp_asignado, monto_fijo: a.monto_fijo, solucion: a.solucion, purchaseOrder: a.purchaseOrder })));
       setOcOptions(ocJson.purchaseOrders ?? []);
       setLoading(false);
     })();
@@ -1373,7 +1373,7 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
     const res = await fetch(`/api/crm/projects/${projectId}/oc-assignments`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ assignments: rows.map((r) => ({ oc_id: r.oc_id, kwp_asignado: Number(r.kwp_asignado), solucion: r.solucion })) }),
+      body: JSON.stringify({ assignments: rows.map((r) => ({ oc_id: r.oc_id, kwp_asignado: r.kwp_asignado ? Number(r.kwp_asignado) : null, monto_fijo: r.monto_fijo ? Number(r.monto_fijo) : null, solucion: r.solucion })) }),
     });
     const json = await res.json();
     if (!res.ok) { setError(json.error); setSaving(false); return; }
@@ -1399,10 +1399,20 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
           <input
             type="number"
             placeholder="kWp"
+            title="kWp asignado (parte de construcción)"
             value={row.kwp_asignado || ''}
             disabled={disabled}
-            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, kwp_asignado: Number(e.target.value) } : x))}
-            style={{ width: 90 }}
+            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, kwp_asignado: e.target.value ? Number(e.target.value) : null } : x))}
+            style={{ width: 80 }}
+          />
+          <input
+            type="number"
+            placeholder="Monto fijo $"
+            title="Monto fijo (parte de otro tema, ej. medidor)"
+            value={row.monto_fijo || ''}
+            disabled={disabled}
+            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, monto_fijo: e.target.value ? Number(e.target.value) : null } : x))}
+            style={{ width: 100 }}
           />
           <select
             value={row.solucion ?? ''}
@@ -1419,7 +1429,7 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
         </div>
       ))}
       {!disabled && (
-        <button className="secondary-btn" onClick={() => setRows((r) => [...r, { oc_id: '', kwp_asignado: 0, solucion: null }])} style={{ marginTop: 4 }}>
+        <button className="secondary-btn" onClick={() => setRows((r) => [...r, { oc_id: '', kwp_asignado: null, monto_fijo: null, solucion: null }])} style={{ marginTop: 4 }}>
           <Plus size={13} /> Agregar OC
         </button>
       )}

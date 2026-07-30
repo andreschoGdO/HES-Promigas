@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { isExecutedStage } from '@/lib/purchase-orders';
+import { isExecutedStage, computeOcPricing, computeAssignmentCost } from '@/lib/purchase-orders';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -27,21 +27,24 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
   if (ocErr || !oc) return NextResponse.json({ error: 'Orden de compra no encontrada' }, { status: 404 });
 
-  type Assignment = { kwp_asignado: number; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
-  const kwpAsignado = (assignments ?? []).reduce((sum, a) => sum + Number(a.kwp_asignado), 0);
-  const precioKwpPromedio = oc.kwp_total > 0 ? oc.valor_total / oc.kwp_total : 0;
+  type Assignment = { kwp_asignado: number | null; monto_fijo: number | null; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
+  const { precioKwpConstruccion, construccionSubtotal, flatSubtotal } = computeOcPricing(items ?? [], oc.kwp_total);
+  const kwpAsignado = (assignments ?? []).reduce((sum, a) => sum + Number(a.kwp_asignado ?? 0), 0);
   const costoEjecutado = (assignments ?? []).reduce((sum, a: Assignment) => {
     const stage = Array.isArray(a.project) ? a.project[0]?.operations_stage : a.project?.operations_stage;
-    return isExecutedStage(stage) ? sum + Number(a.kwp_asignado) * precioKwpPromedio : sum;
+    return isExecutedStage(stage) ? sum + computeAssignmentCost(a.kwp_asignado, a.monto_fijo, precioKwpConstruccion) : sum;
   }, 0);
 
   return NextResponse.json({
     purchaseOrder: {
       ...oc,
       kwp_asignado: kwpAsignado,
-      pct_kwp_asignado: oc.kwp_total > 0 ? Math.min(100, (kwpAsignado / oc.kwp_total) * 100) : 0,
+      pct_kwp_asignado: oc.kwp_total && oc.kwp_total > 0 ? Math.min(100, (kwpAsignado / oc.kwp_total) * 100) : null,
       costo_ejecutado: costoEjecutado,
       costo_no_ejecutado: Math.max(0, Number(oc.valor_total) - costoEjecutado),
+      construccion_subtotal: construccionSubtotal,
+      flat_subtotal: flatSubtotal,
+      precio_kwp_construccion: precioKwpConstruccion,
     },
     items: items ?? [],
     solutionPrices: solutionPrices ?? [],

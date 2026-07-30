@@ -8,6 +8,7 @@ interface RouteContext {
 interface ItemInput {
   posicion: number;
   categoria: string;
+  codigo_servicio?: string | null;
   descripcion: string;
   cantidad?: number | null;
   unidad?: string | null;
@@ -43,6 +44,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
       addendum_id: id,
       posicion: item.posicion ?? i + 1,
       categoria: item.categoria,
+      codigo_servicio: item.codigo_servicio || null,
       descripcion: item.descripcion,
       cantidad: item.cantidad ?? null,
       unidad: item.unidad || null,

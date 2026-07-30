@@ -42,7 +42,11 @@ export async function GET(request: Request) {
       .sort((a, b) => Number(a.order) - Number(b.order));
 
     // ---- 1. Funnel de ventas ----
-    const ventasDeals = await listDealsByGroup(PIPELINE_VENTAS_ID);
+    // Solo deals ABIERTOS (status '0') — igual que la vista Kanban de
+    // TopLeads, que por defecto filtra "Estado: Abierto". Un deal Ganado o
+    // Perdido queda con la última etapa guardada, pero ya no cuenta como
+    // "en" esa etapa del funnel activo.
+    const ventasDeals = (await listDealsByGroup(PIPELINE_VENTAS_ID)).filter((d) => d.status === '0');
     const countByStage = new Map<string, { count: number; value: number }>();
     for (const d of ventasDeals) {
       const acc = countByStage.get(d.stage) ?? { count: 0, value: 0 };

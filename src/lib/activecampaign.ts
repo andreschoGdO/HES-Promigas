@@ -36,6 +36,10 @@ export interface AcDeal {
   group: string;
   stage: string;
   cdate: string;
+  mdate: string;
+  value: string;
+  currency: string;
+  status: string; // '0' abierto, '1' ganado, '2' perdido
 }
 
 /** Lista todos los deals en una etapa dada, paginando de a 100. */
@@ -52,6 +56,46 @@ export async function listDealsByStage(stageId: string): Promise<AcDeal[]> {
     if (offset >= Number(j.meta.total) || j.deals.length === 0) break;
   }
   return out;
+}
+
+/** Lista todos los deals de un pipeline (dealGroup) entero, paginando de a 100. */
+export async function listDealsByGroup(groupId: string): Promise<AcDeal[]> {
+  const out: AcDeal[] = [];
+  let offset = 0;
+  const limit = 100;
+  for (;;) {
+    const j = await acFetch<{ deals: AcDeal[]; meta: { total: string } }>(
+      `/api/3/deals?filters[group]=${groupId}&limit=${limit}&offset=${offset}`,
+    );
+    out.push(...j.deals);
+    offset += limit;
+    if (offset >= Number(j.meta.total) || j.deals.length === 0) break;
+  }
+  return out;
+}
+
+export interface AcPipeline {
+  id: string;
+  title: string;
+}
+
+/** Los 4 pipelines (dealGroups) de la cuenta: "Prospectos Sunny" (ventas), "Postulación Inmuebles", "Constructoras" (construcción), "Lista de Espera". */
+export async function listPipelines(): Promise<AcPipeline[]> {
+  const j = await acFetch<{ dealGroups: AcPipeline[] }>('/api/3/dealGroups');
+  return j.dealGroups;
+}
+
+export interface AcDealStage {
+  id: string;
+  group: string;
+  title: string;
+  order: string;
+}
+
+/** Todas las etapas de todos los pipelines — filtrar por `.group` para las de uno solo. */
+export async function listAllDealStages(): Promise<AcDealStage[]> {
+  const j = await acFetch<{ dealStages: AcDealStage[] }>('/api/3/dealGroups?limit=100');
+  return j.dealStages;
 }
 
 export interface AcDealCustomFieldDatum {

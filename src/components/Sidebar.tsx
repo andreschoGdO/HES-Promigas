@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BarChart3, Settings, LogOut, Sun, ClipboardCheck, Package, HardHat, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt, Users, LayoutDashboard, Sliders, ShoppingCart, Wallet } from 'lucide-react';
+import { BarChart3, Settings, LogOut, Sun, ClipboardCheck, Package, HardHat, PanelLeftClose, PanelLeftOpen, FileBarChart, CalendarRange, Receipt, Users, LayoutDashboard, Sliders, ShoppingCart, Wallet, Filter } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { readVisibility, fetchVisibility, isItemVisible, type SidebarVisibility } from '@/lib/sidebar-visibility';
 import { getRoleFromEmail, type UserRole } from '@/lib/user-role';
@@ -122,13 +122,14 @@ export function Sidebar() {
   // No renderizar sidebar en rutas de auth
   if (pathname.startsWith('/login') || pathname.startsWith('/auth')) return null;
 
-  // Orden = la historia del proceso: se vende y diseña el proyecto
-  // (Construcción/CRM) → se planifica (Planner) → se financia (Órdenes de
-  // Compra, Presupuesto) → se ejecuta en campo (Visitas, Inventario,
-  // Gestión de Equipos) → se sigue el avance (Dash Construcción) → ya
-  // operativo se monitorea en vivo (Head End System) → se factura y se
-  // reporta (Facturación, Reportes).
+  // Orden = la historia del proceso: entran leads a TopLeads (Funnel) →
+  // se vende y diseña el proyecto (Construcción/CRM) → se planifica
+  // (Planner) → se financia (Órdenes de Compra, Presupuesto) → se ejecuta
+  // en campo (Visitas, Inventario, Gestión de Equipos) → se sigue el
+  // avance (Dash Construcción) → ya operativo se monitorea en vivo (Head
+  // End System) → se factura y se reporta (Facturación, Reportes).
   const navItemsAll = [
+    { id: 'funnel-topleads', label: 'Funnel TopLeads', path: '/funnel-topleads', icon: Filter },
     { id: 'operaciones', label: 'Construcción', path: '/operaciones', icon: HardHat },
     { id: 'planner',     label: 'Planner', path: '/planner', icon: CalendarRange },
     { id: 'ordenes-compra', label: 'Órdenes de Compra', path: '/ordenes-compra', icon: ShoppingCart },

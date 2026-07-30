@@ -10,64 +10,14 @@ import {
 import { generateDashPDF } from '@/lib/dash-pdf';
 import { generateDashPPTX } from '@/lib/dash-pptx';
 import { DEFAULT_REPORT, type DashReport } from '@/lib/dash-report-data';
+import { StatCard } from '@/components/StatCard';
+import { SimpleTable, PaginatedTable } from '@/components/DataTable';
 
 const ACCENT = '#07c5a8';
 const MARCA_COLORS = ['#07c5a8', '#3b82f6', '#f59e0b', '#8b5cf6'];
 
 const fmtInt = (n: number) => n.toLocaleString('es-CO');
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-
-function StatCard({ label, value, hint, tag, detalle, detalleSecundario }: {
-  label: string; value: string; hint: string;
-  tag?: string;
-  /** Lista de casas que componen esta métrica; se muestra al hover. */
-  detalle?: string[];
-  /** Lista secundaria (ej: para mostrar 'programadas' al lado de 'instaladas'). */
-  detalleSecundario?: { label: string; items: string[] };
-}) {
-  const parts: string[] = [];
-  if (detalle && detalle.length > 0) {
-    parts.push(`${label}:\n${detalle.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`);
-  }
-  if (detalleSecundario && detalleSecundario.items.length > 0) {
-    parts.push(`${detalleSecundario.label}:\n${detalleSecundario.items.map((d, i) => `  ${i + 1}. ${d}`).join('\n')}`);
-  }
-  const nativeTitle = parts.length > 0 ? parts.join('\n\n') : undefined;
-  const showHint = parts.length > 0;
-  return (
-    <div className="stat-card" title={nativeTitle} style={{ position: 'relative' }}>
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-      <div style={{ fontSize: '0.72rem', color: ACCENT, fontWeight: 600 }}>{hint}</div>
-      {tag && (
-        <div style={{
-          marginTop: 4,
-          display: 'inline-flex',
-          alignSelf: 'flex-start',
-          padding: '2px 8px',
-          background: 'var(--bg-elevated)',
-          color: 'var(--text-secondary)',
-          borderRadius: 999,
-          fontSize: '0.68rem',
-          fontWeight: 600,
-          border: '1px solid var(--border)',
-        }}>
-          {tag}
-        </div>
-      )}
-      {showHint && (
-        <div style={{
-          marginTop: 6,
-          fontSize: '0.68rem',
-          color: 'var(--text-muted)',
-          fontStyle: 'italic',
-        }}>
-          Ver casas ↗
-        </div>
-      )}
-    </div>
-  );
-}
 
 /** Watt-peak por panel para calcular cuántos paneles equivalen a un kWp acumulado. */
 const PANEL_WP = 595;
@@ -164,6 +114,30 @@ export default function DashPage() {
   };
 
   useEffect(() => { void load(from, to); }, [from, to]);
+
+  // ── Órdenes de Compra: CAPEX ejecutado adicional + desglose por
+  // categoría/casa. Aditivo sobre el CAPEX de Facturación de arriba — no lo
+  // reemplaza (ver nota en /presupuesto y ARCHITECTURE del módulo de OC).
+  const [ocCapexEjecutado, setOcCapexEjecutado] = useState(0);
+  const [ocExecution, setOcExecution] = useState<{ grupo: string; presupuestado: number; ejecutado: number; pct: number }[]>([]);
+  const [ocByHouse, setOcByHouse] = useState<{ casa: string; ocs: string[]; adicionales: string[]; costoTotal: number; ejecutado: boolean }[]>([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [ocRes, execRes, houseRes] = await Promise.all([
+          fetch('/api/purchase-orders'),
+          fetch(`/api/budget/execution?anio=${new Date().getFullYear()}`),
+          fetch('/api/purchase-orders/by-house'),
+        ]);
+        const [ocJson, execJson, houseJson] = await Promise.all([ocRes.json(), execRes.json(), houseRes.json()]);
+        setOcCapexEjecutado((ocJson.purchaseOrders ?? []).reduce((s: number, o: { costo_ejecutado: number }) => s + Number(o.costo_ejecutado), 0));
+        setOcExecution(execJson.grupos ?? []);
+        setOcByHouse(houseJson.houses ?? []);
+      } catch (e) {
+        console.error('[dash] carga de Órdenes de Compra falló', e);
+      }
+    })();
+  }, []);
 
   // ─── GANTT ───
   const [ganttRows, setGanttRows] = useState<GanttRow[]>([]);
@@ -335,8 +309,14 @@ export default function DashPage() {
           <StatCard
             label="CAPEX ejecutado (acum.)"
             value={`$${fmtInt(report.global.capexAcumM)}M COP`}
-            hint="desde inicio de operación"
+            hint="desde inicio de operación — equipos (Facturación)"
             tag={report.global.casasAcum > 0 ? `~$${fmt1(report.global.capexAcumM / report.global.casasAcum)}M / casa` : undefined}
+          />
+          <StatCard
+            label="CAPEX Órdenes de Compra"
+            value={`$${fmtInt(ocCapexEjecutado / 1_000_000)}M COP`}
+            hint="ejecutado — casas en instalación o posterior"
+            tag="adicional al de arriba"
           />
           <StatCard
             label="Avance vs. meta anual"
@@ -437,6 +417,45 @@ export default function DashPage() {
         zonas={report.detalleGlobal?.zonas ?? report.detalle.zonas}
         constructores={report.detalleGlobal?.constructores ?? report.detalle.constructores}
       />
+
+      {/* ─── SLIDE 3B (NUEVA): DESGLOSE DE EJECUCIÓN — ÓRDENES DE COMPRA ─── */}
+      <section className="card">
+        <SectionHeader eyebrow={`Presupuesto ${new Date().getFullYear()}`} title="Desglose de ejecución — Órdenes de Compra" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
+          <div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Por categoría (presupuestado vs. ejecutado)
+            </div>
+            <SimpleTable
+              head={['Categoría', 'Presupuestado', 'Ejecutado', '%']}
+              rows={ocExecution.map((r) => [
+                r.grupo,
+                `$${fmtInt(r.presupuestado)}`,
+                `$${fmtInt(r.ejecutado)}`,
+                `${r.pct.toFixed(0)}%`,
+              ])}
+            />
+            {ocExecution.length === 0 && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Sin presupuesto/OC cargados para este año todavía.</p>}
+          </div>
+          <div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Por casa (OC + adicionales que la financian)
+            </div>
+            <PaginatedTable
+              head={['Casa', 'OC', 'Adicionales', 'Costo total', 'Estado']}
+              pageSize={6}
+              rows={ocByHouse.map((h) => [
+                h.casa,
+                h.ocs.join(', ') || '—',
+                h.adicionales.length > 0 ? h.adicionales.join(', ') : '—',
+                `$${fmtInt(h.costoTotal)}`,
+                h.ejecutado ? <span key="e" className="badge-success">Ejecutado</span> : <span key="e" className="badge-warning">Comprometido</span>,
+              ])}
+            />
+            {ocByHouse.length === 0 && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Ninguna casa tiene una Orden de Compra asignada todavía.</p>}
+          </div>
+        </div>
+      </section>
 
       {/* ─── SLIDE 4: CONSTRUCCIÓN (semanal + planeación unificados) ─── */}
       <section className="card">
@@ -864,81 +883,6 @@ function DetalleMarcaZonaConstructor({
         </div>
       </div>
     </section>
-  );
-}
-
-/**
- * Tabla con paginación. Muestra `pageSize` filas por página (default: 6) y
- * ofrece controles Prev/Next + indicador "Página X de Y". Si `rows.length <= pageSize`
- * se renderiza como una SimpleTable normal sin controles.
- */
-function PaginatedTable({ head, rows, pageSize = 6 }: { head: string[]; rows: React.ReactNode[][]; pageSize?: number }) {
-  const [page, setPage] = useState(0);
-  const total = rows.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const currentPage = Math.min(page, totalPages - 1);
-  const start = currentPage * pageSize;
-  const pageRows = rows.slice(start, start + pageSize);
-
-  if (total <= pageSize) return <SimpleTable head={head} rows={rows} />;
-
-  return (
-    <div>
-      <SimpleTable head={head} rows={pageRows} />
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 8, fontSize: '0.78rem' }}>
-        <span style={{ color: 'var(--text-muted)' }}>
-          {start + 1}–{Math.min(start + pageSize, total)} de {total}
-        </span>
-        <button
-          onClick={() => setPage(Math.max(0, currentPage - 1))}
-          disabled={currentPage === 0}
-          className="secondary-btn"
-          style={{ padding: '4px 10px', fontSize: '0.78rem', opacity: currentPage === 0 ? 0.4 : 1 }}
-        >
-          ← Anterior
-        </button>
-        <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-          {currentPage + 1} / {totalPages}
-        </span>
-        <button
-          onClick={() => setPage(Math.min(totalPages - 1, currentPage + 1))}
-          disabled={currentPage >= totalPages - 1}
-          className="secondary-btn"
-          style={{ padding: '4px 10px', fontSize: '0.78rem', opacity: currentPage >= totalPages - 1 ? 0.4 : 1 }}
-        >
-          Siguiente →
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
-  return (
-    <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-        <thead>
-          <tr style={{ background: '#1f2937', color: '#fff' }}>
-            {head.map((h, i) => (
-              <th key={i} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.78rem' }}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={i} style={{ background: i % 2 ? 'var(--bg-elevated)' : 'var(--bg-card)', borderTop: '1px solid var(--border)' }}>
-              {row.map((cell, j) => (
-                <td key={j} style={{ padding: '10px 12px', color: 'var(--text-primary)' }}>
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }
 

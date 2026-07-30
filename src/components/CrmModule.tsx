@@ -1273,6 +1273,10 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
             <FormFieldCheckbox label="Instalación Equipos y Cableado AC" checked={form.inst_equipos_ac === 'true'} onChange={(v) => set('inst_equipos_ac', v ? 'true' : 'false')} disabled={!canEdit('instalacion')} />
             <FormFieldCheckbox label="Configuración Sistema y cierre constructivo" checked={form.inst_config_cierre === 'true'} onChange={(v) => set('inst_config_cierre', v ? 'true' : 'false')} disabled={!canEdit('instalacion')} />
           </div>
+          <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
+            <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 6 }}>¿De qué Orden de Compra sale la plata de esta casa?</label>
+            <OcAssignmentsEditor projectId={project.id} disenoKwp={form.diseno_kwp ? Number(form.diseno_kwp) : null} disabled={!canEdit('instalacion')} />
+          </div>
         </StageSection>
 
         <StageSection title="Otros" stage="dimensionado" canEdit={canEdit('dimensionado')}>
@@ -1324,6 +1328,106 @@ function DetailSection({ title, children }: { title: string; children: React.Rea
       {title && <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{title}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 6, fontSize: '0.82rem' }}>
         {children}
+      </div>
+    </div>
+  );
+}
+
+interface OcOption { id: string; numero_oc: string; proveedor: string; kwp_total: number; }
+interface OcAssignmentRow { oc_id: string; kwp_asignado: number; solucion: number | null; purchaseOrder?: { numero_oc: string; proveedor: string } }
+
+/**
+ * Reparte el kWp diseñado de esta casa entre una o varias Órdenes de
+ * Compra. "Reemplazar todo" contra /api/crm/projects/[id]/oc-assignments
+ * — mismo patrón que el editor de consumibles de inventario. Vive acá (no
+ * en el switch genérico de crm_stage_fields) porque es un campo N:N, no un
+ * escalar.
+ */
+function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: string; disenoKwp: number | null; disabled?: boolean }) {
+  const [rows, setRows] = useState<OcAssignmentRow[]>([]);
+  const [ocOptions, setOcOptions] = useState<OcOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const [aRes, ocRes] = await Promise.all([
+        fetch(`/api/crm/projects/${projectId}/oc-assignments`),
+        fetch('/api/purchase-orders'),
+      ]);
+      const aJson = await aRes.json();
+      const ocJson = await ocRes.json();
+      setRows((aJson.assignments ?? []).map((a: { oc_id: string; kwp_asignado: number; solucion: number | null; purchaseOrder: { numero_oc: string; proveedor: string } }) => ({ oc_id: a.oc_id, kwp_asignado: a.kwp_asignado, solucion: a.solucion, purchaseOrder: a.purchaseOrder })));
+      setOcOptions(ocJson.purchaseOrders ?? []);
+      setLoading(false);
+    })();
+  }, [projectId]);
+
+  const total = rows.reduce((s, r) => s + Number(r.kwp_asignado || 0), 0);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    const res = await fetch(`/api/crm/projects/${projectId}/oc-assignments`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignments: rows.map((r) => ({ oc_id: r.oc_id, kwp_asignado: Number(r.kwp_asignado), solucion: r.solucion })) }),
+    });
+    const json = await res.json();
+    if (!res.ok) { setError(json.error); setSaving(false); return; }
+    setSaving(false);
+  };
+
+  if (loading) return <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Cargando…</p>;
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+      {error && <div className="alert-error" style={{ marginBottom: 8 }}>{error}</div>}
+      {rows.map((row, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+          <select
+            value={row.oc_id}
+            disabled={disabled}
+            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, oc_id: e.target.value } : x))}
+            style={{ flex: 1 }}
+          >
+            <option value="">Elegir OC…</option>
+            {ocOptions.map((oc) => <option key={oc.id} value={oc.id}>{oc.numero_oc} — {oc.proveedor}</option>)}
+          </select>
+          <input
+            type="number"
+            placeholder="kWp"
+            value={row.kwp_asignado || ''}
+            disabled={disabled}
+            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, kwp_asignado: Number(e.target.value) } : x))}
+            style={{ width: 90 }}
+          />
+          <select
+            value={row.solucion ?? ''}
+            disabled={disabled}
+            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, solucion: e.target.value ? Number(e.target.value) : null } : x))}
+            style={{ width: 110 }}
+          >
+            <option value="">Solución?</option>
+            {[1, 2, 3, 4].map((s) => <option key={s} value={s}>Solución {s}</option>)}
+          </select>
+          {!disabled && (
+            <button className="icon-btn" onClick={() => setRows((r) => r.filter((_, j) => j !== i))} aria-label="Quitar"><Trash2 size={13} /></button>
+          )}
+        </div>
+      ))}
+      {!disabled && (
+        <button className="secondary-btn" onClick={() => setRows((r) => [...r, { oc_id: '', kwp_asignado: 0, solucion: null }])} style={{ marginTop: 4 }}>
+          <Plus size={13} /> Agregar OC
+        </button>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: '0.76rem' }}>
+        <span style={{ color: disenoKwp != null && total > disenoKwp ? 'var(--error)' : 'var(--text-muted)' }}>
+          Total asignado: {total.toFixed(2)} kWp{disenoKwp != null ? ` / ${disenoKwp} kWp diseñados` : ''}
+        </span>
+        {!disabled && <button className="primary-btn" onClick={save} disabled={saving} style={{ padding: '5px 12px', fontSize: '0.78rem' }}>{saving ? 'Guardando…' : 'Guardar asignación'}</button>}
       </div>
     </div>
   );

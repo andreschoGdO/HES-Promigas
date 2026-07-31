@@ -1413,6 +1413,103 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
   );
 }
 
+interface AddendumOption { id: string; numero_adicional: string; valor_total: number; purchaseOrder: { numero_oc: string } }
+interface AddendumAssignmentRow { addendum_id: string; porcentaje: number | null; detalle: string; addendum?: { numero_adicional: string; purchaseOrder: { numero_oc: string } } }
+
+function AddendumAssignmentsEditor({ projectId, disabled }: { projectId: string; disabled?: boolean }) {
+  const [rows, setRows] = useState<AddendumAssignmentRow[]>([]);
+  const [options, setOptions] = useState<AddendumOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const [aRes, addRes] = await Promise.all([
+        fetch(`/api/crm/projects/${projectId}/addendum-assignments`),
+        fetch('/api/purchase-orders/addenda'),
+      ]);
+      const aJson = await aRes.json();
+      const addJson = await addRes.json();
+      setRows((aJson.assignments ?? []).map((a: { addendum_id: string; porcentaje: number | null; detalle: string | null; addendum: { numero_adicional: string; purchaseOrder: { numero_oc: string } } }) => ({ addendum_id: a.addendum_id, porcentaje: a.porcentaje, detalle: a.detalle ?? '', addendum: a.addendum })));
+      setOptions(addJson.addenda ?? []);
+      setLoading(false);
+    })();
+  }, [projectId]);
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    for (const row of rows) {
+      if (!row.addendum_id || !row.porcentaje) continue;
+      const res = await fetch(`/api/purchase-orders/addenda/${row.addendum_id}/assignments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: projectId, porcentaje: Number(row.porcentaje), detalle: row.detalle || null }),
+      });
+      if (!res.ok) { const j = await res.json(); setError(j.error); setSaving(false); return; }
+    }
+    setSaving(false);
+  };
+
+  const remove = async (addendumId: string) => {
+    setRows((r) => r.filter((x) => x.addendum_id !== addendumId));
+    await fetch(`/api/purchase-orders/addenda/${addendumId}/assignments?project_id=${projectId}`, { method: 'DELETE' });
+  };
+
+  if (loading) return <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Cargando…</p>;
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+      {error && <div className="alert-error" style={{ marginBottom: 8 }}>{error}</div>}
+      {rows.length === 0 && <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: 0 }}>Sin adicionales asignados a esta casa.</p>}
+      {rows.map((row, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>
+          <select
+            value={row.addendum_id}
+            disabled={disabled}
+            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, addendum_id: e.target.value } : x))}
+            style={{ flex: 1 }}
+          >
+            <option value="">Elegir adicional…</option>
+            {options.map((o) => <option key={o.id} value={o.id}>{o.purchaseOrder.numero_oc} · Adicional {o.numero_adicional}</option>)}
+          </select>
+          <input
+            type="number"
+            placeholder="% casa"
+            title="% del adicional que le corresponde a esta casa"
+            value={row.porcentaje || ''}
+            disabled={disabled}
+            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, porcentaje: e.target.value ? Number(e.target.value) : null } : x))}
+            style={{ width: 80 }}
+          />
+          <input
+            placeholder="Detalle (opcional)"
+            value={row.detalle}
+            disabled={disabled}
+            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, detalle: e.target.value } : x))}
+            style={{ flex: 1 }}
+          />
+          {!disabled && (
+            <button className="icon-btn" onClick={() => remove(row.addendum_id)} aria-label="Quitar"><Trash2 size={13} /></button>
+          )}
+        </div>
+      ))}
+      {!disabled && (
+        <button className="secondary-btn" onClick={() => setRows((r) => [...r, { addendum_id: '', porcentaje: null, detalle: '' }])} style={{ marginTop: 4 }}>
+          <Plus size={13} /> Agregar adicional
+        </button>
+      )}
+      {!disabled && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+          <button className="primary-btn" onClick={save} disabled={saving} style={{ padding: '5px 12px', fontSize: '0.78rem' }}>{saving ? 'Guardando…' : 'Guardar adicionales'}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KV({ label, value }: { label: string; value: unknown }) {
   if (value === null || value === undefined || value === '') return null;
   return (
@@ -1444,6 +1541,15 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Checklist de avance físico — solo aplica al pasar a Operativo. Vive
+  // aparte de `fields` (que vienen de crm_stage_fields) porque es un grupo
+  // de checkboxes fijo, no un campo dinámico configurable.
+  const isToOperativo = def.toStage === 'operativo';
+  const [checklist, setChecklist] = useState({
+    inst_paneles_dc: project.inst_paneles_dc,
+    inst_equipos_ac: project.inst_equipos_ac,
+    inst_config_cierre: project.inst_config_cierre,
+  });
 
   useEffect(() => {
     // Cargar dinámicamente los campos configurados para la etapa destino.
@@ -1492,6 +1598,11 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
     }
     setSaving(true);
     const payload: Record<string, unknown> = { action: def.action, actor_email: userEmail };
+    if (isToOperativo) {
+      payload.inst_paneles_dc = checklist.inst_paneles_dc;
+      payload.inst_equipos_ac = checklist.inst_equipos_ac;
+      payload.inst_config_cierre = checklist.inst_config_cierre;
+    }
     for (const f of fields) {
       const v = values[f.field_key];
       if (v === undefined || v === '') continue;
@@ -1618,6 +1729,25 @@ function TransitionModal({ project, def, userEmail, onClose, onDone }: {
               </div>
             ))}
           </div>
+        )}
+
+        {isToOperativo && (
+          <>
+            <div style={{ marginTop: 14 }}>
+              <label className="input-label" style={{ fontSize: '0.78rem', display: 'block', marginBottom: 6 }}>Avance físico (checklist)</label>
+              <FormFieldCheckbox label="Instalación Paneles y Cableado DC" checked={checklist.inst_paneles_dc} onChange={(v) => setChecklist((c) => ({ ...c, inst_paneles_dc: v }))} />
+              <FormFieldCheckbox label="Instalación Equipos y Cableado AC" checked={checklist.inst_equipos_ac} onChange={(v) => setChecklist((c) => ({ ...c, inst_equipos_ac: v }))} />
+              <FormFieldCheckbox label="Configuración Sistema y cierre constructivo" checked={checklist.inst_config_cierre} onChange={(v) => setChecklist((c) => ({ ...c, inst_config_cierre: v }))} />
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <label className="input-label" style={{ fontSize: '0.78rem', display: 'block', marginBottom: 6 }}>¿De qué Orden de Compra sale la plata de esta casa?</label>
+              <OcAssignmentsEditor projectId={project.id} disenoKwp={project.diseno_kwp} />
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <label className="input-label" style={{ fontSize: '0.78rem', display: 'block', marginBottom: 6 }}>Adicionales (otrosí) de esta casa</label>
+              <AddendumAssignmentsEditor projectId={project.id} />
+            </div>
+          </>
         )}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 16 }}>

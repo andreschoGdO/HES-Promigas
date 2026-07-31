@@ -5,7 +5,10 @@ import { TRANSITIONS, type CrmModule } from '@/lib/crm-stages';
 interface Ctx { params: Promise<{ id: string }>; }
 
 // Columnas por tipo SQL (para coerción correcta de strings → tipos DB)
-const COL_TYPES: Record<string, 'number' | 'integer' | 'date' | 'timestamptz' | 'uuid' | 'text'> = {
+const COL_TYPES: Record<string, 'number' | 'integer' | 'date' | 'timestamptz' | 'uuid' | 'text' | 'boolean'> = {
+  inst_paneles_dc: 'boolean',
+  inst_equipos_ac: 'boolean',
+  inst_config_cierre: 'boolean',
   estrato: 'integer',
   invoice_kwh_mensual: 'number',
   invoice_valor_cop: 'number',
@@ -75,6 +78,8 @@ function coerceValue(key: string, raw: unknown): { ok: true; value: unknown } | 
       if (Number.isNaN(d.getTime())) return { ok: false, error: `${key}: timestamp inválido "${s}"` };
       return { ok: true, value: d.toISOString() };
     }
+    case 'boolean':
+      return { ok: true, value: s === 'true' };
     default:
       return { ok: true, value: s };
   }
@@ -139,6 +144,7 @@ export async function POST(request: Request, context: Ctx) {
       'diseno_aprobado_por','tipo_red',
       'visita_previa_id','visita_instalacion_id','reservation_id','house_id',
       'contractor_name','contractor_email','installation_date','lectura_inicial_kwh',
+      'inst_paneles_dc','inst_equipos_ac','inst_config_cierre',
       'operativo_at','legalizado_at','assigned_to','notes',
     ]);
 

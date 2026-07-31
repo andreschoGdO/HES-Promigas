@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Trash2, Upload, Eye, Save, Home, FileText } from 'lucide-react';
 import { ModalShell } from '@/components/ModalShell';
-import { PURCHASE_ORDER_CATEGORIES } from '@/lib/purchase-orders';
+import { PURCHASE_ORDER_CATEGORIES, resolvePrecioKwp } from '@/lib/purchase-orders';
 
 const CATEGORIAS = PURCHASE_ORDER_CATEGORIES;
 const fmtCOP = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
@@ -125,7 +125,7 @@ export default function OrdenDeCompraDetallePage() {
     load();
   };
 
-  const ocData = oc as { numero_oc: string; proveedor: string; fecha_documento: string | null; fecha_entrega: string | null; kwp_total: number | null; valor_total: number; kwp_asignado: number; pct_kwp_asignado: number | null; costo_ejecutado: number; costo_no_ejecutado: number; observaciones: string | null; pdf_storage_path: string | null; construccion_subtotal: number; flat_subtotal: number };
+  const ocData = oc as { numero_oc: string; proveedor: string; fecha_documento: string | null; fecha_entrega: string | null; kwp_total: number | null; valor_total: number; kwp_asignado: number; pct_kwp_asignado: number | null; costo_ejecutado: number; costo_no_ejecutado: number; observaciones: string | null; pdf_storage_path: string | null; construccion_subtotal: number; flat_subtotal: number; precio_kwp_construccion: number };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -276,21 +276,26 @@ export default function OrdenDeCompraDetallePage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
           <thead>
             <tr style={{ background: 'var(--bg-elevated)', textAlign: 'left' }}>
-              <th style={{ padding: 8 }}>Casa</th><th style={{ padding: 8 }}>kWp (construcción)</th><th style={{ padding: 8 }}>Monto fijo (otro tema)</th><th style={{ padding: 8 }}>Solución</th><th style={{ padding: 8 }}>Etapa</th><th></th>
+              <th style={{ padding: 8 }}>Casa</th><th style={{ padding: 8 }}>kWp (construcción)</th><th style={{ padding: 8 }}>Monto fijo (otro tema)</th><th style={{ padding: 8 }}>Solución</th><th style={{ padding: 8 }}>Costo (kWp × precio solución)</th><th style={{ padding: 8 }}>Etapa</th><th></th>
             </tr>
           </thead>
           <tbody>
-            {assignments.map((a) => (
-              <tr key={a.id} style={{ borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: 8 }}>{a.project.title} {a.project.conjunto ? `— ${a.project.conjunto} #${a.project.casa_numero ?? ''}` : ''}</td>
-                <td style={{ padding: 8 }}>{a.kwp_asignado != null ? `${a.kwp_asignado} kWp` : '—'}</td>
-                <td style={{ padding: 8 }}>{a.monto_fijo != null ? fmtCOP(a.monto_fijo) : '—'}</td>
-                <td style={{ padding: 8 }}>{a.solucion ?? '—'}</td>
-                <td style={{ padding: 8 }}><span className="badge-warning">{a.project.operations_stage ?? '—'}</span></td>
-                <td style={{ padding: 8 }}><button className="icon-btn" onClick={() => unassign(a.project_id)} aria-label="Quitar"><Trash2 size={13} /></button></td>
-              </tr>
-            ))}
-            {assignments.length === 0 && <tr><td colSpan={6} style={{ padding: 12, color: 'var(--text-muted)' }}>Sin casas asignadas todavía.</td></tr>}
+            {assignments.map((a) => {
+              const precio = resolvePrecioKwp(a.solucion, solutionPrices, ocData.precio_kwp_construccion);
+              const costo = Number(a.kwp_asignado ?? 0) * precio;
+              return (
+                <tr key={a.id} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td style={{ padding: 8 }}>{a.project.title} {a.project.conjunto ? `— ${a.project.conjunto} #${a.project.casa_numero ?? ''}` : ''}</td>
+                  <td style={{ padding: 8 }}>{a.kwp_asignado != null ? `${a.kwp_asignado} kWp` : '—'}</td>
+                  <td style={{ padding: 8 }}>{a.monto_fijo != null ? fmtCOP(a.monto_fijo) : '—'}</td>
+                  <td style={{ padding: 8 }}>{a.solucion != null ? `Sol.${a.solucion}` : '—'}</td>
+                  <td style={{ padding: 8 }}>{a.kwp_asignado != null ? fmtCOP(costo) : '—'}</td>
+                  <td style={{ padding: 8 }}><span className="badge-warning">{a.project.operations_stage ?? '—'}</span></td>
+                  <td style={{ padding: 8 }}><button className="icon-btn" onClick={() => unassign(a.project_id)} aria-label="Quitar"><Trash2 size={13} /></button></td>
+                </tr>
+              );
+            })}
+            {assignments.length === 0 && <tr><td colSpan={7} style={{ padding: 12, color: 'var(--text-muted)' }}>Sin casas asignadas todavía.</td></tr>}
           </tbody>
         </table>
       </section>

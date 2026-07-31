@@ -13,7 +13,7 @@ const TITLES: Record<string, string> = {
   '/reportes': 'Reportes',
   '/configuracion': 'Configuración',
   '/usuarios': 'Usuarios',
-  '/funnel-topleads': 'Funnel Comercial (TopLeads)',
+  '/funnel-topleads': 'Funnel Comercial',
   '/planner': 'Planner',
   '/ordenes-compra': 'Órdenes de Compra',
   '/presupuesto': 'Presupuesto',

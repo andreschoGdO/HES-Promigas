@@ -129,7 +129,7 @@ export function Sidebar() {
   // avance (Dash Construcción) → ya operativo se monitorea en vivo (Head
   // End System) → se factura y se reporta (Facturación, Reportes).
   const navItemsAll = [
-    { id: 'funnel-topleads', label: 'Funnel Comercial (TopLeads)', path: '/funnel-topleads', icon: Filter },
+    { id: 'funnel-topleads', label: 'Funnel Comercial', path: '/funnel-topleads', icon: Filter },
     { id: 'operaciones', label: 'Construcción', path: '/operaciones', icon: HardHat },
     { id: 'planner',     label: 'Planner', path: '/planner', icon: CalendarRange },
     { id: 'ordenes-compra', label: 'Órdenes de Compra', path: '/ordenes-compra', icon: ShoppingCart },

@@ -54,10 +54,23 @@ interface PurchaseOrder {
 
 const fmtCOP = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 
+type SortField = 'numero_oc' | 'proveedor' | 'posicion' | 'categoria' | 'descripcion' | 'valor_total';
+const SORT_OPTIONS: Array<{ value: SortField; label: string }> = [
+  { value: 'numero_oc', label: 'N.° OC' },
+  { value: 'proveedor', label: 'Proveedor' },
+  { value: 'posicion', label: 'Posición' },
+  { value: 'categoria', label: 'Categoría' },
+  { value: 'descripcion', label: 'Detalle' },
+  { value: 'valor_total', label: 'Valor' },
+];
+
 export default function OrdenesDeCompraPage() {
   const [ocs, setOcs] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [showImport, setShowImport] = useState(false);
+  const [search, setSearch] = useState('');
+  const [sortField, setSortField] = useState<SortField>('numero_oc');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const load = async () => {
     setLoading(true);
@@ -69,15 +82,35 @@ export default function OrdenesDeCompraPage() {
 
   useEffect(() => { load(); }, []);
 
+  const flatRows = ocs.flatMap((o) => (o.items ?? []).map((it) => ({ oc: o, item: it })));
+
+  const filtered = flatRows.filter(({ oc, item }) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return [oc.numero_oc, oc.proveedor, item.categoria, item.codigo_servicio, item.descripcion]
+      .some((v) => (v ?? '').toString().toLowerCase().includes(q));
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    const get = (r: typeof a) => sortField === 'numero_oc' ? r.oc.numero_oc
+      : sortField === 'proveedor' ? r.oc.proveedor
+      : sortField === 'valor_total' ? r.item.valor_total
+      : r.item[sortField];
+    const av = get(a); const bv = get(b);
+    let cmp: number;
+    if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
+    else cmp = (av ?? '').toString().localeCompare((bv ?? '').toString(), 'es');
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
 
   const downloadTable = () => {
     downloadCSV(
       `ordenes-de-compra-${new Date().toISOString().slice(0, 10)}.csv`,
       ['N. OC', 'Proveedor', 'Posición', 'Categoría', 'Código de servicio', 'Detalle', 'Cantidad', 'Unidad', 'Precio', 'Valor'],
-      ocs.flatMap((o) => (o.items ?? []).map((it) => [
-        o.numero_oc, o.proveedor, it.posicion, it.categoria, it.codigo_servicio ?? '', it.descripcion,
+      sorted.map(({ oc, item: it }) => [
+        oc.numero_oc, oc.proveedor, it.posicion, it.categoria, it.codigo_servicio ?? '', it.descripcion,
         it.cantidad ?? '', it.unidad ?? '', it.precio_unitario ?? '', it.valor_total,
-      ])),
+      ]),
     );
   };
 
@@ -129,15 +162,31 @@ export default function OrdenesDeCompraPage() {
         <div className="card-header">
           <h2 className="card-title">Órdenes de compra</h2>
         </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por N.° OC, proveedor, categoría, código o detalle…"
+            style={{ flex: 1, minWidth: 240 }}
+          />
+          <select value={sortField} onChange={(e) => setSortField(e.target.value as SortField)}>
+            {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>Ordenar por: {o.label}</option>)}
+          </select>
+          <button className="secondary-btn" onClick={() => setSortDir((d) => d === 'asc' ? 'desc' : 'asc')}>
+            {sortDir === 'asc' ? '↑ Ascendente' : '↓ Descendente'}
+          </button>
+        </div>
         {loading ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
-        ) : ocs.every((o) => (o.items ?? []).length === 0) ? (
+        ) : flatRows.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Todavía no hay órdenes de compra cargadas.</p>
+        ) : sorted.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Ninguna línea coincide con la búsqueda.</p>
         ) : (
           <PaginatedTable
             head={['N.° OC', 'Proveedor', 'Posición', 'Categoría', 'Código de servicio', 'Detalle', 'Cantidad', 'Unidad', 'Precio', 'Valor', '']}
             pageSize={15}
-            rows={ocs.flatMap((o) => (o.items ?? []).map((it) => [
+            rows={sorted.map(({ oc: o, item: it }) => [
               <Link key="n" href={`/ordenes-compra/${o.id}`} style={{ fontWeight: 700, color: 'var(--accent)' }}>{o.numero_oc}</Link>,
               o.proveedor,
               it.posicion,
@@ -163,7 +212,7 @@ export default function OrdenesDeCompraPage() {
                   <Trash2 size={14} />
                 </button>
               </div>,
-            ]))}
+            ])}
           />
         )}
       </section>

@@ -222,13 +222,12 @@ export default function FunnelTopLeadsPage() {
       <section className="card">
         <div className="card-header"><span className="card-title">Estado real de Construcción</span></div>
         <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 0 }}>
-          Datos vivos del CRM: obras por instalar, en ejecución, instaladas y en legalización.
+          Datos vivos del CRM: obras por instalar, en ejecución e instaladas.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(165px, 1fr))', gap: 12 }}>
           <StatCard label="Por instalar" value={String(construccionSummary.por_instalar)} hint="dimensionado o alistamiento" />
           <StatCard label="En instalación" value={String(construccionSummary.en_instalacion)} hint="obra en curso" />
           <StatCard label="Instalados" value={String(construccionSummary.instalados)} hint="operativos" />
-          <StatCard label="Legalizándose" value={String(construccionSummary.legalizandose)} hint="trámite AGPE" />
         </div>
       </section>
 

@@ -19,16 +19,16 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const zonaFilter = url.searchParams.get('zona'); // 'Valle' | 'Costa' | null (todas)
 
-  // Filtro único y estricto: contrato firmado — para que el conteo de esta
-  // tabla sea CONGRUENTE con la etapa "Firmado" del funnel de arriba (no
-  // se restringe además por operations_stage/current_module, para no
-  // excluir por accidente un proyecto recién firmado que todavía no pasó
-  // a Operaciones).
+  // `contrato_signed_at` está vacío en TODOS los proyectos hoy (gap de datos:
+  // nadie lo diligencia todavía) — filtrar por ese campo dejaba la tabla
+  // siempre en 0 filas, sin importar el filtro de zona. Se usa en su lugar
+  // `current_module='operations'`, que en la práctica es el mismo universo
+  // (un proyecto solo pasa a Operaciones una vez el contrato está firmado).
   let query = supabaseAdmin
     .from('crm_projects')
     .select('id, code, title, conjunto, casa_numero, client_name, client_doc_number, client_city, zona, contrato_signed_at, cronograma_fecha_inicio, installation_date, diseno_aprobado_at, operations_stage, current_module, operativo_at, legalizado_at, agpe_estado, agpe_fecha_aprobacion, created_at')
-    .not('contrato_signed_at', 'is', null)
-    .order('contrato_signed_at', { ascending: true });
+    .eq('current_module', 'operations')
+    .order('created_at', { ascending: true });
 
   // "Todas" incluye también proyectos históricos sin zona diligenciada.
   if (zonaFilter === 'Valle' || zonaFilter === 'Costa') query = query.eq('zona', zonaFilter);

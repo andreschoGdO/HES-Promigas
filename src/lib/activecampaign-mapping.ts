@@ -101,7 +101,10 @@ export function mapDealToProject(
     client_city: f.get(AC_FIELD.CIUDAD_COBERTURA) ?? null,
     client_address: f.get(AC_FIELD.DIRECCION) ?? null,
     conjunto: f.get(AC_FIELD.CONJUNTO) ?? null,
-    casa_numero: f.get(AC_FIELD.CASA_NUMERO) ?? null,
+    // AC devuelve el número de casa como string numérico ("29.0") cuando el
+    // campo está tipado como número — se quita el ".0" para que matchee con
+    // client_houses.casa (formato "Casa 29", sin decimal).
+    casa_numero: f.get(AC_FIELD.CASA_NUMERO)?.replace(/\.0$/, '') ?? null,
     estrato: num(f.get(AC_FIELD.ESTRATO)),
     diseno_paneles: num(panelCantidad),
     diseno_kwp: num(f.get(AC_FIELD.POTENCIA_KWP)),

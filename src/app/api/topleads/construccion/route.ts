@@ -82,11 +82,22 @@ export async function GET(request: Request) {
     .eq('current_module', 'operations');
   if (opsError) return NextResponse.json({ error: opsError.message }, { status: 500 });
 
+  // Sincronizado con las categorías del Funnel Comercial (EJECUCIÓN):
+  // "Por instalar" = mismo universo que "Firmados sin Instalar" del funnel
+  // (firmado, instalación aún no terminada) — dimensionado/alistamiento
+  // (no ha empezado obra) + instalacion (obra en curso, sin terminar).
+  // "Instalados" = mismo universo que "Instalados"/"Energizados" del
+  // funnel (obra físicamente terminada) — operativo + legalizacion +
+  // legalizado/completado (ya instalado, más allá esté legalizando o no).
+  // "En instalación" y "Legalizándose" quedan como subconjuntos de detalle
+  // dentro de esos dos universos (por eso las 4 tarjetas no suman al
+  // total: son 2 categorías amplias + 2 zooms).
+  const opsStages = (opsData ?? []).map((p) => p.operations_stage);
   const summary = {
-    por_instalar: (opsData ?? []).filter((p) => p.operations_stage === 'dimensionado' || p.operations_stage === 'alistamiento').length,
-    en_instalacion: (opsData ?? []).filter((p) => p.operations_stage === 'instalacion').length,
-    instalados: (opsData ?? []).filter((p) => p.operations_stage === 'operativo').length,
-    legalizandose: (opsData ?? []).filter((p) => p.operations_stage === 'legalizacion').length,
+    por_instalar: opsStages.filter((s) => s === 'dimensionado' || s === 'alistamiento' || s === 'instalacion').length,
+    en_instalacion: opsStages.filter((s) => s === 'instalacion').length,
+    instalados: opsStages.filter((s) => s === 'operativo' || s === 'legalizacion' || s === 'legalizado' || s === 'completado').length,
+    legalizandose: opsStages.filter((s) => s === 'legalizacion').length,
   };
 
   return NextResponse.json({ deals: rows, summary, capturedAt: new Date().toISOString() });

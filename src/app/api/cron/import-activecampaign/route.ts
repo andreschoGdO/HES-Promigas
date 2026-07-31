@@ -1,17 +1,23 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { listDealsByStage, getDealCustomFieldData, getContact, getUser } from '@/lib/activecampaign';
+import { listDealsByGroup, getDealCustomFieldData, getContact, getUser } from '@/lib/activecampaign';
 import { mapDealToProject } from '@/lib/activecampaign-mapping';
 
 /**
  * GET /api/cron/import-activecampaign
  *
  * Importa a crm_projects (etapa Dimensionado) los deals de ActiveCampaign
- * que están en "Contrato firmado" (pipeline Ventas, stage id 47) y todavía
- * no tienen un proyecto acá (dedup por ac_deal_id). Contratista y fechas de
- * cronograma NO vienen de ActiveCampaign — quedan vacías; el proyecto no
- * podrá pasar a Alistamiento hasta que alguien las complete (gate ya
- * existente en la transición).
+ * que llegaron a "Contrato firmado" (pipeline Ventas, stage id 47) O más
+ * allá (55 Instalados, 30 PRUEBAS, 45 Validar con negocio, o ganado) y
+ * todavía no tienen un proyecto acá (dedup por ac_deal_id). Contratista y
+ * fechas de cronograma NO vienen de ActiveCampaign — quedan vacías; el
+ * proyecto no podrá pasar a Alistamiento hasta que alguien las complete
+ * (gate ya existente en la transición).
+ *
+ * Antes solo miraba deals parados EN ESE MOMENTO en la etapa 47 — un trato
+ * que avanzaba de largo el mismo día (p.ej. de Contrato enviado directo a
+ * Instalados) nunca quedaba capturado. Verificado en vivo: 38 de 88 tratos
+ * ya "firmados" en TopLeads no tenían fila en crm_projects por este motivo.
  *
  * Ver docs/superpowers/specs/2026-07-21-activecampaign-import-design.md
  *
@@ -28,7 +34,10 @@ import { mapDealToProject } from '@/lib/activecampaign-mapping';
 export const runtime = 'nodejs';
 export const maxDuration = 120;
 
-const CONTRATO_FIRMADO_STAGE_ID = '47';
+const PIPELINE_VENTAS_ID = '1'; // "Prospectos Sunny"
+// Etapas >= "Contrato firmado" en el orden del pipeline (ver STAGE_ORDER en
+// funnel-comercial/route.ts) — excluye "No viable" (6).
+const ADVANCED_STAGE_IDS = new Set(['47', '55', '30', '45']);
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
@@ -48,7 +57,8 @@ export async function GET(request: Request) {
   let linked = 0;
 
   try {
-    const deals = await listDealsByStage(CONTRATO_FIRMADO_STAGE_ID);
+    const allDeals = await listDealsByGroup(PIPELINE_VENTAS_ID);
+    const deals = allDeals.filter((d) => d.status === '1' || (d.status === '0' && ADVANCED_STAGE_IDS.has(d.stage)));
 
     // Dedup en 2 niveles:
     //  1) ac_deal_id ya presente → ya lo importamos antes, saltar.

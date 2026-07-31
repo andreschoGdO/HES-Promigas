@@ -15,7 +15,7 @@ import { isExecutedStage, computeOcPricing, computeAssignmentCost, resolvePrecio
 export async function GET() {
   const [{ data: ocs, error: ocErr }, { data: items, error: itErr }, { data: assignments, error: aErr }, { data: addenda, error: adErr }, { data: solutionPrices, error: spErr }] = await Promise.all([
     supabaseAdmin.from('purchase_orders').select('*').order('fecha_documento', { ascending: false }),
-    supabaseAdmin.from('purchase_order_items').select('oc_id, categoria, valor_total'),
+    supabaseAdmin.from('purchase_order_items').select('*').order('posicion'),
     supabaseAdmin
       .from('purchase_order_house_assignments')
       .select('oc_id, project_id, kwp_asignado, monto_fijo, solucion, project:crm_projects(operations_stage)'),
@@ -53,6 +53,7 @@ export async function GET() {
 
     return {
       ...oc,
+      items: ocItems,
       kwp_asignado: kwpAsignado,
       pct_kwp_asignado: oc.kwp_total && oc.kwp_total > 0 ? Math.min(100, (kwpAsignado / oc.kwp_total) * 100) : null,
       costo_ejecutado: costoEjecutado,

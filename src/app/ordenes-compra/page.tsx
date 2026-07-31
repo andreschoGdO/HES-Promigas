@@ -21,6 +21,19 @@ interface NewItem {
 }
 const blankItem = (): NewItem => ({ categoria: CATEGORIAS[0], codigo_servicio: '', descripcion: '', cantidad: '', unidad: '', precio_unitario: '', valor_total: '' });
 
+interface PurchaseOrderItem {
+  id: string;
+  oc_id: string;
+  posicion: number;
+  categoria: string;
+  codigo_servicio: string | null;
+  descripcion: string;
+  cantidad: number | null;
+  unidad: string | null;
+  precio_unitario: number | null;
+  valor_total: number;
+}
+
 interface PurchaseOrder {
   id: string;
   numero_oc: string;
@@ -36,10 +49,10 @@ interface PurchaseOrder {
   tiene_adicionales: boolean;
   adicionales_count: number;
   pdf_storage_path: string | null;
+  items: PurchaseOrderItem[];
 }
 
 const fmtCOP = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
-const fmtPct = (n: number) => `${n.toFixed(1)}%`;
 
 export default function OrdenesDeCompraPage() {
   const [ocs, setOcs] = useState<PurchaseOrder[]>([]);
@@ -60,13 +73,34 @@ export default function OrdenesDeCompraPage() {
   const downloadTable = () => {
     downloadCSV(
       `ordenes-de-compra-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Numero OC', 'Proveedor', 'Fecha', 'kWp OC', 'kWp asignado', '% asignado', 'Valor total', 'Costo ejecutado', 'Costo no ejecutado', 'Casas asignadas', 'Adicionales'],
-      ocs.map((o) => [
-        o.numero_oc, o.proveedor, o.fecha_documento ?? '', o.kwp_total ?? '', o.kwp_asignado.toFixed(2),
-        o.pct_kwp_asignado != null ? fmtPct(o.pct_kwp_asignado) : '', o.valor_total, Math.round(o.costo_ejecutado), Math.round(o.costo_no_ejecutado),
-        o.casas_count, o.tiene_adicionales ? `Sí (${o.adicionales_count})` : 'No',
-      ]),
+      ['N. OC', 'Proveedor', 'Posición', 'Categoría', 'Código de servicio', 'Detalle', 'Cantidad', 'Unidad', 'Precio', 'Valor'],
+      ocs.flatMap((o) => (o.items ?? []).map((it) => [
+        o.numero_oc, o.proveedor, it.posicion, it.categoria, it.codigo_servicio ?? '', it.descripcion,
+        it.cantidad ?? '', it.unidad ?? '', it.precio_unitario ?? '', it.valor_total,
+      ])),
     );
+  };
+
+  const viewPdf = async (ocId: string) => {
+    const res = await fetch(`/api/purchase-orders/${ocId}/pdf`);
+    const json = await res.json();
+    if (res.ok) window.open(json.url, '_blank');
+    else alert(json.error ?? 'Esta OC no tiene PDF cargado');
+  };
+
+  const replacePdf = async (ocId: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`/api/purchase-orders/${ocId}/pdf`, { method: 'POST', body: fd });
+    if (res.ok) load();
+    else { const j = await res.json(); alert(j.error ?? 'Error al subir el PDF'); }
+  };
+
+  const deleteLine = async (ocId: string, itemId: string) => {
+    if (!confirm('¿Borrar esta línea de la OC?')) return;
+    const res = await fetch(`/api/purchase-orders/${ocId}/items?itemId=${itemId}`, { method: 'DELETE' });
+    if (res.ok) load();
+    else { const j = await res.json(); alert(j.error ?? 'Error al borrar la línea'); }
   };
 
   return (
@@ -97,29 +131,36 @@ export default function OrdenesDeCompraPage() {
         </div>
         {loading ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
-        ) : ocs.length === 0 ? (
+        ) : ocs.every((o) => (o.items ?? []).length === 0) ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Todavía no hay órdenes de compra cargadas.</p>
         ) : (
           <PaginatedTable
-            head={['N.° OC', 'Proveedor', 'Casas', 'kWp OC', '% kWp asignado', 'Ejecutado', 'No ejecutado', 'Adicionales', '']}
-            pageSize={10}
-            rows={ocs.map((o) => [
+            head={['N.° OC', 'Proveedor', 'Posición', 'Categoría', 'Código de servicio', 'Detalle', 'Cantidad', 'Unidad', 'Precio', 'Valor', '']}
+            pageSize={15}
+            rows={ocs.flatMap((o) => (o.items ?? []).map((it) => [
               <Link key="n" href={`/ordenes-compra/${o.id}`} style={{ fontWeight: 700, color: 'var(--accent)' }}>{o.numero_oc}</Link>,
               o.proveedor,
-              o.casas_count,
-              o.kwp_total != null ? `${o.kwp_total.toLocaleString('es-CO')} kWp` : '—',
-              o.pct_kwp_asignado != null ? fmtPct(o.pct_kwp_asignado) : '—',
-              fmtCOP(o.costo_ejecutado),
-              fmtCOP(o.costo_no_ejecutado),
-              o.tiene_adicionales
-                ? <span key="a" className="badge-warning">Sí ({o.adicionales_count})</span>
-                : <span key="a" style={{ color: 'var(--text-muted)' }}>No</span>,
+              it.posicion,
+              it.categoria,
+              it.codigo_servicio ?? '—',
+              it.descripcion,
+              it.cantidad != null ? it.cantidad.toLocaleString('es-CO') : '—',
+              it.unidad ?? '—',
+              it.precio_unitario != null ? fmtCOP(it.precio_unitario) : '—',
+              fmtCOP(it.valor_total),
               <div key="acts" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                <Link href={`/ordenes-compra/${o.id}`} className="icon-btn" aria-label="Ver detalle" title="Ver detalle">
+                <button className="icon-btn" onClick={() => viewPdf(o.id)} disabled={!o.pdf_storage_path} aria-label="Ver PDF" title="Ver PDF">
                   <Eye size={14} />
-                </Link>
+                </button>
+                <label className="icon-btn" style={{ cursor: 'pointer' }} aria-label="Reemplazar PDF" title="Reemplazar PDF">
+                  <Upload size={14} />
+                  <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) replacePdf(o.id, f); }} />
+                </label>
+                <button className="icon-btn" onClick={() => deleteLine(o.id, it.id)} aria-label="Borrar línea" title="Borrar línea">
+                  <Trash2 size={14} />
+                </button>
               </div>,
-            ])}
+            ]))}
           />
         )}
       </section>

@@ -68,3 +68,18 @@ export async function PUT(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Error' }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/purchase-orders/[id]/items?itemId=xxx
+ * Borra una sola línea de detalle, sin tocar el resto (a diferencia del
+ * PUT, que reemplaza todas).
+ */
+export async function DELETE(request: Request, { params }: RouteContext) {
+  const { id } = await params;
+  const url = new URL(request.url);
+  const itemId = url.searchParams.get('itemId');
+  if (!itemId) return NextResponse.json({ error: 'itemId es requerido' }, { status: 400 });
+  const { error } = await supabaseAdmin.from('purchase_order_items').delete().eq('id', itemId).eq('oc_id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}

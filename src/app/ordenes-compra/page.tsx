@@ -54,10 +54,11 @@ interface PurchaseOrder {
 
 const fmtCOP = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 
-type SortField = 'numero_oc' | 'proveedor' | 'posicion' | 'categoria' | 'codigo_servicio' | 'descripcion' | 'cantidad' | 'unidad' | 'precio_unitario' | 'valor_total';
+type SortField = 'numero_oc' | 'proveedor' | 'fecha_documento' | 'posicion' | 'categoria' | 'codigo_servicio' | 'descripcion' | 'cantidad' | 'unidad' | 'precio_unitario' | 'valor_total';
 const COLUMNS: Array<{ field: SortField; label: string }> = [
   { field: 'numero_oc', label: 'N.° OC' },
   { field: 'proveedor', label: 'Proveedor' },
+  { field: 'fecha_documento', label: 'Fecha documento' },
   { field: 'posicion', label: 'Posición' },
   { field: 'categoria', label: 'Categoría' },
   { field: 'codigo_servicio', label: 'Código de servicio' },
@@ -98,6 +99,7 @@ export default function OrdenesDeCompraPage() {
   const sorted = [...filtered].sort((a, b) => {
     const get = (r: typeof a) => sortField === 'numero_oc' ? r.oc.numero_oc
       : sortField === 'proveedor' ? r.oc.proveedor
+      : sortField === 'fecha_documento' ? r.oc.fecha_documento
       : sortField === 'valor_total' ? r.item.valor_total
       : r.item[sortField];
     const av = get(a); const bv = get(b);
@@ -110,9 +112,9 @@ export default function OrdenesDeCompraPage() {
   const downloadTable = () => {
     downloadCSV(
       `ordenes-de-compra-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['N. OC', 'Proveedor', 'Posición', 'Categoría', 'Código de servicio', 'Detalle', 'Cantidad', 'Unidad', 'Precio', 'Valor'],
+      ['N. OC', 'Proveedor', 'Fecha documento', 'Posición', 'Categoría', 'Código de servicio', 'Detalle', 'Cantidad', 'Unidad', 'Precio', 'Valor'],
       sorted.map(({ oc, item: it }) => [
-        oc.numero_oc, oc.proveedor, it.posicion, it.categoria, it.codigo_servicio ?? '', it.descripcion,
+        oc.numero_oc, oc.proveedor, oc.fecha_documento ?? '', it.posicion, it.categoria, it.codigo_servicio ?? '', it.descripcion,
         it.cantidad ?? '', it.unidad ?? '', it.precio_unitario ?? '', it.valor_total,
       ]),
     );
@@ -202,6 +204,7 @@ export default function OrdenesDeCompraPage() {
             rows={sorted.map(({ oc: o, item: it }) => [
               <Link key="n" href={`/ordenes-compra/${o.id}`} style={{ fontWeight: 700, color: 'var(--accent)' }}>{o.numero_oc}</Link>,
               o.proveedor,
+              o.fecha_documento ?? '—',
               it.posicion,
               it.categoria,
               it.codigo_servicio ?? '—',

@@ -7,7 +7,7 @@ import { useState } from 'react';
  * duplicadas ahí y en planner/page.tsx sin import compartido). Mismo
  * comportamiento, sin cambios de fondo.
  */
-export function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
+export function SimpleTable({ head, rows }: { head: React.ReactNode[]; rows: React.ReactNode[][] }) {
   return (
     <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
@@ -41,7 +41,7 @@ export function SimpleTable({ head, rows }: { head: string[]; rows: React.ReactN
  * ofrece controles Prev/Next + indicador "Página X de Y". Si `rows.length <= pageSize`
  * se renderiza como una SimpleTable normal sin controles.
  */
-export function PaginatedTable({ head, rows, pageSize = 6 }: { head: string[]; rows: React.ReactNode[][]; pageSize?: number }) {
+export function PaginatedTable({ head, rows, pageSize = 6 }: { head: React.ReactNode[]; rows: React.ReactNode[][]; pageSize?: number }) {
   const [page, setPage] = useState(0);
   const total = rows.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

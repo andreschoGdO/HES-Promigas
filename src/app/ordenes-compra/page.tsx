@@ -54,14 +54,18 @@ interface PurchaseOrder {
 
 const fmtCOP = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 
-type SortField = 'numero_oc' | 'proveedor' | 'posicion' | 'categoria' | 'descripcion' | 'valor_total';
-const SORT_OPTIONS: Array<{ value: SortField; label: string }> = [
-  { value: 'numero_oc', label: 'N.° OC' },
-  { value: 'proveedor', label: 'Proveedor' },
-  { value: 'posicion', label: 'Posición' },
-  { value: 'categoria', label: 'Categoría' },
-  { value: 'descripcion', label: 'Detalle' },
-  { value: 'valor_total', label: 'Valor' },
+type SortField = 'numero_oc' | 'proveedor' | 'posicion' | 'categoria' | 'codigo_servicio' | 'descripcion' | 'cantidad' | 'unidad' | 'precio_unitario' | 'valor_total';
+const COLUMNS: Array<{ field: SortField; label: string }> = [
+  { field: 'numero_oc', label: 'N.° OC' },
+  { field: 'proveedor', label: 'Proveedor' },
+  { field: 'posicion', label: 'Posición' },
+  { field: 'categoria', label: 'Categoría' },
+  { field: 'codigo_servicio', label: 'Código de servicio' },
+  { field: 'descripcion', label: 'Detalle' },
+  { field: 'cantidad', label: 'Cantidad' },
+  { field: 'unidad', label: 'Unidad' },
+  { field: 'precio_unitario', label: 'Precio' },
+  { field: 'valor_total', label: 'Valor' },
 ];
 
 export default function OrdenesDeCompraPage() {
@@ -169,12 +173,6 @@ export default function OrdenesDeCompraPage() {
             placeholder="Buscar por N.° OC, proveedor, categoría, código o detalle…"
             style={{ flex: 1, minWidth: 240 }}
           />
-          <select value={sortField} onChange={(e) => setSortField(e.target.value as SortField)}>
-            {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>Ordenar por: {o.label}</option>)}
-          </select>
-          <button className="secondary-btn" onClick={() => setSortDir((d) => d === 'asc' ? 'desc' : 'asc')}>
-            {sortDir === 'asc' ? '↑ Ascendente' : '↓ Descendente'}
-          </button>
         </div>
         {loading ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
@@ -184,7 +182,22 @@ export default function OrdenesDeCompraPage() {
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Ninguna línea coincide con la búsqueda.</p>
         ) : (
           <PaginatedTable
-            head={['N.° OC', 'Proveedor', 'Posición', 'Categoría', 'Código de servicio', 'Detalle', 'Cantidad', 'Unidad', 'Precio', 'Valor', '']}
+            head={[
+              ...COLUMNS.map((c) => (
+                <button
+                  key={c.field}
+                  onClick={() => {
+                    if (sortField === c.field) setSortDir((d) => d === 'asc' ? 'desc' : 'asc');
+                    else { setSortField(c.field); setSortDir('asc'); }
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', color: 'inherit', textTransform: 'inherit', letterSpacing: 'inherit' }}
+                >
+                  {c.label}
+                  {sortField === c.field && <span>{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                </button>
+              )),
+              '',
+            ]}
             pageSize={15}
             rows={sorted.map(({ oc: o, item: it }) => [
               <Link key="n" href={`/ordenes-compra/${o.id}`} style={{ fontWeight: 700, color: 'var(--accent)' }}>{o.numero_oc}</Link>,

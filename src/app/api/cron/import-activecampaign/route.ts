@@ -6,13 +6,15 @@ import { mapDealToProject } from '@/lib/activecampaign-mapping';
 /**
  * GET /api/cron/import-activecampaign
  *
- * Importa a crm_projects (etapa Dimensionado) los deals de ActiveCampaign
- * que llegaron a "Contrato firmado" (pipeline Ventas, stage id 47) O más
- * allá (55 Instalados, 30 PRUEBAS, 45 Validar con negocio, o ganado) y
- * todavía no tienen un proyecto acá (dedup por ac_deal_id). Contratista y
- * fechas de cronograma NO vienen de ActiveCampaign — quedan vacías; el
- * proyecto no podrá pasar a Alistamiento hasta que alguien las complete
- * (gate ya existente en la transición).
+ * Importa a crm_projects los deals de ActiveCampaign que llegaron a
+ * "Contrato firmado" (pipeline Ventas, stage id 47) O más allá (55
+ * Instalados, 30 PRUEBAS, 45 Validar con negocio, o ganado) y todavía no
+ * tienen un proyecto acá (dedup por ac_deal_id). La etapa inicial en
+ * operaciones no es siempre "Dimensionado" — se deriva de dónde viene el
+ * deal en TopLeads, ver `initialOperationsStage`. Contratista y fechas de
+ * cronograma NO vienen de ActiveCampaign — quedan vacías; el proyecto no
+ * podrá pasar a Alistamiento hasta que alguien las complete (gate ya
+ * existente en la transición).
  *
  * Antes solo miraba deals parados EN ESE MOMENTO en la etapa 47 — un trato
  * que avanzaba de largo el mismo día (p.ej. de Contrato enviado directo a
@@ -40,6 +42,19 @@ const PIPELINE_VENTAS_ID = '1'; // "Prospectos Sunny"
 const ADVANCED_STAGE_IDS = new Set(['47', '55', '30', '45']);
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+
+/**
+ * Etapa de operaciones inicial para un proyecto nuevo, según dónde viene el
+ * deal en TopLeads (mapeo confirmado con el usuario comparando ambos
+ * sistemas): Ganado (instalación terminada) → operativo; abierto en
+ * Instalados (obra en curso) → alistamiento; abierto en Contrato firmado
+ * (obra sin empezar) → dimensionado.
+ */
+function initialOperationsStage(status: string, stage: string): string {
+  if (status === '1') return 'operativo';
+  if (stage === '55') return 'alistamiento';
+  return 'dimensionado';
+}
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -103,7 +118,7 @@ export async function GET(request: Request) {
           current_module: 'operations',
           sales_stage: 'completado',
           engineering_stage: 'completado',
-          operations_stage: 'dimensionado',
+          operations_stage: initialOperationsStage(deal.status, deal.stage),
           created_by: 'import-activecampaign',
           assigned_to: 'import-activecampaign',
         });

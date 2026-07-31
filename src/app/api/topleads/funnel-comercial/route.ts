@@ -93,16 +93,17 @@ export async function GET() {
     const energizados = won.length;
 
     // Bandas (derecha): valores puntuales por etapa cruda, todos abiertos —
-    // salvo "Instalados", también filtrado por ganado (mismo criterio que
-    // arriba). Los abiertos parados en la etapa "Instalados" (instalación
-    // en curso, sin terminar) se suman a "Firmados sin Instalar".
+    // salvo "Energizados", filtrado por ganado. "En instalación" son los
+    // abiertos parados en la etapa "Instalados" (obra en curso, sin
+    // terminar todavía) — separado de "Firmados sin Instalar" (contrato
+    // firmado, obra sin empezar) para no mezclar "en cola" con "en obra".
     const enDimensionamiento = openAtStage('34');
     const dimensionado = openAtStage('5');
     const pendientesOferta = openAtStage('44');
     const pendConfirmOferta = openAtStage('7');
     const pendConfirmContrato = openAtStage('8');
-    const firmadosSinInstalar = openAtStage('47') + openAtStage('55');
-    const instaladosBanda = won.length;
+    const firmadosSinInstalar = openAtStage('47');
+    const enInstalacionBanda = openAtStage('55');
 
     return NextResponse.json({
       capturedAt: new Date().toISOString(),
@@ -149,10 +150,10 @@ export async function GET() {
         },
         {
           nombre: 'EJECUCIÓN',
-          total: firmadosSinInstalar + instaladosBanda + energizados,
+          total: firmadosSinInstalar + enInstalacionBanda + energizados,
           filas: [
             { label: 'Firmados sin Instalar', value: firmadosSinInstalar },
-            { label: 'Instalados', value: instaladosBanda },
+            { label: 'En instalación', value: enInstalacionBanda },
             { label: 'Energizados', value: energizados },
           ],
         },

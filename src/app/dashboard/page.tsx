@@ -2,16 +2,17 @@
 import { supabase } from '@/lib/supabase';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { toPng } from 'html-to-image';
-import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp, BarChart3, Cpu, AlertTriangle, AlertCircle, Bell, Info } from 'lucide-react';
+import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, ChevronUp, BarChart3, Cpu, AlertTriangle, AlertCircle, Bell, Info, Sliders } from 'lucide-react';
 import { VARIABLES, findVariable, type VariableMeta } from '@/lib/variables-dict';
 import { NarFullView } from '@/components/NarFullView';
+import { InverterControlPanel } from '@/components/InverterControlPanel';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush,
   PieChart, Pie, Cell,
 } from 'recharts';
 import { classifyDevice } from '@/lib/classify-device';
 
-type Tab = 'cierres' | 'nar';
+type Tab = 'cierres' | 'nar' | 'equipos';
 type TypeFilter = 'all' | 'meter' | 'inverter' | 'gateway' | 'other';
 
 interface DeviceOption {
@@ -1092,6 +1093,7 @@ export default function DashboardPage() {
   const TAB_META: Record<Tab, { label: string; color: string; Icon: typeof BarChart3; description: string }> = {
     cierres:  { label: 'Vista Granular',         color: '#07c5a8', Icon: Activity,       description: 'Series de tiempo de Metrum por dispositivo. Multi-select de casas, zoom interactivo y tabla diaria/puntos.' },
     nar:      { label: 'NAR',                    color: '#ef4444', Icon: Bell,            description: 'Notificaciones, Alertas y Recomendaciones de la flota. Incluye análisis de Reactiva CREG.' },
+    equipos:  { label: 'Gestión de Equipos',      color: '#f59e0b', Icon: Sliders,         description: 'Control manual de inversores del portafolio: cos φ, Q reactiva, límite de P activa y modo de trabajo. El envío real depende del adapter del fabricante (Deye Cloud, Livoltek). Si no hay credenciales, el comando queda en auditoría con status mocked.' },
   };
   const meta = TAB_META[tab];
 
@@ -1150,6 +1152,7 @@ export default function DashboardPage() {
 
       {tab === 'cierres' && <CierresGranularTab devices={devices} />}
       {tab === 'nar' && <NarTab />}
+      {tab === 'equipos' && <InverterControlPanel devices={devices} />}
     </>
   );
 }

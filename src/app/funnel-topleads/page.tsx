@@ -132,7 +132,7 @@ export default function FunnelTopLeadsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '1.3rem' }}>Funnel Comercial</h1>
+          <h1 style={{ margin: 0, fontSize: '1.3rem' }}>Dash Comercial</h1>
         </div>
         <button className="secondary-btn" onClick={refreshNow} disabled={refreshing}>
           <RefreshCw size={14} /> {refreshing ? 'Actualizando…' : 'Actualizar ahora'}

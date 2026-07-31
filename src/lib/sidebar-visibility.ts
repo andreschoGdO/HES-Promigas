@@ -22,7 +22,6 @@ export interface SidebarVisibility {
   operaciones?: boolean;
   visitas?: boolean;
   inventario?: boolean;
-  'gestion-equipos'?: boolean;
   facturacion?: boolean;
   reportes?: boolean;
   planner?: boolean;
@@ -41,17 +40,16 @@ export const ALWAYS_VISIBLE_IDS: ReadonlySet<string> = new Set();
 
 /** Catálogo completo de items que se pueden mostrar/ocultar */
 export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: string; group: 'general' | 'sistema' }> = [
-  { id: 'funnel-topleads', label: 'Funnel Comercial', group: 'general' },
-  { id: 'operaciones',   label: 'Construcción',            group: 'general' },
-  { id: 'planner',       label: 'Planner',                 group: 'general' },
-  { id: 'ordenes-compra', label: 'Órdenes de Compra',      group: 'general' },
-  { id: 'presupuesto',   label: 'Presupuesto',             group: 'general' },
-  { id: 'visitas',       label: 'Visitas en Campo',        group: 'general' },
-  { id: 'inventario',    label: 'Inventario',              group: 'general' },
-  { id: 'gestion-equipos', label: 'Gestión de Equipos',    group: 'general' },
+  { id: 'funnel-topleads', label: 'Dash Comercial',         group: 'general' },
   { id: 'dash',          label: 'Dash Construcción',       group: 'general' },
   { id: 'dashboard',     label: 'Head End System',         group: 'general' },
+  { id: 'visitas',       label: 'Visitas en Campo',        group: 'general' },
+  { id: 'operaciones',   label: 'CRM Construcción',        group: 'general' },
+  { id: 'inventario',    label: 'Inventario',              group: 'general' },
+  { id: 'ordenes-compra', label: 'Órdenes de Compra',      group: 'general' },
+  { id: 'presupuesto',   label: 'Presupuesto',             group: 'general' },
   { id: 'facturacion',   label: 'Facturación',             group: 'general' },
+  { id: 'planner',       label: 'Planner',                 group: 'general' },
   { id: 'reportes',      label: 'Reportes',                group: 'general' },
   { id: 'usuarios',      label: 'Usuarios',                group: 'sistema' },
   { id: 'configuracion', label: 'Configuración API',       group: 'sistema' },

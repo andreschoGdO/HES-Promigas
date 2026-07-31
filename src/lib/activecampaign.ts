@@ -42,6 +42,19 @@ export interface AcDeal {
   status: string; // '0' abierto, '1' ganado, '2' perdido
 }
 
+/**
+ * `orders[id]=ASC` es obligatorio: sin un orden explícito, AC ordena por
+ * defecto por `mdate` (fecha de modificación), que cambia constantemente
+ * mientras el equipo comercial mueve tratos de etapa DURANTE la paginación.
+ * Eso hace que la "ventana" de offset/limit se corra entre páginas — el
+ * mismo deal aparece en dos páginas (duplicado) mientras otro se salta por
+ * completo. Verificado en vivo: sin `orders[id]`, una paginación de 4
+ * páginas trajo 364 registros con solo 300 IDs únicos (64 duplicados, ~64
+ * deals faltantes), inflando conteos por etapa muy por encima del Kanban
+ * real. Con `orders[id]=ASC` (id es inmutable) la paginación es estable.
+ */
+const STABLE_ORDER = 'orders[id]=ASC';
+
 /** Lista todos los deals en una etapa dada, paginando de a 100. */
 export async function listDealsByStage(stageId: string): Promise<AcDeal[]> {
   const out: AcDeal[] = [];
@@ -49,7 +62,7 @@ export async function listDealsByStage(stageId: string): Promise<AcDeal[]> {
   const limit = 100;
   for (;;) {
     const j = await acFetch<{ deals: AcDeal[]; meta: { total: string } }>(
-      `/api/3/deals?filters[stage]=${stageId}&limit=${limit}&offset=${offset}`,
+      `/api/3/deals?filters[stage]=${stageId}&${STABLE_ORDER}&limit=${limit}&offset=${offset}`,
     );
     out.push(...j.deals);
     offset += limit;
@@ -65,7 +78,7 @@ export async function listDealsByGroup(groupId: string): Promise<AcDeal[]> {
   const limit = 100;
   for (;;) {
     const j = await acFetch<{ deals: AcDeal[]; meta: { total: string } }>(
-      `/api/3/deals?filters[group]=${groupId}&limit=${limit}&offset=${offset}`,
+      `/api/3/deals?filters[group]=${groupId}&${STABLE_ORDER}&limit=${limit}&offset=${offset}`,
     );
     out.push(...j.deals);
     offset += limit;

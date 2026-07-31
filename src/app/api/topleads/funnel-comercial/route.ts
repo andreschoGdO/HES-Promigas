@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { listDealsByGroup } from '@/lib/activecampaign';
 
-const PIPELINE_VENTAS_ID = '1';   // "Prospectos Sunny"
-const PIPELINE_ESPERA_ID = '5';   // "Lista de Espera"
+const PIPELINE_VENTAS_ID = '1';   // "Prospectos Sunny" — el embudo es SOLO este pipeline
 
 /**
  * Orden de las etapas del pipeline de ventas — reconstruido a partir de
@@ -41,24 +40,23 @@ const STAGE_ORDER: Record<string, number> = {
  * (Interesados/Evaluación/Cierre/Ejecución) que se ve en la tabla de
  * control diaria de esa herramienta.
  *
- * NOTA DE PRECISIÓN: la mayoría de los números están verificados contra
- * capturas reales (En Dimensionamiento, Dimensionado, Pend. Confirm.
- * Oferta/Contrato, Firmados sin Instalar, Instalados, Energizados, En
- * Lista de Espera cierran exacto o casi exacto). El corte entre "Leads
- * Completos" y "Leads Incompletos" y el número exacto de "Descartados" son
- * mejor-esfuerzo — no tenemos acceso al query original de esa herramienta,
- * así que quedan calculados con una regla propia (ver código) que puede
- * no coincidir 1:1 con la de ellos.
+ * El embudo es SOLO el pipeline "Prospectos Sunny" (id 1) — "Lista de
+ * Espera" es otro pipeline aparte y no se mezcla acá.
  *
- * Se consulta en vivo (sin snapshot): es liviano (2 pipelines paginados),
- * y así nunca queda desactualizado.
+ * NOTA DE PRECISIÓN: la mayoría de los números están verificados contra
+ * capturas reales del Kanban (En Dimensionamiento, Dimensionado, Pend.
+ * Confirm. Oferta/Contrato, Firmados sin Instalar, Instalados, Energizados
+ * cierran exacto). El corte entre "Leads Completos" y "Leads Incompletos" y
+ * el número exacto de "Descartados" son mejor-esfuerzo — no tenemos acceso
+ * al query original de esa herramienta, así que quedan calculados con una
+ * regla propia (ver código) que puede no coincidir 1:1 con la de ellos.
+ *
+ * Se consulta en vivo (sin snapshot): es liviano (1 pipeline paginado), y
+ * así nunca queda desactualizado.
  */
 export async function GET() {
   try {
-    const [ventas, espera] = await Promise.all([
-      listDealsByGroup(PIPELINE_VENTAS_ID),
-      listDealsByGroup(PIPELINE_ESPERA_ID),
-    ]);
+    const ventas = await listDealsByGroup(PIPELINE_VENTAS_ID);
 
     const open = ventas.filter((d) => d.status === '0');
     const lost = ventas.filter((d) => d.status === '2');
@@ -77,8 +75,9 @@ export async function GET() {
       return o === 1 || o === 2;
     }).length;
     const descartados = lost.length;
-    const enListaDeEspera = espera.length;
-    const totalLeads = ventas.length + enListaDeEspera;
+    // El embudo es solo el pipeline "Prospectos Sunny" — "Lista de Espera"
+    // es otro pipeline aparte y no se mezcla acá.
+    const totalLeads = ventas.length;
     const completos = ventas.length - incompletos - descartados; // resto — incluye ganados
 
     // Funnel acumulado (izquierda): cada bucket = abiertos con orden >= X,
@@ -127,7 +126,6 @@ export async function GET() {
           total: totalLeads,
           filas: [
             { label: 'Total Leads', value: totalLeads },
-            { label: 'En Lista de Espera', value: enListaDeEspera },
             { label: 'Leads Incompletos', value: incompletos, activos: true },
             { label: 'Leads Completos', value: completos, activos: true },
           ],

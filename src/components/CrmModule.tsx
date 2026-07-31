@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload, Pencil, CalendarRange } from 'lucide-react';
+import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload, Pencil } from 'lucide-react';
 import {
   type CrmModule, type StageMeta, type TransitionDef,
   OPERATIONS_STAGES,
@@ -673,17 +673,12 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
   const [showHistory, setShowHistory] = useState(false);
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  type PlannerTaskLite = { id: string; title: string; status: string; urgency: string; start_date: string | null; due_date: string | null; assigned_to: string | null; team: string | null; tags: string[] | null };
-  const [linkedTasks, setLinkedTasks] = useState<PlannerTaskLite[]>([]);
 
   const reload = () => {
     fetch(`/api/crm/projects/${initial.id}`).then((r) => r.json()).then((j) => {
       if (j.project) setProject(j.project);
       setEvents(j.events ?? []);
     });
-    fetch(`/api/planner/tasks?project_id=${initial.id}`).then((r) => r.json()).then((j) => {
-      setLinkedTasks(j.tasks ?? []);
-    }).catch(() => {});
   };
   useEffect(reload, [initial.id]);
 
@@ -806,46 +801,6 @@ function ProjectDetailModal({ project: initial, onClose, onChanged, userEmail, m
           <KV label="Notas" value={project.notes} />
           <KV label="Asignado a" value={project.assigned_to} />
         </DetailSection>
-
-        {/* Tareas del Planner vinculadas */}
-        <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--bg-elevated)', borderRadius: 8, borderLeft: '4px solid #8b5cf6' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <CalendarRange size={14} style={{ color: '#8b5cf6' }} />
-            <strong style={{ fontSize: '0.85rem' }}>Actividades del Planner</strong>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>({linkedTasks.length})</span>
-            <Link href={`/planner?project_id=${project.id}`} style={{ marginLeft: 'auto', fontSize: '0.74rem', color: 'var(--accent)' }}>
-              Abrir en Planner →
-            </Link>
-          </div>
-          {linkedTasks.length === 0 ? (
-            <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              Sin tareas vinculadas. Se crean automáticamente al pasar a Instalación o abrir un ticket de garantía.
-            </p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {linkedTasks.map((t) => {
-                const statusColors: Record<string, string> = {
-                  todo: '#94a3b8', in_progress: '#3b82f6', done: '#10b981', blocked: '#ef4444',
-                };
-                const urgencyColors: Record<string, string> = {
-                  low: '#3b82f6', medium: '#f59e0b', high: '#ef4444', critical: '#dc2626',
-                };
-                return (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.78rem', padding: '6px 8px', background: 'var(--bg-surface)', borderRadius: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: urgencyColors[t.urgency] ?? '#64748b' }} />
-                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                      {t.start_date ? `${t.start_date}${t.due_date && t.due_date !== t.start_date ? ' → ' + t.due_date : ''}` : (t.due_date ?? 'sin fecha')}
-                    </span>
-                    <span style={{ padding: '2px 8px', borderRadius: 10, background: (statusColors[t.status] ?? '#64748b') + '20', color: statusColors[t.status] ?? '#64748b', fontSize: '0.68rem', fontWeight: 700 }}>
-                      {t.status}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
         {/* Audit log */}
         <div style={{ marginTop: 10 }}>
@@ -1096,7 +1051,7 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  type CatOpt = { id: string; name: string; family: string };
+  type CatOpt = { id: string; name: string; family: string; default_brand: string | null; default_capacity_value: number | null };
   const [cats, setCats] = useState<CatOpt[]>([]);
   useEffect(() => {
     void (async () => {
@@ -1104,13 +1059,43 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
         const r = await fetch('/api/inventory/categories');
         if (!r.ok) return;
         const j = await r.json();
-        setCats(((j.categories ?? []) as Array<{ id: string; name: string; family: string; is_serialized: boolean }>)
+        setCats(((j.categories ?? []) as Array<{ id: string; name: string; family: string; is_serialized: boolean; default_brand: string | null; default_capacity_value: number | null }>)
           .filter((c) => c.is_serialized)
-          .map((c) => ({ id: c.id, name: c.name, family: c.family })));
+          .map((c) => ({ id: c.id, name: c.name, family: c.family, default_brand: c.default_brand, default_capacity_value: c.default_capacity_value })));
       } catch { /* ignore */ }
     })();
   }, []);
   const catsByFamily = (fam: string) => cats.filter((c) => c.family === fam);
+
+  /**
+   * Ya viene diseñado (marca + potencia/capacidad) desde ventas — no tiene
+   * sentido pedirle a operaciones que vuelva a elegir el modelo a mano.
+   * Detecta por marca (texto libre del diseño) y, si hay varias opciones de
+   * la misma marca, por la potencia/capacidad más cercana.
+   */
+  const autoResolveCategoria = (family: string, marca: string | null | undefined, capacidad: number | null | undefined): CatOpt | null => {
+    if (!marca) return null;
+    const options = catsByFamily(family).filter((c) => c.default_brand && marca.toLowerCase().includes(c.default_brand.toLowerCase()));
+    if (options.length === 0) return null;
+    if (options.length === 1 || capacidad == null) return options[0];
+    return options.reduce((best, c) => {
+      const dBest = Math.abs(Number(best.default_capacity_value ?? 0) - capacidad);
+      const dC = Math.abs(Number(c.default_capacity_value ?? 0) - capacidad);
+      return dC < dBest ? c : best;
+    });
+  };
+  const autoInversor = autoResolveCategoria('inverter', project.diseno_inversor_marca, project.diseno_inversor_potencia_kw);
+  const autoBateria = autoResolveCategoria('battery', project.diseno_bateria_marca, project.diseno_bateria_capacidad_kwh);
+  const autoPanel = catsByFamily('panel')[0] ?? null; // única opción en catálogo hoy
+
+  // Auto-completar los campos apenas se puedan resolver (sin pisar un valor
+  // ya guardado — si alguien ya lo corrigió a mano, se respeta).
+  useEffect(() => {
+    if (autoInversor && !form.diseno_inversor_categoria_id) set('diseno_inversor_categoria_id', autoInversor.id);
+    if (autoBateria && !form.diseno_bateria_categoria_id) set('diseno_bateria_categoria_id', autoBateria.id);
+    if (autoPanel && !form.diseno_panel_categoria_id) set('diseno_panel_categoria_id', autoPanel.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoInversor?.id, autoBateria?.id, autoPanel?.id]);
 
   // Mapeo: cada CAMPO está asociado a la etapa donde se vuelve editable.
   // Si el proyecto está en una etapa ≥ a la del campo, se puede editar.
@@ -1218,25 +1203,10 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
           <FormField label="Estrato" type="number" value={form.estrato} onChange={(v) => set('estrato', v)} disabled={!canEdit('dimensionado')} />
           <FormFieldSelect label="Carga carro eléctrico" value={form.carga_carro_electrico} onChange={(v) => set('carga_carro_electrico', v)}
             options={['No tenemos carro eléctrico', 'Sí - Wallbox 7 kW', 'Sí - Wallbox 11 kW', 'Sí - Wallbox 22 kW', 'Sí - otro']} fullWidth disabled={!canEdit('dimensionado')} />
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>
-              Casa vinculada (de client_houses)
-            </label>
-            <HousePicker
-              value={form.house_id}
-              onChange={(v) => set('house_id', v)}
-              casaHint={form.casa_numero || form.conjunto || null}
-              disabled={!canEdit('dimensionado')}
-            />
-            <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-              Vincula el proyecto con su casa física (la que aparece en Metrum). Es obligatorio para pasar a Operativo. El sistema intenta auto-vincular por número de casa al transicionar.
-            </p>
-          </div>
         </StageSection>
 
         <StageSection title="Dimensionado" stage="dimensionado" canEdit={canEdit('dimensionado')}>
           <FormField label="Promedio consumo (kWh/mes)" type="number" value={form.invoice_kwh_mensual} onChange={(v) => set('invoice_kwh_mensual', v)} disabled={!canEdit('dimensionado')} />
-          <FormField label="Autosuficiencia objetivo (%)" type="number" value={form.autosuficiencia_objetivo_pct} onChange={(v) => set('autosuficiencia_objetivo_pct', v)} disabled={!canEdit('dimensionado')} />
           <FormField label="kWp diseño" type="number" value={form.diseno_kwp} onChange={(v) => set('diseno_kwp', v)} disabled={!canEdit('dimensionado')} />
           <FormField label="Paneles (cantidad)" type="number" value={form.diseno_paneles} onChange={(v) => set('diseno_paneles', v)} disabled={!canEdit('dimensionado')} />
           <FormField label="Baterías (cantidad)" type="number" value={form.diseno_baterias_cantidad} onChange={(v) => set('diseno_baterias_cantidad', v)} disabled={!canEdit('dimensionado')} />
@@ -1245,13 +1215,14 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
         </StageSection>
 
         <StageSection title="Equipos del diseño (catálogo)" stage="dimensionado" canEdit={canEdit('dimensionado')}>
-          <CategoryPicker label="Modelo de inversor" value={form.diseno_inversor_categoria_id} onChange={(v) => set('diseno_inversor_categoria_id', v)} options={catsByFamily('inverter')} disabled={!canEdit('dimensionado')} />
-          <CategoryPicker label="Modelo de batería"  value={form.diseno_bateria_categoria_id}  onChange={(v) => set('diseno_bateria_categoria_id', v)}  options={catsByFamily('battery')} disabled={!canEdit('dimensionado')} />
-          <CategoryPicker label="Modelo de panel"    value={form.diseno_panel_categoria_id}    onChange={(v) => set('diseno_panel_categoria_id', v)}    options={catsByFamily('panel')} fullWidth disabled={!canEdit('dimensionado')} />
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>Acta de visita previa</label>
-            <LinkedResourcePicker kind="visita_previa" casaHint={form.casa_numero || form.client_name || null} value={form.visita_previa_id} onChange={(v) => set('visita_previa_id', v)} disabled={!canEdit('dimensionado')} />
+          <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            <AutoDetectedCategoria label="Modelo de inversor" cat={cats.find((c) => c.id === form.diseno_inversor_categoria_id) ?? autoInversor} marca={project.diseno_inversor_marca} />
+            <AutoDetectedCategoria label="Modelo de batería" cat={cats.find((c) => c.id === form.diseno_bateria_categoria_id) ?? autoBateria} marca={project.diseno_bateria_marca} />
+            <AutoDetectedCategoria label="Modelo de panel" cat={cats.find((c) => c.id === form.diseno_panel_categoria_id) ?? autoPanel} marca={null} />
           </div>
+          <p style={{ gridColumn: '1 / -1', margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            Se detecta solo, a partir de la marca/potencia que ya viene del diseño — no requiere selección manual.
+          </p>
         </StageSection>
 
         <StageSection title="Cronograma de instalación" stage="dimensionado" canEdit={canEdit('dimensionado')}>
@@ -1262,7 +1233,6 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
         </StageSection>
 
         <StageSection title="Instalación (puesta en marcha)" stage="instalacion" canEdit={canEdit('instalacion')}>
-          <FormField label="Lectura inicial (kWh)" type="number" value={form.lectura_inicial_kwh} onChange={(v) => set('lectura_inicial_kwh', v)} disabled={!canEdit('instalacion')} />
           <div style={{ gridColumn: '1 / -1' }}>
             <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>Acta de visita de instalación</label>
             <LinkedResourcePicker kind="visita_instalacion" casaHint={form.casa_numero || form.client_name || null} value={form.visita_instalacion_id} onChange={(v) => set('visita_instalacion_id', v)} disabled={!canEdit('instalacion')} />
@@ -2025,6 +1995,24 @@ function CategoryPicker({ label, value, onChange, options, fullWidth, disabled }
         <option value="">{options.length === 0 ? '(no hay modelos en /inventario)' : '— Selecciona —'}</option>
         {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
       </select>
+    </div>
+  );
+}
+
+/** Muestra el modelo de catálogo detectado automáticamente (sin selección manual). */
+function AutoDetectedCategoria({ label, cat, marca }: { label: string; cat: { name: string } | null; marca: string | null }) {
+  return (
+    <div>
+      <label className="input-label" style={{ fontSize: '0.74rem' }}>{label}</label>
+      {cat ? (
+        <div style={{ fontSize: '0.85rem', padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 6, border: '1px solid var(--border)' }}>
+          {cat.name}
+        </div>
+      ) : (
+        <div style={{ fontSize: '0.78rem', padding: '8px 10px', color: 'var(--text-muted)', fontStyle: 'italic', background: 'var(--bg-elevated)', borderRadius: 6, border: '1px solid var(--border)' }}>
+          No se pudo detectar{marca ? ` (marca "${marca}" sin modelo en catálogo)` : ' — sin marca en el diseño'}
+        </div>
+      )}
     </div>
   );
 }

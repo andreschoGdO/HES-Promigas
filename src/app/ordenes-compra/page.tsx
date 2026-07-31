@@ -149,8 +149,11 @@ export default function OrdenesDeCompraPage() {
               it.precio_unitario != null ? fmtCOP(it.precio_unitario) : '—',
               fmtCOP(it.valor_total),
               <div key="acts" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                <button className="icon-btn" onClick={() => viewPdf(o.id)} disabled={!o.pdf_storage_path} aria-label="Ver PDF" title="Ver PDF">
+                <Link href={`/ordenes-compra/${o.id}`} className="icon-btn" aria-label="Ver detalle de la OC" title="Ver detalle de la OC">
                   <Eye size={14} />
+                </Link>
+                <button className="icon-btn" onClick={() => viewPdf(o.id)} disabled={!o.pdf_storage_path} aria-label="Ver PDF" title="Ver PDF">
+                  <FileText size={14} />
                 </button>
                 <label className="icon-btn" style={{ cursor: 'pointer' }} aria-label="Reemplazar PDF" title="Reemplazar PDF">
                   <Upload size={14} />

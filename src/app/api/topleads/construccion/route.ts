@@ -70,11 +70,23 @@ export async function GET(request: Request) {
     };
   });
 
+  // "Estado real de Construcción": se calcula aparte de `rows` (que exige
+  // contrato_signed_at, hoy vacío en todos los proyectos — gap de datos
+  // pendiente, ver nota abajo). Esta tarjeta debe reflejar el estado real
+  // de obra ya en curso, así que se basa en TODO crm_projects que ya pasó
+  // a Operaciones (current_module='operations'), sin depender de esa
+  // fecha de firma.
+  const { data: opsData, error: opsError } = await supabaseAdmin
+    .from('crm_projects')
+    .select('operations_stage')
+    .eq('current_module', 'operations');
+  if (opsError) return NextResponse.json({ error: opsError.message }, { status: 500 });
+
   const summary = {
-    por_instalar: rows.filter((p) => p.operations_stage === 'dimensionado' || p.operations_stage === 'alistamiento').length,
-    en_instalacion: rows.filter((p) => p.operations_stage === 'instalacion').length,
-    instalados: rows.filter((p) => p.operations_stage === 'operativo').length,
-    legalizandose: rows.filter((p) => p.operations_stage === 'legalizacion').length,
+    por_instalar: (opsData ?? []).filter((p) => p.operations_stage === 'dimensionado' || p.operations_stage === 'alistamiento').length,
+    en_instalacion: (opsData ?? []).filter((p) => p.operations_stage === 'instalacion').length,
+    instalados: (opsData ?? []).filter((p) => p.operations_stage === 'operativo').length,
+    legalizandose: (opsData ?? []).filter((p) => p.operations_stage === 'legalizacion').length,
   };
 
   return NextResponse.json({ deals: rows, summary, capturedAt: new Date().toISOString() });

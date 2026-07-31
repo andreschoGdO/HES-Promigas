@@ -144,9 +144,6 @@ export default function FunnelTopLeadsPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.3rem' }}>Funnel Comercial</h1>
-          <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            TopLeads — pipelines &ldquo;Prospectos Sunny&rdquo; y &ldquo;Lista de Espera&rdquo;, en vivo. Actualizado {fmtDateTime(funnelCapturedAt)}.
-          </p>
         </div>
         <button className="secondary-btn" onClick={refreshNow} disabled={refreshing}>
           <RefreshCw size={14} /> {refreshing ? 'Actualizando…' : 'Actualizar ahora'}
@@ -155,7 +152,7 @@ export default function FunnelTopLeadsPage() {
 
       {error && <div className="alert-error">{error}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 16, alignItems: 'stretch' }}>
         <section className="card">
           <div className="card-header"><span className="card-title">Funnel</span></div>
           {funnelLoading ? (

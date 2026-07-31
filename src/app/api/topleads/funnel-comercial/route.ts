@@ -81,22 +81,29 @@ export async function GET() {
     const totalLeads = ventas.length + enListaDeEspera;
     const completos = ventas.length - incompletos - descartados; // resto — incluye ganados
 
-    // Funnel acumulado (izquierda): cada bucket = abiertos con orden >= X, + ganados.
+    // Funnel acumulado (izquierda): cada bucket = abiertos con orden >= X,
+    // + ganados — EXCEPTO "Instalados", que se filtra por GANADO puro. Un
+    // deal abierto parado en la etapa "Instalados" todavía se está
+    // instalando, no terminó — sigue contando en "Firmado" (que ya lo
+    // incluye vía orden >= 11) pero no en "Instalados".
     const dimensionamiento = openAtLeastOrder(6) + won.length;
     const ofertaComercial = openAtLeastOrder(8) + won.length;
     const contrato = openAtLeastOrder(10) + won.length;
     const firmado = openAtLeastOrder(11) + won.length;
-    const instalados = openAtLeastOrder(12) + won.length;
+    const instalados = won.length; // ganado = instalación terminada
     const energizados = won.length;
 
-    // Bandas (derecha): valores puntuales por etapa cruda.
+    // Bandas (derecha): valores puntuales por etapa cruda, todos abiertos —
+    // salvo "Instalados", también filtrado por ganado (mismo criterio que
+    // arriba). Los abiertos parados en la etapa "Instalados" (instalación
+    // en curso, sin terminar) se suman a "Firmados sin Instalar".
     const enDimensionamiento = openAtStage('34');
     const dimensionado = openAtStage('5');
     const pendientesOferta = openAtStage('44');
     const pendConfirmOferta = openAtStage('7');
     const pendConfirmContrato = openAtStage('8');
-    const firmadosSinInstalar = openAtStage('47');
-    const instaladosBanda = openAtStage('55');
+    const firmadosSinInstalar = openAtStage('47') + openAtStage('55');
+    const instaladosBanda = won.length;
 
     return NextResponse.json({
       capturedAt: new Date().toISOString(),
@@ -114,12 +121,13 @@ export async function GET() {
       totalLeads,
       bandas: [
         {
+          // Sin "Descartados" acá a propósito — el estado Perdido solo se
+          // muestra en el Funnel de la izquierda, no en esta tabla.
           nombre: 'INTERESADOS',
           total: totalLeads,
           filas: [
             { label: 'Total Leads', value: totalLeads },
             { label: 'En Lista de Espera', value: enListaDeEspera },
-            { label: 'Descartados', value: descartados },
             { label: 'Leads Incompletos', value: incompletos, activos: true },
             { label: 'Leads Completos', value: completos, activos: true },
           ],

@@ -143,7 +143,6 @@ export default function OrdenDeCompraDetallePage() {
         <div className="card-header"><span className="card-title">Cabecera</span></div>
         <div className="grid grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, fontSize: '0.85rem' }}>
           <Kv label="Fecha documento" value={ocData.fecha_documento ?? '—'} />
-          <Kv label="Fecha entrega" value={ocData.fecha_entrega ?? '—'} />
           <Kv label="kWp total" value={ocData.kwp_total != null ? `${ocData.kwp_total} kWp` : 'No aplica (sin líneas de construcción)'} />
           <Kv
             label="kWp asignado"

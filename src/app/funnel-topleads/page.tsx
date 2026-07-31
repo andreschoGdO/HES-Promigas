@@ -5,12 +5,6 @@ import { RefreshCw, Download } from 'lucide-react';
 import { StatCard } from '@/components/StatCard';
 import { downloadCSV } from '@/lib/csv-export';
 
-interface FunnelBar {
-  key: string;
-  label: string;
-  value: number;
-}
-
 interface BandaFila {
   label: string;
   value: number;
@@ -60,7 +54,6 @@ const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(
 const fmtDateTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-CO') : 'nunca');
 
 export default function FunnelTopLeadsPage() {
-  const [funnel, setFunnel] = useState<FunnelBar[]>([]);
   const [bandas, setBandas] = useState<Banda[]>([]);
   const [funnelCapturedAt, setFunnelCapturedAt] = useState<string | null>(null);
   const [deals, setDeals] = useState<ConstruccionRow[]>([]);
@@ -77,7 +70,6 @@ export default function FunnelTopLeadsPage() {
     try {
       const fRes = await fetch('/api/topleads/funnel-comercial', { cache: 'no-store' });
       const fJson = await fRes.json();
-      setFunnel(fJson.funnel ?? []);
       setBandas(fJson.bandas ?? []);
       setFunnelCapturedAt(fJson.capturedAt ?? null);
     } finally {
@@ -136,9 +128,6 @@ export default function FunnelTopLeadsPage() {
     );
   };
 
-  const totalLeads = funnel.find((f) => f.key === 'total')?.value ?? 0;
-  const maxFunnel = Math.max(1, ...funnel.map((f) => f.value));
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -153,39 +142,6 @@ export default function FunnelTopLeadsPage() {
       {error && <div className="alert-error">{error}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 16, alignItems: 'stretch' }}>
-        <section className="card">
-          <div className="card-header"><span className="card-title">Funnel</span></div>
-          {funnelLoading ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {funnel.map((f) => {
-                const pct = totalLeads > 0 ? (f.value / totalLeads) * 100 : 0;
-                const isPerdidos = f.key === 'perdidos';
-                return (
-                  <div key={f.key}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 4 }}>
-                      <span style={{ fontWeight: 600 }}>{f.label}</span>
-                      <span><strong>{f.value}</strong> <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>{pct.toFixed(0)}% del total</span></span>
-                    </div>
-                    <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, height: 8, overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${Math.max(1, (f.value / maxFunnel) * 100)}%`,
-                        height: '100%',
-                        background: isPerdidos ? 'var(--error)' : 'var(--accent)',
-                        borderRadius: 6,
-                      }} />
-                    </div>
-                  </div>
-                );
-              })}
-              <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: 0 }}>
-                Los % indican cuántos de los {totalLeads} leads totales llegaron a cada etapa. Cada etapa es acumulada (incluye las siguientes).
-              </p>
-            </div>
-          )}
-        </section>
-
         <section className="card">
           <div className="card-header"><span className="card-title">Tabla de control</span></div>
           {funnelLoading ? (

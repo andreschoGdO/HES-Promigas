@@ -1,16 +1,26 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, Download, TrendingDown } from 'lucide-react';
+import { RefreshCw, Download } from 'lucide-react';
 import { StatCard } from '@/components/StatCard';
 import { downloadCSV } from '@/lib/csv-export';
 
-interface FunnelStage {
-  stage_id: string;
-  stage_title: string;
-  stage_order: number;
-  deals_count: number;
-  deals_value_total: number;
+interface FunnelBar {
+  key: string;
+  label: string;
+  value: number;
+}
+
+interface BandaFila {
+  label: string;
+  value: number;
+  activos?: boolean;
+}
+
+interface Banda {
+  nombre: string;
+  total: number;
+  filas: BandaFila[];
 }
 
 interface ConstruccionRow {
@@ -39,12 +49,19 @@ interface ConstruccionSummary {
 
 type ZonaFiltro = 'todas' | 'Valle' | 'Costa';
 
-const fmtCOP = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
+const BANDA_COLOR: Record<string, string> = {
+  INTERESADOS: '#3b82f6',
+  'EVALUACIÓN': '#84a83d',
+  CIERRE: '#e88b2d',
+  'EJECUCIÓN': '#0f9d6e',
+};
+
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('es-CO') : 'NO FECHA');
 const fmtDateTime = (iso: string | null) => (iso ? new Date(iso).toLocaleString('es-CO') : 'nunca');
 
 export default function FunnelTopLeadsPage() {
-  const [stages, setStages] = useState<FunnelStage[]>([]);
+  const [funnel, setFunnel] = useState<FunnelBar[]>([]);
+  const [bandas, setBandas] = useState<Banda[]>([]);
   const [funnelCapturedAt, setFunnelCapturedAt] = useState<string | null>(null);
   const [deals, setDeals] = useState<ConstruccionRow[]>([]);
   const [dealsCapturedAt, setDealsCapturedAt] = useState<string | null>(null);
@@ -58,9 +75,10 @@ export default function FunnelTopLeadsPage() {
   const loadFunnel = useCallback(async () => {
     setFunnelLoading(true);
     try {
-      const fRes = await fetch('/api/topleads/funnel', { cache: 'no-store' });
+      const fRes = await fetch('/api/topleads/funnel-comercial', { cache: 'no-store' });
       const fJson = await fRes.json();
-      setStages(fJson.stages ?? []);
+      setFunnel(fJson.funnel ?? []);
+      setBandas(fJson.bandas ?? []);
       setFunnelCapturedAt(fJson.capturedAt ?? null);
     } finally {
       setFunnelLoading(false);
@@ -97,11 +115,13 @@ export default function FunnelTopLeadsPage() {
   const refreshNow = async () => {
     setRefreshing(true);
     setError(null);
-    const res = await fetch('/api/cron/topleads-funnel', { headers: { 'x-trigger': 'manual' } });
-    const json = await res.json();
-    if (!res.ok || !json.ok) { setError(json.error ?? 'No se pudo refrescar'); setRefreshing(false); return; }
-    await loadFunnel();
-    setRefreshing(false);
+    try {
+      await loadFunnel();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo refrescar');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const downloadDeals = () => {
@@ -116,10 +136,8 @@ export default function FunnelTopLeadsPage() {
     );
   };
 
-  const maxCount = Math.max(1, ...stages.map((s) => s.deals_count));
-  const totalDeals = stages.reduce((s, r) => s + r.deals_count, 0);
-  const totalValue = stages.reduce((s, r) => s + r.deals_value_total, 0);
-  const firmados = stages.find((s) => s.stage_title === 'Contrato firmado')?.deals_count ?? 0;
+  const totalLeads = funnel.find((f) => f.key === 'total')?.value ?? 0;
+  const maxFunnel = Math.max(1, ...funnel.map((f) => f.value));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -127,7 +145,7 @@ export default function FunnelTopLeadsPage() {
         <div>
           <h1 style={{ margin: 0, fontSize: '1.3rem' }}>Funnel Comercial</h1>
           <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            Pipeline de ventas &ldquo;Prospectos Sunny&rdquo; — actualizado {fmtDateTime(funnelCapturedAt)}.
+            TopLeads — pipelines &ldquo;Prospectos Sunny&rdquo; y &ldquo;Lista de Espera&rdquo;, en vivo. Actualizado {fmtDateTime(funnelCapturedAt)}.
           </p>
         </div>
         <button className="secondary-btn" onClick={refreshNow} disabled={refreshing}>
@@ -137,48 +155,72 @@ export default function FunnelTopLeadsPage() {
 
       {error && <div className="alert-error">{error}</div>}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-        <StatCard label="Deals en el funnel" value={String(totalDeals)} hint="pipeline Prospectos Sunny, abiertos" />
-        <StatCard label="Valor total en pipeline" value={fmtCOP(totalValue)} hint="suma de todas las etapas" />
-        <StatCard label="Contrato firmado" value={String(firmados)} hint="etapa de conversión" />
-      </div>
-
-      <section className="card">
-        <div className="card-header"><span className="card-title">Funnel por etapa</span></div>
-        {funnelLoading ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
-        ) : stages.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            Sin datos todavía — tocá &ldquo;Actualizar ahora&rdquo; para traer la primera foto de TopLeads.
-          </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {stages.map((s) => (
-              <div key={s.stage_id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 190, fontSize: '0.8rem', color: 'var(--text-secondary)', flexShrink: 0 }}>{s.stage_title}</div>
-                <div style={{ flex: 1, background: 'var(--bg-elevated)', borderRadius: 6, overflow: 'hidden', height: 26, position: 'relative' }}>
-                  <div
-                    style={{
-                      width: `${Math.max(2, (s.deals_count / maxCount) * 100)}%`,
-                      height: '100%',
-                      background: 'var(--accent)',
-                      borderRadius: 6,
-                      transition: 'width .2s ease',
-                    }}
-                  />
-                  <span style={{ position: 'absolute', left: 10, top: 0, height: '100%', display: 'flex', alignItems: 'center', fontSize: '0.76rem', fontWeight: 700, color: '#fff', mixBlendMode: 'difference' }}>
-                    {s.deals_count}
-                  </span>
-                </div>
-                <div style={{ width: 130, textAlign: 'right', fontSize: '0.78rem', color: 'var(--text-muted)', flexShrink: 0 }}>{fmtCOP(s.deals_value_total)}</div>
-              </div>
-            ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: 6 }}>
-              <TrendingDown size={13} /> Orden = el mismo de las etapas del pipeline en TopLeads. Solo deals abiertos (no Ganados/Perdidos).
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 16, alignItems: 'start' }}>
+        <section className="card">
+          <div className="card-header"><span className="card-title">Funnel</span></div>
+          {funnelLoading ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {funnel.map((f) => {
+                const pct = totalLeads > 0 ? (f.value / totalLeads) * 100 : 0;
+                const isPerdidos = f.key === 'perdidos';
+                return (
+                  <div key={f.key}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600 }}>{f.label}</span>
+                      <span><strong>{f.value}</strong> <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>{pct.toFixed(0)}% del total</span></span>
+                    </div>
+                    <div style={{ background: 'var(--bg-elevated)', borderRadius: 6, height: 8, overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${Math.max(1, (f.value / maxFunnel) * 100)}%`,
+                        height: '100%',
+                        background: isPerdidos ? 'var(--error)' : 'var(--accent)',
+                        borderRadius: 6,
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+              <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: 0 }}>
+                Los % indican cuántos de los {totalLeads} leads totales llegaron a cada etapa. Cada etapa es acumulada (incluye las siguientes).
+              </p>
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+
+        <section className="card">
+          <div className="card-header"><span className="card-title">Tabla de control</span></div>
+          {funnelLoading ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {bandas.map((b) => (
+                <div key={b.nombre} style={{ display: 'flex', gap: 10 }}>
+                  <div style={{
+                    width: 22, flexShrink: 0, borderRadius: 4, background: BANDA_COLOR[b.nombre] ?? 'var(--accent)',
+                    color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    writingMode: 'vertical-rl', textOrientation: 'mixed', fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.04em', padding: '6px 0',
+                  }}>
+                    {b.nombre}
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    {b.filas.map((f) => (
+                      <div key={f.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid var(--border)', fontSize: '0.8rem' }}>
+                        <span>
+                          {f.label}
+                          {f.activos && <span className="badge-success" style={{ marginLeft: 6, fontSize: '0.6rem' }}>ACTIVOS</span>}
+                        </span>
+                        <strong>{f.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
 
       <section className="card">
         <div className="card-header"><span className="card-title">Estado real de Construcción</span></div>
@@ -195,13 +237,13 @@ export default function FunnelTopLeadsPage() {
 
       <section className="card">
         <div className="card-header">
-          <span className="card-title">Obras activas de Construcción</span>
+          <span className="card-title">BD Clientes Firmados Construcción</span>
           <button className="secondary-btn" onClick={downloadDeals} disabled={deals.length === 0}>
             <Download size={14} /> Descargar
           </button>
         </div>
         <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 0 }}>
-          Datos en vivo del CRM de Construcción; esta tabla se actualiza sola cada minuto, {fmtDateTime(dealsCapturedAt)}.
+          Todas las casas con contrato firmado — congruente con &ldquo;Firmado&rdquo; del funnel de arriba. En vivo del CRM, {fmtDateTime(dealsCapturedAt)}.
         </p>
         <div className="tabs" style={{ marginBottom: 14 }}>
           {(['todas', 'Valle', 'Costa'] as ZonaFiltro[]).map((z) => (
@@ -213,7 +255,7 @@ export default function FunnelTopLeadsPage() {
         {tableLoading ? (
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
         ) : deals.length === 0 ? (
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin obras activas de Construcción en esta zona todavía.</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin casas firmadas en esta zona todavía.</p>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>

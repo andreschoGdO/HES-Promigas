@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { FileText, Plus, Trash2, Download, Eye, Upload, RefreshCw } from 'lucide-react';
-import { StatCard } from '@/components/StatCard';
 import { PaginatedTable } from '@/components/DataTable';
 import { ModalShell } from '@/components/ModalShell';
 import { downloadCSV } from '@/lib/csv-export';
@@ -57,11 +56,6 @@ export default function OrdenesDeCompraPage() {
 
   useEffect(() => { load(); }, []);
 
-  const totalValor = ocs.reduce((s, o) => s + Number(o.valor_total), 0);
-  const totalKwp = ocs.reduce((s, o) => s + Number(o.kwp_total), 0);
-  const totalKwpAsignado = ocs.reduce((s, o) => s + Number(o.kwp_asignado), 0);
-  const totalEjecutado = ocs.reduce((s, o) => s + Number(o.costo_ejecutado), 0);
-  const totalNoEjecutado = ocs.reduce((s, o) => s + Number(o.costo_no_ejecutado), 0);
 
   const downloadTable = () => {
     downloadCSV(
@@ -95,22 +89,6 @@ export default function OrdenesDeCompraPage() {
             <Plus size={14} /> Importar OC
           </button>
         </div>
-      </div>
-
-      <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-        <StatCard label="Valor total OC" value={fmtCOP(totalValor)} hint={`${ocs.length} orden${ocs.length === 1 ? '' : 'es'} de compra`} />
-        <StatCard
-          label="kWp asignado"
-          value={`${totalKwpAsignado.toFixed(1)} / ${totalKwp.toFixed(1)} kWp`}
-          hint={fmtPct(totalKwp > 0 ? (totalKwpAsignado / totalKwp) * 100 : 0)}
-          tag="global"
-        />
-        <StatCard
-          label="Costo ejecutado vs. no ejecutado"
-          value={fmtCOP(totalEjecutado)}
-          hint={`${fmtCOP(totalNoEjecutado)} sin ejecutar`}
-          tag={totalValor > 0 ? fmtPct((totalEjecutado / totalValor) * 100) : undefined}
-        />
       </div>
 
       <section className="card">

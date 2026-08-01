@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { Receipt, Download, Search, Pencil, X, Check, Loader2, MapPin, Tag, Layers, HardHat, Boxes, DollarSign, Wrench, Calculator, Lock, Unlock, History, Upload, Snowflake, AlertTriangle, FileText, FileSignature } from 'lucide-react';
+import { Receipt, Download, Search, Pencil, X, Check, Loader2, MapPin, Tag, Layers, HardHat, Boxes, DollarSign, Wrench, Calculator, Lock, Unlock, History, Upload, Snowflake, AlertTriangle, FileText } from 'lucide-react';
 import { ModalShell } from '@/components/ModalShell';
 
 interface Row {
@@ -138,7 +138,6 @@ const GROUPS: Group[] = [
       { key: 'estado',              label: 'ESTADO',           type: 'text', editable: false, minWidth: 120 },
       { key: 'installation_date',   label: 'F. INSTALACIÓN',   type: 'text', editable: false, minWidth: 110 },
       { key: 'operativo_at',        label: 'F. OPERATIVO',     type: 'text', editable: false, minWidth: 110 },
-      { key: 'lectura_inicial_kwh', label: 'LECTURA INICIAL',  type: 'num',  editable: false, minWidth: 110 },
     ],
   },
   {
@@ -159,20 +158,9 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    id: 'tecnico_acta', label: 'Datos técnicos (del acta)', Icon: HardHat, color: '#0ea5e9',
-    cols: [
-      { key: 'numero_contrato_or',      label: 'Nº CONTRATO OR',       type: 'text', editable: false, minWidth: 130 },
-      { key: 'capacidad_transformador', label: 'TRANSFORMADOR (kVA)',  type: 'num',  editable: false, minWidth: 120 },
-      { key: 'nivel_tension',           label: 'NIVEL TENSIÓN (V)',    type: 'num',  editable: false, minWidth: 120 },
-      { key: 'operador_telefonia',      label: 'OPERADOR TELEFONÍA',   type: 'text', editable: false, minWidth: 120 },
-    ],
-  },
-  {
     id: 'actores', label: 'Actores y marcas', Icon: HardHat, color: '#f59e0b',
     cols: [
       { key: 'constructor',        label: 'Constructor',     type: 'text', editable: false, minWidth: 130 },
-      { key: 'cuadrilla',          label: 'Cuadrilla',       type: 'text', editable: false, minWidth: 130 },
-      { key: 'tecnico_instalador', label: 'Técnico inst.',   type: 'text', editable: false, minWidth: 130 },
       { key: 'marca_bateria',      label: 'Marca Bateria',   type: 'text', editable: false, minWidth: 130 },
       { key: 'marca_inversor',     label: 'Marca Inversor',  type: 'text', editable: false, minWidth: 130 },
       { key: 'marca_panel',        label: 'Marca Panel',     type: 'text', editable: false, minWidth: 130 },
@@ -199,40 +187,9 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    id: 'contrato', label: 'Contrato comercial', Icon: FileSignature, color: '#0ea5e9',
-    cols: [
-      { key: 'contract_type',            label: 'Tipo contrato',     type: 'text',  editable: true, minWidth: 130 },
-      { key: 'contract_status',          label: 'Estado contrato',   type: 'text',  editable: true, minWidth: 140 },
-      { key: 'contract_start_date',      label: 'Fecha inicio',      type: 'text',  editable: true, minWidth: 120 },
-      { key: 'contract_duration_months', label: 'Duración (meses)',  type: 'num',   editable: true, minWidth: 110 },
-      { key: 'tariff_cop_per_kwh',       label: 'Tarifa COP/kWh',    type: 'money', editable: true, minWidth: 120 },
-      { key: 'monthly_fee_cop',          label: 'Cuota fija/mes',    type: 'money', editable: true, minWidth: 130 },
-      { key: 'system_warranty_months',   label: 'Garantía (meses)',  type: 'num',   editable: true, minWidth: 120 },
-      { key: 'contract_url',             label: 'URL contrato',      type: 'text',  editable: true, minWidth: 160 },
-    ],
-  },
-  {
     id: 'cierre', label: 'Cierre', Icon: Calculator, color: '#07c5a8',
     cols: [
-      { key: 'capex',        label: 'Capex', type: 'money', editable: true, minWidth: 130 },
-      { key: 'operador_red', label: 'OR',    type: 'text',  editable: true, minWidth: 100 },
-    ],
-  },
-  {
-    id: 'cobros', label: 'Cobros (manual)', Icon: DollarSign, color: '#10b981',
-    cols: [
-      { key: 'revenue_billed_cop',  label: 'INGRESO FACTURADO',   type: 'money', editable: true, minWidth: 140 },
-      { key: 'balance_due_cop',     label: 'SALDO PENDIENTE',     type: 'money', editable: true, minWidth: 130 },
-      { key: 'first_billing_date',  label: 'F. PRIMER COBRO',     type: 'text',  editable: true, minWidth: 120 },
-    ],
-  },
-  {
-    id: 'documentacion', label: 'Comercial y documentos', Icon: FileText, color: '#8b5cf6',
-    cols: [
-      { key: 'salesperson',                  label: 'VENDEDOR',           type: 'text', editable: true, minWidth: 140 },
-      { key: 'contract_notes',               label: 'NOTAS CONTRATO',     type: 'text', editable: true, minWidth: 200 },
-      { key: 'acta_instalacion_url',         label: 'URL ACTA INSTAL.',   type: 'text', editable: true, minWidth: 160 },
-      { key: 'certificado_legalizacion_url', label: 'URL CERT. LEGAL.',   type: 'text', editable: true, minWidth: 160 },
+      { key: 'capex', label: 'Capex', type: 'money', editable: true, minWidth: 130 },
     ],
   },
 ];

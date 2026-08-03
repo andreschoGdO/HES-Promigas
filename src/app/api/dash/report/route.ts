@@ -62,7 +62,12 @@ interface CrmProjectRow {
   casa_numero: string | null;
 }
 
-interface FacturaRow { project_id: string; capex: number | null; capex_venta: number | null; usd_wp: number | null; solucion: string | null; }
+interface FacturaRow {
+  project_id: string; capex: number | null; capex_venta: number | null; usd_wp: number | null; solucion: string | null;
+  costo_inversor: number | null; costo_bateria: number | null; costo_control_box: number | null; costo_top_cover: number | null;
+  costo_panel_solar: number | null; costo_medidor_solar: number | null; costo_medidor_generacion: number | null;
+  costo_modem: number | null; mano_de_obra: number | null; desmantelamiento_mo: number | null;
+}
 
 interface CategoryRow {
   id: string;
@@ -198,15 +203,31 @@ export async function GET(request: Request) {
   const projects = (projRaw ?? []) as CrmProjectRow[];
 
   // ─── CAPEX (facturación) ───
+  // `capex` en facturacion_records es un override manual (solo lo tienen
+  // 2 casas hoy) — para el resto (34/36) el capex real vive repartido en
+  // sus 10 columnas de costo individuales y nunca se sumaban acá, así que
+  // el Dash mostraba un CAPEX ejecutado ~95% más bajo que el real (misma
+  // regla de suma que ya usa /api/facturacion cuando no hay override).
   const { data: factRaw } = await supabaseAdmin
     .from('facturacion_records')
-    .select('project_id, capex, capex_venta, usd_wp, solucion');
+    .select(`
+      project_id, capex, capex_venta, usd_wp, solucion,
+      costo_inversor, costo_bateria, costo_control_box, costo_top_cover,
+      costo_panel_solar, costo_medidor_solar, costo_medidor_generacion,
+      costo_modem, mano_de_obra, desmantelamiento_mo
+    `);
   const capexByProj = new Map<string, number>();
   const capexVentaByProj = new Map<string, number>();
   const usdWpByProj = new Map<string, number>();
   const solucionByProj = new Map<string, string>();
   ((factRaw ?? []) as FacturaRow[]).forEach((f) => {
-    if (f.capex != null) capexByProj.set(f.project_id, Number(f.capex));
+    const capexComputado = [
+      f.costo_inversor, f.costo_bateria, f.costo_control_box, f.costo_top_cover,
+      f.costo_panel_solar, f.costo_medidor_solar, f.costo_medidor_generacion,
+      f.costo_modem, f.mano_de_obra, f.desmantelamiento_mo,
+    ].reduce((sum: number, v) => sum + Number(v ?? 0), 0);
+    const capex = f.capex != null ? Number(f.capex) : capexComputado;
+    if (capex > 0) capexByProj.set(f.project_id, capex);
     if (f.capex_venta != null) capexVentaByProj.set(f.project_id, Number(f.capex_venta));
     if (f.usd_wp != null) usdWpByProj.set(f.project_id, Number(f.usd_wp));
     if (f.solucion) solucionByProj.set(f.project_id, f.solucion);

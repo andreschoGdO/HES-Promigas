@@ -265,42 +265,83 @@ export default function OrdenesDeCompraPage() {
 
 function ImportOcModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [tipoOc, setTipoOc] = useState<'construccion' | 'adicionales'>('construccion');
+  const [ocOptions, setOcOptions] = useState<Array<{ id: string; numero_oc: string; proveedor: string; valor_total: number }>>([]);
+  const [parentOcId, setParentOcId] = useState('');
   const [form, setForm] = useState({
     numero_oc: '', proveedor: '', fecha_documento: '',
     condiciones_pago: '', kwp_total: '', valor_total: '', observaciones: '',
+    numero_adicional: '', motivo: '', solicitado_por: '', aprobado_por: '',
   });
   const [items, setItems] = useState<NewItem[]>([blankItem()]);
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (tipoOc !== 'adicionales' || ocOptions.length > 0) return;
+    (async () => {
+      const r = await fetch('/api/purchase-orders');
+      const j = await r.json();
+      setOcOptions((j.purchaseOrders ?? []).map((o: { id: string; numero_oc: string; proveedor: string; valor_total: number }) => ({ id: o.id, numero_oc: o.numero_oc, proveedor: o.proveedor, valor_total: o.valor_total })));
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipoOc]);
+
   const set = (k: keyof typeof form, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const setItem = (i: number, patch: Partial<NewItem>) => setItems((rows) => rows.map((r, j) => j === i ? { ...r, ...patch } : r));
+
+  const submitConstruccion = async () => {
+    const res = await fetch('/api/purchase-orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        numero_oc: form.numero_oc,
+        proveedor: form.proveedor,
+        fecha_documento: form.fecha_documento || null,
+        condiciones_pago: form.condiciones_pago || null,
+        kwp_total: form.kwp_total ? Number(form.kwp_total) : null,
+        valor_total: Number(form.valor_total),
+        observaciones: form.observaciones || null,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) { setError(json.error ?? 'Error al crear la OC'); setSaving(false); return null; }
+    return { id: json.purchaseOrder.id, itemsUrl: `/api/purchase-orders/${json.purchaseOrder.id}/items`, pdfUrl: `/api/purchase-orders/${json.purchaseOrder.id}/pdf` };
+  };
+
+  // Un "adicional" (otrosí) NO es una OC nueva — queda vinculado a una OC
+  // padre en purchase_order_addenda. Antes, elegir "Adicionales" acá no
+  // hacía nada distinto: siempre se creaba una OC suelta sin vínculo.
+  const submitAdicional = async () => {
+    if (!parentOcId) { setError('Selecciona la OC padre de este adicional'); setSaving(false); return null; }
+    const res = await fetch('/api/purchase-orders/addenda', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        oc_id: parentOcId,
+        numero_adicional: form.numero_adicional,
+        fecha: form.fecha_documento || null,
+        motivo: form.motivo || null,
+        solicitado_por: form.solicitado_por || null,
+        aprobado_por: form.aprobado_por || null,
+        valor_total: Number(form.valor_total),
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) { setError(json.error ?? 'Error al crear el adicional'); setSaving(false); return null; }
+    return { id: json.addendum.id, itemsUrl: `/api/purchase-orders/addenda/${json.addendum.id}/items`, pdfUrl: `/api/purchase-orders/addenda/${json.addendum.id}/pdf` };
+  };
 
   const submit = async () => {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch('/api/purchase-orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          numero_oc: form.numero_oc,
-          proveedor: form.proveedor,
-          fecha_documento: form.fecha_documento || null,
-          condiciones_pago: form.condiciones_pago || null,
-          kwp_total: tipoOc === 'construccion' && form.kwp_total ? Number(form.kwp_total) : null,
-          valor_total: Number(form.valor_total),
-          observaciones: form.observaciones || null,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) { setError(json.error ?? 'Error al crear la OC'); setSaving(false); return; }
-      const ocId = json.purchaseOrder.id;
+      const created = tipoOc === 'construccion' ? await submitConstruccion() : await submitAdicional();
+      if (!created) return;
 
       const validItems = items.filter((it) => it.descripcion.trim() && it.valor_total !== '');
       if (validItems.length > 0) {
-        const itemsRes = await fetch(`/api/purchase-orders/${ocId}/items`, {
+        const itemsRes = await fetch(created.itemsUrl, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -316,13 +357,13 @@ function ImportOcModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
             })),
           }),
         });
-        if (!itemsRes.ok) { const j = await itemsRes.json(); setError(`OC creada, pero falló guardar las líneas: ${j.error}`); setSaving(false); return; }
+        if (!itemsRes.ok) { const j = await itemsRes.json(); setError(`${tipoOc === 'construccion' ? 'OC creada' : 'Adicional creado'}, pero falló guardar las líneas: ${j.error}`); setSaving(false); return; }
       }
 
       if (file) {
         const fd = new FormData();
         fd.append('file', file);
-        await fetch(`/api/purchase-orders/${ocId}/pdf`, { method: 'POST', body: fd });
+        await fetch(created.pdfUrl, { method: 'POST', body: fd });
       }
       onSuccess();
     } catch (e) {
@@ -332,7 +373,7 @@ function ImportOcModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
   };
 
   return (
-    <ModalShell title="Importar orden de compra" onClose={onClose} accent="#07c5a8" Icon={Upload} width={920}>
+    <ModalShell title={tipoOc === 'construccion' ? 'Importar orden de compra' : 'Importar adicional (otrosí)'} onClose={onClose} accent="#07c5a8" Icon={Upload} width={920}>
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {error && <div className="alert-error">{error}</div>}
 
@@ -343,20 +384,38 @@ function ImportOcModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
           </div>
         </Field>
 
-        <div className="grid grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <Field label="Número de OC *"><input value={form.numero_oc} onChange={(e) => set('numero_oc', e.target.value)} placeholder="4200028778" /></Field>
-          <Field label="Proveedor *"><input value={form.proveedor} onChange={(e) => set('proveedor', e.target.value)} placeholder="ESTRUCCON INGENIERIA SAS" /></Field>
-          <Field label="Fecha documento"><input type="date" value={form.fecha_documento} onChange={(e) => set('fecha_documento', e.target.value)} /></Field>
-          <Field label="Valor total (COP) *"><input type="number" value={form.valor_total} onChange={(e) => set('valor_total', e.target.value)} placeholder="472650198" /></Field>
-          {tipoOc === 'construccion' && (
-            <Field label="kWp total OC"><input type="number" value={form.kwp_total} onChange={(e) => set('kwp_total', e.target.value)} placeholder="205.28" /></Field>
-          )}
-          <Field label="Condiciones de pago"><input value={form.condiciones_pago} onChange={(e) => set('condiciones_pago', e.target.value)} placeholder="Dentro de los 30 días sin DPP" /></Field>
-          <Field label="PDF de la OC"><input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
-        </div>
-        <Field label="Observaciones">
-          <textarea rows={2} value={form.observaciones} onChange={(e) => set('observaciones', e.target.value)} />
-        </Field>
+        {tipoOc === 'adicionales' ? (
+          <div className="grid grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label="OC padre *">
+              <select value={parentOcId} onChange={(e) => setParentOcId(e.target.value)}>
+                <option value="">— Elegir OC a la que se le agrega este adicional —</option>
+                {ocOptions.map((o) => <option key={o.id} value={o.id}>{o.numero_oc} — {o.proveedor}</option>)}
+              </select>
+            </Field>
+            <Field label="N.° adicional *"><input value={form.numero_adicional} onChange={(e) => set('numero_adicional', e.target.value)} placeholder="1" /></Field>
+            <Field label="Fecha"><input type="date" value={form.fecha_documento} onChange={(e) => set('fecha_documento', e.target.value)} /></Field>
+            <Field label="Valor total (COP) *"><input type="number" value={form.valor_total} onChange={(e) => set('valor_total', e.target.value)} placeholder="26567938" /></Field>
+            <Field label="Solicitado por"><input value={form.solicitado_por} onChange={(e) => set('solicitado_por', e.target.value)} /></Field>
+            <Field label="Aprobado por"><input value={form.aprobado_por} onChange={(e) => set('aprobado_por', e.target.value)} /></Field>
+            <Field label="PDF del adicional"><input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
+            <Field label="Motivo"><input value={form.motivo} onChange={(e) => set('motivo', e.target.value)} placeholder="ADICIONAL DE ADECUACIÓN ELÉCTRICA…" /></Field>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Número de OC *"><input value={form.numero_oc} onChange={(e) => set('numero_oc', e.target.value)} placeholder="4200028778" /></Field>
+              <Field label="Proveedor *"><input value={form.proveedor} onChange={(e) => set('proveedor', e.target.value)} placeholder="ESTRUCCON INGENIERIA SAS" /></Field>
+              <Field label="Fecha documento"><input type="date" value={form.fecha_documento} onChange={(e) => set('fecha_documento', e.target.value)} /></Field>
+              <Field label="Valor total (COP) *"><input type="number" value={form.valor_total} onChange={(e) => set('valor_total', e.target.value)} placeholder="472650198" /></Field>
+              <Field label="kWp total OC"><input type="number" value={form.kwp_total} onChange={(e) => set('kwp_total', e.target.value)} placeholder="205.28" /></Field>
+              <Field label="Condiciones de pago"><input value={form.condiciones_pago} onChange={(e) => set('condiciones_pago', e.target.value)} placeholder="Dentro de los 30 días sin DPP" /></Field>
+              <Field label="PDF de la OC"><input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></Field>
+            </div>
+            <Field label="Observaciones">
+              <textarea rows={2} value={form.observaciones} onChange={(e) => set('observaciones', e.target.value)} />
+            </Field>
+          </>
+        )}
 
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -421,9 +480,9 @@ function ImportOcModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
           <button
             className="primary-btn"
             onClick={submit}
-            disabled={saving || !form.numero_oc || !form.proveedor || !form.valor_total}
+            disabled={saving || !form.valor_total || (tipoOc === 'construccion' ? (!form.numero_oc || !form.proveedor) : (!parentOcId || !form.numero_adicional))}
           >
-            <FileText size={14} /> {saving ? 'Guardando…' : 'Crear OC'}
+            <FileText size={14} /> {saving ? 'Guardando…' : tipoOc === 'construccion' ? 'Crear OC' : 'Crear adicional'}
           </button>
         </div>
       </div>

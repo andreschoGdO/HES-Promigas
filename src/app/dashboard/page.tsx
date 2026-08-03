@@ -6,6 +6,7 @@ import { Filter, RefreshCw, Download, Activity, Play, BookOpen, ChevronDown, Che
 import { VARIABLES, findVariable, type VariableMeta } from '@/lib/variables-dict';
 import { NarFullView } from '@/components/NarFullView';
 import { InverterControlPanel } from '@/components/InverterControlPanel';
+import { MeterControlPanel } from '@/components/MeterControlPanel';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush,
   PieChart, Pie, Cell,
@@ -1152,7 +1153,18 @@ export default function DashboardPage() {
 
       {tab === 'cierres' && <CierresGranularTab devices={devices} />}
       {tab === 'nar' && <NarTab />}
-      {tab === 'equipos' && <InverterControlPanel devices={devices} />}
+      {tab === 'equipos' && (
+        <>
+          <InverterControlPanel devices={devices} />
+          <div style={{ margin: '28px 0 14px', paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            <h2 style={{ margin: 0, fontSize: '1.05rem' }}>🔌 Corte y Reconexión de Medidores</h2>
+            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+              Control remoto del relé de corte de cada medidor (protocolo DLMS/COSEM) vía Metrum.
+            </p>
+          </div>
+          <MeterControlPanel devices={devices} />
+        </>
+      )}
     </>
   );
 }

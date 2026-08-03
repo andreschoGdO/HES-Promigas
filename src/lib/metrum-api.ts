@@ -160,6 +160,28 @@ export async function getTimeseries(
   return res.json();
 }
 
+/** Lee atributos actuales (con valor + lastUpdateTs) de un device en un scope dado. */
+export async function getAttributeValues(
+  token: string, entityId: string, scope: 'SERVER_SCOPE' | 'SHARED_SCOPE' | 'CLIENT_SCOPE', keys: string[],
+): Promise<Array<{ key: string; value: unknown; lastUpdateTs: number }>> {
+  if (keys.length === 0) return [];
+  const url = `${METRUM_API_URL}/api/plugins/telemetry/DEVICE/${entityId}/values/attributes/${scope}?keys=${keys.join(',')}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Error leyendo atributos ${scope} (${res.status})`);
+  return res.json();
+}
+
+/** Escribe atributos SERVER_SCOPE de un device (ej. despachar un "command"). Requiere permisos de escritura. */
+export async function setServerAttributes(token: string, entityId: string, attrs: Record<string, unknown>): Promise<void> {
+  const url = `${METRUM_API_URL}/api/plugins/telemetry/DEVICE/${entityId}/attributes/SERVER_SCOPE`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(attrs),
+  });
+  if (!res.ok) throw new Error(`Error escribiendo atributos SERVER_SCOPE (${res.status})`);
+}
+
 export async function getDailyClosure(token: string, entityId: string, startTs: number, endTs: number) {
   // Consulta los parámetros de cierre diario para un dispositivo
   const keys = ['CenergyAI', 'CenergyAE', 'CenergyRI', 'CenergyRE'].join('%2C');

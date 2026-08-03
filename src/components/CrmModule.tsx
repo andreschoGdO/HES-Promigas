@@ -229,10 +229,37 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConf
   onConfigureStage: (stage: StageMeta) => void;
   onDownloadStage: (stage: StageMeta, list: CrmProject[]) => void;
 }) {
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  const allProjectsById = useMemo(() => {
+    const m = new Map<string, CrmProject>();
+    for (const list of projectsByStage.values()) for (const p of list) m.set(p.id, p);
+    return m;
+  }, [projectsByStage]);
+
+  const handleDrop = (targetStage: StageMeta) => (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverStage(null);
+    let payload: { projectId: string; fromStage: string } | null = null;
+    try { payload = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { /* ignore */ }
+    if (!payload || payload.fromStage === targetStage.key) return;
+    const project = allProjectsById.get(payload.projectId);
+    if (!project) return;
+    const def = transitionsFrom(module, payload.fromStage).find((t) => t.toStage === targetStage.key);
+    if (!def) {
+      const fromLabel = stages.find((s) => s.key === payload!.fromStage)?.shortLabel ?? payload.fromStage;
+      alert(`No se puede mover directamente de "${fromLabel}" a "${targetStage.shortLabel}".`);
+      return;
+    }
+    onAdvance({ project, def });
+  };
+
   return (
     <div className="pipefy-board">
       {stages.map((s) => {
         const list = projectsByStage.get(s.key) ?? [];
+        const isDragOver = dragOverStage === s.key;
         return (
           <div key={s.key} className="pipefy-col">
             {/* Header de columna con stripe colorida arriba — click abre configurador */}
@@ -264,15 +291,31 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConf
               </div>
               <p style={{ margin: '4px 0 0', fontSize: '0.66rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>{s.description}</p>
             </div>
-            {/* Body de columna — fondo gris suave */}
-            <div className="pipefy-col-body">
+            {/* Body de columna — fondo gris suave. Acepta drop de cards arrastradas desde otra etapa. */}
+            <div
+              className="pipefy-col-body"
+              style={isDragOver ? { background: s.color + '12', outline: `2px dashed ${s.color}60`, outlineOffset: -4 } : undefined}
+              onDragOver={(e) => { e.preventDefault(); if (dragOverStage !== s.key) setDragOverStage(s.key); }}
+              onDragLeave={() => setDragOverStage((cur) => cur === s.key ? null : cur)}
+              onDrop={handleDrop(s)}
+            >
               {list.length === 0 ? (
                 <div className="pipefy-empty">
-                  <div style={{ fontSize: '0.74rem' }}>Vacío</div>
+                  <div style={{ fontSize: '0.74rem' }}>{isDragOver ? 'Soltar aquí' : 'Vacío'}</div>
                   <div style={{ fontSize: '0.66rem', marginTop: 4, opacity: 0.6 }}>Las cards aparecen aquí</div>
                 </div>
               ) : list.map((p) => (
-                <ProjectCard key={p.id} project={p} onOpen={() => onOpen(p)} module={module} onAdvance={onAdvance} stageColor={s.color} />
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  onOpen={() => onOpen(p)}
+                  module={module}
+                  onAdvance={onAdvance}
+                  stageColor={s.color}
+                  isDragging={draggingId === p.id}
+                  onDragStart={() => setDraggingId(p.id)}
+                  onDragEnd={() => setDraggingId(null)}
+                />
               ))}
             </div>
           </div>
@@ -439,12 +482,15 @@ function TagEditor({ tags, stage, onChange }: {
 }
 
 /* ─────────── Card de proyecto, look Pipefy ─────────── */
-function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
+function ProjectCard({ project, onOpen, module, onAdvance, stageColor, isDragging, onDragStart, onDragEnd }: {
   project: CrmProject;
   onOpen: () => void;
   module: 'operations';
   onAdvance: (t: { project: CrmProject; def: TransitionDef }) => void;
   stageColor: string;
+  isDragging?: boolean;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const stage = project.operations_stage;
   // Solo mostrar la transición forward en el footer del card (el "Volver atrás"
@@ -474,17 +520,26 @@ function ProjectCard({ project, onOpen, module, onAdvance, stageColor }: {
   return (
     <div
       onClick={onOpen}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', JSON.stringify({ projectId: project.id, fromStage: stage }));
+        onDragStart?.();
+      }}
+      onDragEnd={() => onDragEnd?.()}
       style={{
         background: 'var(--bg-surface)',
         borderRadius: 10,
         padding: 12,
         border: '1px solid var(--border)',
         boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-        cursor: 'pointer',
-        transition: 'transform 0.12s, box-shadow 0.12s, border-color 0.12s',
+        cursor: isDragging ? 'grabbing' : 'grab',
+        opacity: isDragging ? 0.4 : 1,
+        transition: 'transform 0.12s, box-shadow 0.12s, border-color 0.12s, opacity 0.12s',
         position: 'relative',
       }}
       onMouseEnter={(e) => {
+        if (isDragging) return;
         e.currentTarget.style.transform = 'translateY(-1px)';
         e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.06)';
         e.currentTarget.style.borderColor = stageColor + '60';

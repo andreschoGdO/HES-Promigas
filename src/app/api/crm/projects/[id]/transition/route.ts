@@ -9,6 +9,7 @@ const COL_TYPES: Record<string, 'number' | 'integer' | 'date' | 'timestamptz' | 
   inst_paneles_dc: 'boolean',
   inst_equipos_ac: 'boolean',
   inst_config_cierre: 'boolean',
+  diseno_modelo_cambiado: 'boolean',
   estrato: 'integer',
   invoice_kwh_mensual: 'number',
   invoice_valor_cop: 'number',
@@ -146,6 +147,8 @@ export async function POST(request: Request, context: Ctx) {
       'contractor_name','contractor_email','installation_date','lectura_inicial_kwh',
       'inst_paneles_dc','inst_equipos_ac','inst_config_cierre',
       'operativo_at','legalizado_at','assigned_to','notes',
+      'dossier_proyecto_url','dossier_equipos_url',
+      'diseno_modelo_cambiado','diseno_modelo_cambio_log',
     ]);
 
     // Campos del body que no son del schema fijo van a custom_data JSONB

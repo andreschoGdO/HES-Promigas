@@ -12,8 +12,10 @@ export type OperationsStage =
   | 'dimensionado'
   | 'alistamiento'
   | 'instalacion'
-  | 'legalizacion'
   | 'operativo'
+  | 'documentacion'
+  | 'o_m'
+  | 'legalizacion'
   | 'logistica_inversa'
   | 'desistido'
   | 'sin_renovacion'
@@ -33,9 +35,11 @@ export const OPERATIONS_STAGES: StageMeta[] = [
   { key: 'alistamiento',     label: '2. Alistamiento',     shortLabel: 'Alistamiento',     color: '#3b82f6', description: 'Reservar equipos en inventario con los SKUs del diseño y verificar disponibilidad física antes de despachar.' },
   { key: 'instalacion',      label: '3. Instalación',      shortLabel: 'Instalación',      color: '#8b5cf6', description: 'Contratista seleccionado, instalación en curso. Visita de instalación enlazada en /visitas.' },
   { key: 'operativo',        label: '4. Operativo',        shortLabel: 'Operativo',        color: '#10b981', description: 'Sistema instalado y generando. Lectura inicial registrada, conectado a Metrum.' },
-  { key: 'legalizacion',     label: '5. Legalización',     shortLabel: 'Legalización',     color: '#0ea5e9', description: 'Trámite AGPE en curso para habilitar venta de excedentes. El sistema sigue OPERATIVO — solo queda registro de que se legalizó al volver.' },
-  { key: 'desistido',        label: '6. Desistido',        shortLabel: 'Desistido',        color: '#f97316', description: 'Cliente desistió del proyecto antes o durante. Equipos se recuperan a bodega.' },
-  { key: 'sin_renovacion',   label: '7. Sin renovación',   shortLabel: 'No renovado',      color: '#64748b', description: 'Fin del contrato — cliente no renueva. Equipos se retiran y se devuelven a bodega para reuso.' },
+  { key: 'documentacion',    label: '5. Documentación',    shortLabel: 'Documentación',    color: '#eab308', description: 'Se recopila el dossier del proyecto y el dossier de los equipos instalados.' },
+  { key: 'o_m',              label: '6. O&M',               shortLabel: 'O&M',              color: '#06b6d4', description: 'Operación y mantenimiento. Historial de visitas y tickets al equipo constructivo.' },
+  { key: 'legalizacion',     label: '7. Legalización',     shortLabel: 'Legalización',     color: '#0ea5e9', description: 'Trámite AGPE en curso para habilitar venta de excedentes. El sistema sigue generando — solo queda registro de que se legalizó al volver.' },
+  { key: 'desistido',        label: '8. Desistido',        shortLabel: 'Desistido',        color: '#f97316', description: 'Cliente desistió del proyecto antes o durante. Equipos se recuperan a bodega.' },
+  { key: 'sin_renovacion',   label: '9. Sin renovación',   shortLabel: 'No renovado',      color: '#64748b', description: 'Fin del contrato — cliente no renueva. Equipos se retiran y se devuelven a bodega para reuso.' },
 ];
 // Nota (mig 47): la etapa 'logistica_inversa' fue retirada del kanban.
 // Garantía y cambio de equipos ahora se gestionan desde /inventario por
@@ -115,26 +119,46 @@ export const TRANSITIONS: TransitionDef[] = [
     ],
     noteTemplate: 'Instalación completada. Sistema generando.',
   },
-  // Legalización (AGPE) ahora vive DESPUÉS de operativo. La casa sigue
-  // generando durante el trámite; al volver a operativo queda el registro
+  // Documentación (nuevo, mig 62): dossier del proyecto + de los equipos
+  // instalados, antes de pasar a O&M.
+  {
+    action: 'operativo_to_documentacion',
+    label: 'Iniciar documentación',
+    buttonLabel: 'Documentar →',
+    fromModule: 'operations', fromStage: 'operativo', toModule: 'operations', toStage: 'documentacion',
+    requiredFields: [],
+    noteTemplate: 'Sistema operativo. Recopilando dossier del proyecto y de equipos.',
+  },
+  // O&M (nuevo, mig 62): estado de operación/mantenimiento en curso — es el
+  // nuevo estado estable de largo plazo (antes lo era 'operativo').
+  {
+    action: 'documentacion_to_om',
+    label: 'Pasar a O&M',
+    buttonLabel: 'A O&M →',
+    fromModule: 'operations', fromStage: 'documentacion', toModule: 'operations', toStage: 'o_m',
+    requiredFields: [],
+    noteTemplate: 'Documentación completa. Entra a Operación y Mantenimiento.',
+  },
+  // Legalización (AGPE) ahora vive DESPUÉS de O&M. La casa sigue
+  // generando durante el trámite; al volver a O&M queda el registro
   // de que ya está legalizada (agpe_fecha_aprobacion + agpe_estado='Aprobado').
   {
-    action: 'operativo_to_legalizacion',
+    action: 'om_to_legalizacion',
     label: 'Iniciar legalización (AGPE)',
     buttonLabel: 'Legalizar →',
-    fromModule: 'operations', fromStage: 'operativo', toModule: 'operations', toStage: 'legalizacion',
+    fromModule: 'operations', fromStage: 'o_m', toModule: 'operations', toStage: 'legalizacion',
     requiredFields: [
       f('agpe_operador_red', 'Operador de red', 'select', true, { options: ['EPSA', 'EMCALI', 'AIR-E', 'AFINIA', 'ENEL', 'ELECTRICARIBE', 'Otro'] }),
       f('agpe_estado', 'Estado del trámite', 'select', true, { options: ['Con visita', 'Radicado', 'En revisión', 'Aprobado sin visita', 'Aprobado visitado', 'Legalizada'] }),
       f('agpe_fecha_estimada', 'Fecha estimada de aprobación', 'date', false),
     ],
-    noteTemplate: 'Iniciado trámite AGPE. Sistema sigue operativo.',
+    noteTemplate: 'Iniciado trámite AGPE. Sistema sigue generando.',
   },
   {
-    action: 'legalizacion_to_operativo',
+    action: 'legalizacion_to_om',
     label: 'Cerrar legalización (aprobado)',
     buttonLabel: 'Legalización aprobada →',
-    fromModule: 'operations', fromStage: 'legalizacion', toModule: 'operations', toStage: 'operativo',
+    fromModule: 'operations', fromStage: 'legalizacion', toModule: 'operations', toStage: 'o_m',
     requiredFields: [
       f('agpe_fecha_aprobacion', 'Fecha de aprobación AGPE', 'date'),
     ],
@@ -162,6 +186,16 @@ export const TRANSITIONS: TransitionDef[] = [
     noteTemplate: 'Cliente desistió. Iniciar logística inversa de recuperación de equipos.',
   },
   {
+    action: 'om_to_desistido',
+    label: 'Marcar como desistido',
+    buttonLabel: 'Cliente desistió →',
+    fromModule: 'operations', fromStage: 'o_m', toModule: 'closed', toStage: 'desistido',
+    requiredFields: [
+      f('cancellation_reason', 'Motivo del desistimiento', 'textarea'),
+    ],
+    noteTemplate: 'Cliente desistió. Iniciar logística inversa de recuperación de equipos.',
+  },
+  {
     action: 'dimensionado_to_desistido',
     label: 'Desistido antes de instalar',
     buttonLabel: 'Cliente desistió →',
@@ -177,6 +211,16 @@ export const TRANSITIONS: TransitionDef[] = [
     label: 'No renueva contrato',
     buttonLabel: 'Fin de contrato →',
     fromModule: 'operations', fromStage: 'operativo', toModule: 'closed', toStage: 'sin_renovacion',
+    requiredFields: [
+      f('cancellation_reason', 'Motivo del cierre', 'textarea'),
+    ],
+    noteTemplate: 'Cliente no renueva contrato. Iniciar retiro de equipos.',
+  },
+  {
+    action: 'om_to_sin_renovacion',
+    label: 'No renueva contrato',
+    buttonLabel: 'Fin de contrato →',
+    fromModule: 'operations', fromStage: 'o_m', toModule: 'closed', toStage: 'sin_renovacion',
     requiredFields: [
       f('cancellation_reason', 'Motivo del cierre', 'textarea'),
     ],
@@ -208,6 +252,24 @@ export const TRANSITIONS: TransitionDef[] = [
     fromModule: 'operations', fromStage: 'operativo', toModule: 'operations', toStage: 'instalacion',
     requiredFields: [],
     noteTemplate: 'Devuelto a Instalación para ajustes.',
+    direction: 'backward',
+  },
+  {
+    action: 'operations_back_to_operativo_from_documentacion',
+    label: 'Devolver a Operativo',
+    buttonLabel: '← Volver a Operativo',
+    fromModule: 'operations', fromStage: 'documentacion', toModule: 'operations', toStage: 'operativo',
+    requiredFields: [],
+    noteTemplate: 'Devuelto a Operativo (faltó algo antes de documentar).',
+    direction: 'backward',
+  },
+  {
+    action: 'operations_back_to_documentacion',
+    label: 'Devolver a Documentación',
+    buttonLabel: '← Volver a Documentación',
+    fromModule: 'operations', fromStage: 'o_m', toModule: 'operations', toStage: 'documentacion',
+    requiredFields: [],
+    noteTemplate: 'Devuelto a Documentación (falta dossier).',
     direction: 'backward',
   },
 ];

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload, Pencil } from 'lucide-react';
+import { Plus, Search, ArrowRight, ExternalLink, ChevronDown, ChevronUp, History, Settings, Trash2, GripVertical, Upload, Pencil, Download } from 'lucide-react';
+import { downloadCSV } from '@/lib/csv-export';
 import {
   type CrmModule, type StageMeta, type TransitionDef,
   OPERATIONS_STAGES,
@@ -30,6 +31,7 @@ interface CrmProject {
   tipo_vivienda: string | null;
   conjunto: string | null;
   casa_numero: string | null;
+  zona: string | null;
   carga_carro_electrico: string | null;
   autosuficiencia_objetivo_pct: number | null;
   invoice_kwh_mensual: number | null;
@@ -54,6 +56,10 @@ interface CrmProject {
   diseno_notes: string | null;
   diseno_aprobado_por: string | null;
   diseno_aprobado_at: string | null;
+  diseno_modelo_cambiado: boolean;
+  diseno_modelo_cambio_log: string | null;
+  dossier_proyecto_url: string | null;
+  dossier_equipos_url: string | null;
   tipo_red: string | null;
   visita_previa_id: string | null;
   visita_instalacion_id: string | null;
@@ -87,6 +93,7 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
   const [projects, setProjects] = useState<CrmProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [zonaFilter, setZonaFilter] = useState<'todos' | 'Valle' | 'Costa'>('todos');
   const [view, setView] = useState<'kanban' | 'tabla'>('kanban');
   const [activeProject, setActiveProject] = useState<CrmProject | null>(null);
   const [transition, setTransition] = useState<{ project: CrmProject; def: TransitionDef } | null>(null);
@@ -106,15 +113,31 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [module, search]);
 
+  const filteredProjects = useMemo(() => {
+    if (zonaFilter === 'todos') return projects;
+    return projects.filter((p) => p.zona === zonaFilter);
+  }, [projects, zonaFilter]);
+
   const projectsByStage = useMemo(() => {
     const m = new Map<string, CrmProject[]>();
     for (const s of stages) m.set(s.key, []);
-    for (const p of projects) {
+    for (const p of filteredProjects) {
       const stage = p.operations_stage;
       if (m.has(stage)) m.get(stage)!.push(p);
     }
     return m;
-  }, [projects, stages]);
+  }, [filteredProjects, stages]);
+
+  const downloadStageCSV = (stage: StageMeta, list: CrmProject[]) => {
+    downloadCSV(
+      `crm-construccion-${stage.key}-${new Date().toISOString().slice(0, 10)}.csv`,
+      ['Código', 'Título', 'Cliente', 'Email', 'Teléfono', 'Ciudad', 'Conjunto', 'Casa', 'Zona', 'kWp diseño', 'Contratista', 'Fecha instalación', 'Creado'],
+      list.map((p) => [
+        p.code, p.title, p.client_name, p.client_email, p.client_phone, p.client_city,
+        p.conjunto, p.casa_numero, p.zona, p.diseno_kwp, p.contractor_name, p.installation_date, p.created_at,
+      ]),
+    );
+  };
 
   return (
     <div style={{ maxWidth: 1600, margin: '0 auto', paddingBottom: 40 }}>
@@ -134,14 +157,25 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
         </div>
       </div>
 
-      {/* Toolbar — búsqueda + view toggle */}
+      {/* Toolbar — búsqueda + filtro zona + view toggle */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
-        <div style={{ flex: 1, minWidth: 240, position: 'relative' }}>
+        <div style={{ width: 220, position: 'relative' }}>
           <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input type="text" placeholder="Buscar por código, título, cliente, email…"
+          <input type="text" placeholder="Buscar…"
             value={search} onChange={(e) => setSearch(e.target.value)}
-            style={{ width: '100%', paddingLeft: 36, paddingTop: 9, paddingBottom: 9, borderRadius: 8 }} />
+            style={{ width: '100%', paddingLeft: 32, paddingTop: 8, paddingBottom: 8, fontSize: '0.82rem', borderRadius: 8 }} />
         </div>
+        <div style={{ display: 'inline-flex', gap: 6 }}>
+          {(['todos', 'Valle', 'Costa'] as const).map((z) => (
+            <button key={z} onClick={() => setZonaFilter(z)} style={{
+              padding: '6px 13px', fontSize: '0.76rem', fontWeight: 600, borderRadius: 999, cursor: 'pointer',
+              border: zonaFilter === z ? `1px solid ${color}` : '1px solid var(--border)',
+              background: zonaFilter === z ? color + '18' : 'var(--bg-elevated)',
+              color: zonaFilter === z ? color : 'var(--text-muted)',
+            }}>{z === 'todos' ? 'Todos' : z}</button>
+          ))}
+        </div>
+        <div style={{ flex: 1 }} />
         <div style={{ display: 'inline-flex', background: 'var(--bg-elevated)', borderRadius: 8, padding: 3, border: '1px solid var(--border)' }}>
           <button onClick={() => setView('kanban')} style={{
             padding: '6px 14px', fontSize: '0.78rem', fontWeight: 600, borderRadius: 6, border: 'none', cursor: 'pointer',
@@ -169,9 +203,9 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
             </div>
           )}
           {view === 'kanban' ? (
-            <KanbanView stages={stages} projectsByStage={projectsByStage} onOpen={setActiveProject} module={module} onAdvance={setTransition} onConfigureStage={setConfigStage} />
+            <KanbanView stages={stages} projectsByStage={projectsByStage} onOpen={setActiveProject} module={module} onAdvance={setTransition} onConfigureStage={setConfigStage} onDownloadStage={downloadStageCSV} />
           ) : (
-            <TableView projects={projects} stages={stages} module={module} onOpen={setActiveProject} onAdvance={setTransition} />
+            <TableView projects={filteredProjects} stages={stages} module={module} onOpen={setActiveProject} onAdvance={setTransition} />
           )}
         </>
       )}
@@ -186,13 +220,14 @@ export function CrmModulePage({ module, title, description, color, userEmail }: 
 }
 
 /* ─────────────── KANBAN — estilo Pipefy ─────────────── */
-function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConfigureStage }: {
+function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConfigureStage, onDownloadStage }: {
   stages: StageMeta[];
   projectsByStage: Map<string, CrmProject[]>;
   onOpen: (p: CrmProject) => void;
   module: 'operations';
   onAdvance: (t: { project: CrmProject; def: TransitionDef }) => void;
   onConfigureStage: (stage: StageMeta) => void;
+  onDownloadStage: (stage: StageMeta, list: CrmProject[]) => void;
 }) {
   return (
     <div className="pipefy-board">
@@ -201,9 +236,9 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConf
         return (
           <div key={s.key} className="pipefy-col">
             {/* Header de columna con stripe colorida arriba — click abre configurador */}
-            <button
+            <div
               className="pipefy-col-head"
-              style={{ borderTopColor: s.color, textAlign: 'left', width: '100%', background: 'var(--bg-surface)', border: 'none', cursor: 'pointer', display: 'block' }}
+              style={{ borderTopColor: s.color, cursor: 'pointer' }}
               onClick={() => onConfigureStage(s)}
               title="Click para ver/editar los campos de esta etapa"
             >
@@ -213,13 +248,22 @@ function KanbanView({ stages, projectsByStage, onOpen, module, onAdvance, onConf
                   <span style={{ fontSize: '0.82rem', fontWeight: 700, letterSpacing: '-0.01em' }}>{s.shortLabel}</span>
                   <Settings size={11} style={{ color: 'var(--text-muted)', opacity: 0.5 }} />
                 </div>
-                <span style={{
-                  fontSize: '0.7rem', fontWeight: 700, color: s.color,
-                  background: s.color + '15', padding: '2px 9px', borderRadius: 12, minWidth: 22, textAlign: 'center',
-                }}>{list.length}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDownloadStage(s, list); }}
+                    title="Descargar CSV de esta etapa"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', color: 'var(--text-muted)' }}
+                  >
+                    <Download size={12} />
+                  </button>
+                  <span style={{
+                    fontSize: '0.7rem', fontWeight: 700, color: s.color,
+                    background: s.color + '15', padding: '2px 9px', borderRadius: 12, minWidth: 22, textAlign: 'center',
+                  }}>{list.length}</span>
+                </div>
               </div>
               <p style={{ margin: '4px 0 0', fontSize: '0.66rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>{s.description}</p>
-            </button>
+            </div>
             {/* Body de columna — fondo gris suave */}
             <div className="pipefy-col-body">
               {list.length === 0 ? (
@@ -980,7 +1024,9 @@ const STAGE_INDEX: Record<string, number> = {
   alistamiento: 1,
   instalacion: 2,
   operativo: 3,
-  completado: 4,
+  documentacion: 4,
+  o_m: 5,
+  completado: 6,
 };
 
 // Etiqueta legible por etapa (para el badge de candado)
@@ -988,6 +1034,8 @@ const STAGE_LABEL: Record<string, string> = {
   dimensionado: 'Dimensionado',
   alistamiento: 'Alistamiento',
   instalacion: 'Instalación',
+  documentacion: 'Documentación',
+  o_m: 'O&M',
   operativo: 'Operativo',
   completado: 'Cerrado',
 };
@@ -1153,6 +1201,22 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
         }
         delta[k] = BOOLEAN_FIELDS.has(k) ? after === 'true' : after;
       }
+      // Detecta si el modelo (inversor/batería/panel) quedó distinto al
+      // auto-detectado por marca/potencia — si sí, registra el cambio para
+      // que se alisten los equipos nuevos al pasar a Alistamiento.
+      const modelChecks: Array<[string, string | undefined, string]> = [
+        ['diseno_inversor_categoria_id', autoInversor?.id, 'inversor'],
+        ['diseno_bateria_categoria_id', autoBateria?.id, 'batería'],
+        ['diseno_panel_categoria_id', autoPanel?.id, 'panel'],
+      ];
+      const overrides = modelChecks
+        .filter(([k, autoId]) => (form[k] || '') && autoId && form[k] !== autoId)
+        .map(([, , label]) => label);
+      if (overrides.length > 0 && !project.diseno_modelo_cambiado) {
+        delta.diseno_modelo_cambiado = true;
+        delta.diseno_modelo_cambio_log = `Cambio manual de modelo (${overrides.join(', ')}) el ${new Date().toLocaleDateString('es-CO')} por ${userEmail}.`;
+      }
+
       if (Object.keys(delta).length === 0) {
         if (ignored.length > 0) setErr('No puedes editar campos de etapas futuras todavía.');
         else onClose();
@@ -1216,13 +1280,18 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
 
         <StageSection title="Equipos del diseño (catálogo)" stage="dimensionado" canEdit={canEdit('dimensionado')}>
           <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-            <AutoDetectedCategoria label="Modelo de inversor" cat={cats.find((c) => c.id === form.diseno_inversor_categoria_id) ?? autoInversor} marca={project.diseno_inversor_marca} />
-            <AutoDetectedCategoria label="Modelo de batería" cat={cats.find((c) => c.id === form.diseno_bateria_categoria_id) ?? autoBateria} marca={project.diseno_bateria_marca} />
-            <AutoDetectedCategoria label="Modelo de panel" cat={cats.find((c) => c.id === form.diseno_panel_categoria_id) ?? autoPanel} marca={null} />
+            <CategoryPicker label="Modelo de inversor" value={form.diseno_inversor_categoria_id ?? ''} onChange={(v) => set('diseno_inversor_categoria_id', v)} options={catsByFamily('inverter')} disabled={!canEdit('dimensionado')} />
+            <CategoryPicker label="Modelo de batería" value={form.diseno_bateria_categoria_id ?? ''} onChange={(v) => set('diseno_bateria_categoria_id', v)} options={catsByFamily('battery')} disabled={!canEdit('dimensionado')} />
+            <CategoryPicker label="Modelo de panel" value={form.diseno_panel_categoria_id ?? ''} onChange={(v) => set('diseno_panel_categoria_id', v)} options={catsByFamily('panel')} disabled={!canEdit('dimensionado')} />
           </div>
           <p style={{ gridColumn: '1 / -1', margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-            Se detecta solo, a partir de la marca/potencia que ya viene del diseño — no requiere selección manual.
+            Se pre-selecciona solo, a partir de la marca/potencia que ya viene del diseño. Si no la mueves de aquí, pasa como llega. Si la cambiás, el cambio queda registrado y se alista el equipo nuevo al pasar a Alistamiento.
           </p>
+          {project.diseno_modelo_cambiado && (
+            <p style={{ gridColumn: '1 / -1', margin: '6px 0 0', fontSize: '0.72rem', color: '#f59e0b' }}>
+              ⚠️ El modelo se cambió respecto al diseño original.{project.diseno_modelo_cambio_log ? ` ${project.diseno_modelo_cambio_log}` : ''}
+            </p>
+          )}
         </StageSection>
 
         <StageSection title="Cronograma de instalación" stage="dimensionado" canEdit={canEdit('dimensionado')}>
@@ -1246,6 +1315,19 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
           <div style={{ gridColumn: '1 / -1', marginTop: 6 }}>
             <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 6 }}>¿De qué Orden de Compra sale la plata de esta casa?</label>
             <OcAssignmentsEditor projectId={project.id} disenoKwp={form.diseno_kwp ? Number(form.diseno_kwp) : null} disabled={!canEdit('instalacion')} />
+          </div>
+        </StageSection>
+
+        <StageSection title="Documentación" stage="documentacion" canEdit={canEdit('documentacion')}>
+          <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <DossierUploader projectId={project.id} kind="proyecto" label="Dossier del proyecto" hasFile={!!project.dossier_proyecto_url} disabled={!canEdit('documentacion')} />
+            <DossierUploader projectId={project.id} kind="equipos" label="Dossier de equipos instalados" hasFile={!!project.dossier_equipos_url} disabled={!canEdit('documentacion')} />
+          </div>
+        </StageSection>
+
+        <StageSection title="O&M — Operación y Mantenimiento" stage="o_m" canEdit={canEdit('o_m')}>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <OmPanel projectId={project.id} casa={form.casa_numero || form.conjunto || project.title} userEmail={userEmail} disabled={!canEdit('o_m')} />
           </div>
         </StageSection>
 
@@ -1316,6 +1398,8 @@ interface OcAssignmentRow { oc_id: string; kwp_asignado: number | null; monto_fi
 function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: string; disenoKwp: number | null; disabled?: boolean }) {
   const [rows, setRows] = useState<OcAssignmentRow[]>([]);
   const [ocOptions, setOcOptions] = useState<OcOption[]>([]);
+  const [priceCache, setPriceCache] = useState<Record<string, Array<{ solucion: number | null; precio_kwp: number }>>>({});
+  const [solucion, setSolucion] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1323,17 +1407,64 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [aRes, ocRes] = await Promise.all([
+      const [aRes, ocRes, factRes] = await Promise.all([
         fetch(`/api/crm/projects/${projectId}/oc-assignments`),
         fetch('/api/purchase-orders'),
+        fetch('/api/facturacion'),
       ]);
       const aJson = await aRes.json();
       const ocJson = await ocRes.json();
+      const factJson = await factRes.json();
       setRows((aJson.assignments ?? []).map((a: { oc_id: string; kwp_asignado: number | null; monto_fijo: number | null; solucion: number | null; purchaseOrder: { numero_oc: string; proveedor: string } }) => ({ oc_id: a.oc_id, kwp_asignado: a.kwp_asignado, monto_fijo: a.monto_fijo, solucion: a.solucion, purchaseOrder: a.purchaseOrder })));
       setOcOptions(ocJson.purchaseOrders ?? []);
+      const fact = ((factJson.rows ?? []) as Array<{ project_id: string; solucion: string | number | null }>).find((f) => f.project_id === projectId);
+      setSolucion(fact?.solucion ? Number(fact.solucion) : null);
       setLoading(false);
     })();
   }, [projectId]);
+
+  // Precio por kWp según la solución de esta casa (facturación), para
+  // sugerir el monto = kWp asignado × precio de esa solución en la OC.
+  const loadPrices = async (ocId: string) => {
+    if (!ocId || priceCache[ocId]) return priceCache[ocId];
+    const r = await fetch(`/api/purchase-orders/${ocId}/solution-prices`);
+    const j = await r.json();
+    const prices = j.solutionPrices ?? [];
+    setPriceCache((c) => ({ ...c, [ocId]: prices }));
+    return prices;
+  };
+
+  const priceForSolucion = (ocId: string, sol: number | null): number | null => {
+    const prices = priceCache[ocId];
+    if (!prices) return null;
+    const match = prices.find((p) => p.solucion === sol) ?? prices.find((p) => p.solucion === null);
+    return match ? Number(match.precio_kwp) : null;
+  };
+
+  // Al elegir OC o cambiar el kWp/solución de una fila, sugiere el monto
+  // automáticamente (kWp × precio de la solución) — solo si el usuario no
+  // lo ha escrito a mano todavía (monto_fijo sigue en null).
+  const applyOc = async (i: number, ocId: string) => {
+    await loadPrices(ocId);
+    recalcMonto(i, { oc_id: ocId, kwp_asignado: undefined, solucion: undefined });
+  };
+
+  const recalcMonto = (i: number, patch: Partial<OcAssignmentRow> & { kwp_asignado?: number | null | undefined; solucion?: number | null | undefined }) => {
+    setRows((r) => r.map((x, j) => {
+      if (j !== i) return x;
+      const next: OcAssignmentRow = {
+        ...x,
+        ...patch,
+        kwp_asignado: patch.kwp_asignado !== undefined ? patch.kwp_asignado : (x.kwp_asignado ?? disenoKwp ?? null),
+        solucion: patch.solucion !== undefined ? patch.solucion : (x.solucion ?? solucion ?? null),
+      };
+      if (x.monto_fijo == null) {
+        const price = next.oc_id ? priceForSolucion(next.oc_id, next.solucion) : null;
+        next.monto_fijo = next.kwp_asignado != null && price != null ? Number((next.kwp_asignado * price).toFixed(2)) : null;
+      }
+      return next;
+    }));
+  };
 
   const total = rows.reduce((s, r) => s + Number(r.kwp_asignado || 0), 0);
 
@@ -1360,7 +1491,7 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
           <select
             value={row.oc_id}
             disabled={disabled}
-            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, oc_id: e.target.value } : x))}
+            onChange={(e) => applyOc(i, e.target.value)}
             style={{ flex: 1 }}
           >
             <option value="">Elegir OC…</option>
@@ -1369,16 +1500,16 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
           <input
             type="number"
             placeholder="kWp"
-            title="kWp asignado (parte de construcción)"
+            title="kWp asignado (parte de construcción) — se prellena con el kWp diseñado de la casa"
             value={row.kwp_asignado || ''}
             disabled={disabled}
-            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, kwp_asignado: e.target.value ? Number(e.target.value) : null } : x))}
+            onChange={(e) => recalcMonto(i, { kwp_asignado: e.target.value ? Number(e.target.value) : null })}
             style={{ width: 80 }}
           />
           <input
             type="number"
-            placeholder="Monto fijo $"
-            title="Monto fijo (parte de otro tema, ej. medidor)"
+            placeholder="Monto $"
+            title="Monto = kWp asignado × precio de la solución en esta OC (se sugiere solo; podés sobrescribirlo)"
             value={row.monto_fijo || ''}
             disabled={disabled}
             onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, monto_fijo: e.target.value ? Number(e.target.value) : null } : x))}
@@ -1387,7 +1518,7 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
           <select
             value={row.solucion ?? ''}
             disabled={disabled}
-            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, solucion: e.target.value ? Number(e.target.value) : null } : x))}
+            onChange={(e) => recalcMonto(i, { solucion: e.target.value ? Number(e.target.value) : null })}
             style={{ width: 110 }}
           >
             <option value="">Solución?</option>
@@ -1399,7 +1530,7 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
         </div>
       ))}
       {!disabled && (
-        <button className="secondary-btn" onClick={() => setRows((r) => [...r, { oc_id: '', kwp_asignado: null, monto_fijo: null, solucion: null }])} style={{ marginTop: 4 }}>
+        <button className="secondary-btn" onClick={() => setRows((r) => [...r, { oc_id: '', kwp_asignado: disenoKwp ?? null, monto_fijo: null, solucion: solucion ?? null }])} style={{ marginTop: 4 }}>
           <Plus size={13} /> Agregar OC
         </button>
       )}
@@ -1414,7 +1545,7 @@ function OcAssignmentsEditor({ projectId, disenoKwp, disabled }: { projectId: st
 }
 
 interface AddendumOption { id: string; numero_adicional: string; valor_total: number; purchaseOrder: { numero_oc: string } }
-interface AddendumAssignmentRow { addendum_id: string; porcentaje: number | null; detalle: string; addendum?: { numero_adicional: string; purchaseOrder: { numero_oc: string } } }
+interface AddendumAssignmentRow { addendum_id: string; valor: number | null; detalle: string; addendum?: { numero_adicional: string; purchaseOrder: { numero_oc: string } } }
 
 function AddendumAssignmentsEditor({ projectId, disabled }: { projectId: string; disabled?: boolean }) {
   const [rows, setRows] = useState<AddendumAssignmentRow[]>([]);
@@ -1432,7 +1563,7 @@ function AddendumAssignmentsEditor({ projectId, disabled }: { projectId: string;
       ]);
       const aJson = await aRes.json();
       const addJson = await addRes.json();
-      setRows((aJson.assignments ?? []).map((a: { addendum_id: string; porcentaje: number | null; detalle: string | null; addendum: { numero_adicional: string; purchaseOrder: { numero_oc: string } } }) => ({ addendum_id: a.addendum_id, porcentaje: a.porcentaje, detalle: a.detalle ?? '', addendum: a.addendum })));
+      setRows((aJson.assignments ?? []).map((a: { addendum_id: string; valor: number | null; detalle: string | null; addendum: { numero_adicional: string; purchaseOrder: { numero_oc: string } } }) => ({ addendum_id: a.addendum_id, valor: a.valor, detalle: a.detalle ?? '', addendum: a.addendum })));
       setOptions(addJson.addenda ?? []);
       setLoading(false);
     })();
@@ -1442,11 +1573,11 @@ function AddendumAssignmentsEditor({ projectId, disabled }: { projectId: string;
     setSaving(true);
     setError(null);
     for (const row of rows) {
-      if (!row.addendum_id || !row.porcentaje) continue;
+      if (!row.addendum_id || !row.valor) continue;
       const res = await fetch(`/api/purchase-orders/addenda/${row.addendum_id}/assignments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: projectId, porcentaje: Number(row.porcentaje), detalle: row.detalle || null }),
+        body: JSON.stringify({ project_id: projectId, valor: Number(row.valor), detalle: row.detalle || null }),
       });
       if (!res.ok) { const j = await res.json(); setError(j.error); setSaving(false); return; }
     }
@@ -1476,20 +1607,21 @@ function AddendumAssignmentsEditor({ projectId, disabled }: { projectId: string;
             {options.map((o) => <option key={o.id} value={o.id}>{o.purchaseOrder.numero_oc} · Adicional {o.numero_adicional}</option>)}
           </select>
           <input
-            type="number"
-            placeholder="% casa"
-            title="% del adicional que le corresponde a esta casa"
-            value={row.porcentaje || ''}
-            disabled={disabled}
-            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, porcentaje: e.target.value ? Number(e.target.value) : null } : x))}
-            style={{ width: 80 }}
-          />
-          <input
-            placeholder="Detalle (opcional)"
+            placeholder="Detalle"
+            title="Detalle de qué corresponde este adicional en esta casa"
             value={row.detalle}
             disabled={disabled}
             onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, detalle: e.target.value } : x))}
             style={{ flex: 1 }}
+          />
+          <input
+            type="number"
+            placeholder="Valor $"
+            title="Valor en pesos que le corresponde a esta casa de este adicional"
+            value={row.valor || ''}
+            disabled={disabled}
+            onChange={(e) => setRows((r) => r.map((x, j) => j === i ? { ...x, valor: e.target.value ? Number(e.target.value) : null } : x))}
+            style={{ width: 110 }}
           />
           {!disabled && (
             <button className="icon-btn" onClick={() => remove(row.addendum_id)} aria-label="Quitar"><Trash2 size={13} /></button>
@@ -1497,7 +1629,7 @@ function AddendumAssignmentsEditor({ projectId, disabled }: { projectId: string;
         </div>
       ))}
       {!disabled && (
-        <button className="secondary-btn" onClick={() => setRows((r) => [...r, { addendum_id: '', porcentaje: null, detalle: '' }])} style={{ marginTop: 4 }}>
+        <button className="secondary-btn" onClick={() => setRows((r) => [...r, { addendum_id: '', valor: null, detalle: '' }])} style={{ marginTop: 4 }}>
           <Plus size={13} /> Agregar adicional
         </button>
       )}
@@ -2129,20 +2261,176 @@ function CategoryPicker({ label, value, onChange, options, fullWidth, disabled }
   );
 }
 
-/** Muestra el modelo de catálogo detectado automáticamente (sin selección manual). */
-function AutoDetectedCategoria({ label, cat, marca }: { label: string; cat: { name: string } | null; marca: string | null }) {
+/** Sube/ve el dossier del proyecto o de equipos instalados (etapa Documentación). */
+function DossierUploader({ projectId, kind, label, hasFile, disabled }: {
+  projectId: string; kind: 'proyecto' | 'equipos'; label: string; hasFile: boolean; disabled?: boolean;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [uploaded, setUploaded] = useState(hasFile);
+  const [error, setError] = useState<string | null>(null);
+
+  const upload = async (file: File) => {
+    setUploading(true);
+    setError(null);
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('kind', kind);
+    const res = await fetch(`/api/crm/projects/${projectId}/documents`, { method: 'POST', body: fd });
+    if (!res.ok) { const j = await res.json(); setError(j.error ?? 'Error al subir'); setUploading(false); return; }
+    setUploaded(true);
+    setUploading(false);
+  };
+
+  const view = async () => {
+    const r = await fetch(`/api/crm/projects/${projectId}/documents?kind=${kind}`);
+    const j = await r.json();
+    if (j.url) window.open(j.url, '_blank');
+  };
+
   return (
     <div>
-      <label className="input-label" style={{ fontSize: '0.74rem' }}>{label}</label>
-      {cat ? (
-        <div style={{ fontSize: '0.85rem', padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 6, border: '1px solid var(--border)' }}>
-          {cat.name}
+      <label className="input-label" style={{ fontSize: '0.74rem', display: 'block', marginBottom: 4 }}>{label}</label>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {uploaded && <button type="button" className="secondary-btn" onClick={view} style={{ padding: '5px 10px', fontSize: '0.76rem' }}>Ver</button>}
+        {!disabled && (
+          <label className="secondary-btn" style={{ padding: '5px 10px', fontSize: '0.76rem', cursor: 'pointer', margin: 0 }}>
+            {uploading ? 'Subiendo…' : uploaded ? 'Reemplazar' : 'Subir archivo'}
+            <input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} disabled={uploading}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} />
+          </label>
+        )}
+        {!uploaded && disabled && <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Sin archivo</span>}
+      </div>
+      {error && <div style={{ fontSize: '0.72rem', color: 'var(--error)', marginTop: 4 }}>{error}</div>}
+    </div>
+  );
+}
+
+interface OmVisit { id: string; visit_date: string; contratista: string | null; technician_name: string | null; notes: string | null; status: string }
+
+/** Panel de la etapa O&M: historial de visitas + creación de tickets al Planner. */
+function OmPanel({ projectId, casa, userEmail, disabled }: { projectId: string; casa: string; userEmail: string; disabled?: boolean }) {
+  const [visits, setVisits] = useState<OmVisit[]>([]);
+  const [loadingVisits, setLoadingVisits] = useState(true);
+  const [showVisitForm, setShowVisitForm] = useState(false);
+  const [visitNotes, setVisitNotes] = useState('');
+  const [visitDate, setVisitDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [savingVisit, setSavingVisit] = useState(false);
+
+  const [showTicketForm, setShowTicketForm] = useState(false);
+  const [ticketTitle, setTicketTitle] = useState('');
+  const [ticketDesc, setTicketDesc] = useState('');
+  const [ticketUrgency, setTicketUrgency] = useState<'low' | 'medium' | 'high' | 'critical'>('medium');
+  const [ticketAssignee, setTicketAssignee] = useState('');
+  const [savingTicket, setSavingTicket] = useState(false);
+  const [ticketMsg, setTicketMsg] = useState<string | null>(null);
+
+  const loadVisits = async () => {
+    setLoadingVisits(true);
+    const r = await fetch(`/api/visits?type=om&casa=${encodeURIComponent(casa)}`);
+    const j = await r.json();
+    setVisits(j.visits ?? []);
+    setLoadingVisits(false);
+  };
+  useEffect(() => { void loadVisits(); /* eslint-disable-next-line */ }, [casa]);
+
+  const saveVisit = async () => {
+    setSavingVisit(true);
+    await fetch('/api/visits', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visit_type: 'om', casa, visit_date: visitDate, notes: visitNotes || null, status: 'completed', technician_email: userEmail }),
+    });
+    setVisitNotes('');
+    setShowVisitForm(false);
+    setSavingVisit(false);
+    void loadVisits();
+  };
+
+  const createTicket = async () => {
+    if (!ticketTitle.trim()) return;
+    setSavingTicket(true);
+    setTicketMsg(null);
+    const res = await fetch('/api/planner/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: ticketTitle,
+        description: ticketDesc || undefined,
+        assigned_to: ticketAssignee || undefined,
+        urgency: ticketUrgency,
+        project_id: projectId,
+        tags: ['om', casa],
+        created_by: userEmail,
+      }),
+    });
+    setSavingTicket(false);
+    if (res.ok) {
+      setTicketMsg('Ticket creado y asignado.');
+      setTicketTitle(''); setTicketDesc(''); setTicketAssignee('');
+      setShowTicketForm(false);
+    } else {
+      const j = await res.json();
+      setTicketMsg(j.error ?? 'Error al crear el ticket');
+    }
+  };
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: '0.76rem', fontWeight: 700 }}>Historial de visitas</span>
+          {!disabled && <button className="secondary-btn" style={{ padding: '4px 8px', fontSize: '0.72rem' }} onClick={() => setShowVisitForm((v) => !v)}>+ Visita</button>}
         </div>
-      ) : (
-        <div style={{ fontSize: '0.78rem', padding: '8px 10px', color: 'var(--text-muted)', fontStyle: 'italic', background: 'var(--bg-elevated)', borderRadius: 6, border: '1px solid var(--border)' }}>
-          No se pudo detectar{marca ? ` (marca "${marca}" sin modelo en catálogo)` : ' — sin marca en el diseño'}
+        {showVisitForm && (
+          <div style={{ marginBottom: 8, padding: 8, background: 'var(--bg-elevated)', borderRadius: 6 }}>
+            <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} style={{ width: '100%', marginBottom: 6 }} />
+            <textarea placeholder="Notas de la visita" value={visitNotes} onChange={(e) => setVisitNotes(e.target.value)} rows={2} style={{ width: '100%', marginBottom: 6 }} />
+            <button className="primary-btn" onClick={saveVisit} disabled={savingVisit} style={{ padding: '4px 10px', fontSize: '0.74rem' }}>{savingVisit ? 'Guardando…' : 'Registrar visita'}</button>
+          </div>
+        )}
+        {loadingVisits ? (
+          <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Cargando…</p>
+        ) : visits.length === 0 ? (
+          <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Sin visitas de O&amp;M registradas.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+            {visits.map((v) => (
+              <div key={v.id} style={{ fontSize: '0.74rem', padding: '4px 6px', borderRadius: 4, background: 'var(--bg-elevated)' }}>
+                <strong>{v.visit_date}</strong> {v.technician_name ? `· ${v.technician_name}` : ''}
+                {v.notes && <div style={{ color: 'var(--text-muted)' }}>{v.notes}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: '0.76rem', fontWeight: 700 }}>Ticket al equipo constructivo</span>
+          {!disabled && <button className="secondary-btn" style={{ padding: '4px 8px', fontSize: '0.72rem' }} onClick={() => setShowTicketForm((v) => !v)}>+ Ticket</button>}
         </div>
-      )}
+        {showTicketForm && (
+          <div style={{ padding: 8, background: 'var(--bg-elevated)', borderRadius: 6 }}>
+            <input placeholder="Título del ticket" value={ticketTitle} onChange={(e) => setTicketTitle(e.target.value)} style={{ width: '100%', marginBottom: 6 }} />
+            <textarea placeholder="Descripción" value={ticketDesc} onChange={(e) => setTicketDesc(e.target.value)} rows={2} style={{ width: '100%', marginBottom: 6 }} />
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+              <input placeholder="Email del asignado" value={ticketAssignee} onChange={(e) => setTicketAssignee(e.target.value)} style={{ flex: 1 }} />
+              <select value={ticketUrgency} onChange={(e) => setTicketUrgency(e.target.value as typeof ticketUrgency)}>
+                <option value="low">Baja</option>
+                <option value="medium">Media</option>
+                <option value="high">Alta</option>
+                <option value="critical">Crítica</option>
+              </select>
+            </div>
+            <button className="primary-btn" onClick={createTicket} disabled={savingTicket} style={{ padding: '4px 10px', fontSize: '0.74rem' }}>{savingTicket ? 'Creando…' : 'Crear y asignar'}</button>
+          </div>
+        )}
+        {ticketMsg && <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 6 }}>{ticketMsg}</p>}
+        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 6 }}>
+          Se crea como tarea en el Planner, ligada a esta casa, y se notifica al asignado.
+        </p>
+      </div>
     </div>
   );
 }

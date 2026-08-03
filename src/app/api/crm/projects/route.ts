@@ -249,7 +249,9 @@ const PATCHABLE_COLUMNS = new Set<string>([
   'diseno_bateria_marca', 'diseno_bateria_capacidad_kwh',
   'diseno_inversor_categoria_id', 'diseno_panel_categoria_id', 'diseno_bateria_categoria_id',
   'diseno_yield_estimado_kwh_mes', 'diseno_notes', 'diseno_aprobado_por', 'diseno_aprobado_at',
+  'diseno_modelo_cambiado', 'diseno_modelo_cambio_log',
   'tipo_red',
+  'dossier_proyecto_url', 'dossier_equipos_url',
   // Operación / Instalación
   'visita_previa_id', 'visita_instalacion_id', 'reservation_id', 'house_id',
   'contractor_name', 'contractor_email', 'installation_date', 'lectura_inicial_kwh',

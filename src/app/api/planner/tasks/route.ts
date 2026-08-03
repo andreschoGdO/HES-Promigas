@@ -121,7 +121,7 @@ export async function POST(request: Request) {
     }
 
     // Notificar al responsable si tiene email. Fire-and-forget — el response
-    // al cliente no espera al envío SMTP.
+    // al cliente no espera al envío SMTP ni al insert de la notificación.
     if (data.assigned_to) {
       void sendTaskAssignedEmail({
         title: data.title,
@@ -134,6 +134,14 @@ export async function POST(request: Request) {
         taskId: data.id,
       }, appUrl(request)).then((r) => {
         if (!r.ok) console.warn('Task email skipped/failed:', r.reason);
+      });
+      void supabaseAdmin.from('notifications').insert({
+        user_email: String(data.assigned_to).toLowerCase(),
+        type: 'task_assigned',
+        title: `Nueva tarea asignada: ${data.title}`,
+        body: data.description ?? null,
+        link: '/planner',
+        project_id: data.project_id ?? null,
       });
     }
 
@@ -219,6 +227,14 @@ export async function PATCH(request: Request) {
         taskId: data.id,
       }, appUrl(request)).then((r) => {
         if (!r.ok) console.warn('Task reassign email skipped/failed:', r.reason);
+      });
+      void supabaseAdmin.from('notifications').insert({
+        user_email: newAssignee,
+        type: 'task_assigned',
+        title: `Nueva tarea asignada: ${data.title}`,
+        body: data.description ?? null,
+        link: '/planner',
+        project_id: data.project_id ?? null,
       });
     }
 

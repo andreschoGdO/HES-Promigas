@@ -66,7 +66,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    if (!body.visit_type || !['previa', 'instalacion', 'emergencia', 'normalizacion'].includes(body.visit_type)) {
+    if (!body.visit_type || !['previa', 'instalacion', 'emergencia', 'normalizacion', 'om'].includes(body.visit_type)) {
       return NextResponse.json({ error: 'visit_type inválido' }, { status: 400 });
     }
 

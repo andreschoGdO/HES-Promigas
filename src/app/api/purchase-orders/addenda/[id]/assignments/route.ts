@@ -19,32 +19,47 @@ export async function GET(_request: Request, { params }: RouteContext) {
  * POST — asigna a una casa qué % de este adicional le corresponde, con su
  * propio detalle en texto libre. Valida que la suma de % no pase de 100.
  */
+/**
+ * Asigna a una casa Detalle + Valor de este adicional (monto directo en $).
+ * Se valida que la suma de `valor` asignado no supere el `valor_total` del
+ * adicional. Se mantiene `porcentaje` como columna derivada (valor/total×100)
+ * por compatibilidad con reportes existentes que ya la leían.
+ */
 export async function POST(request: Request, { params }: RouteContext) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { project_id, porcentaje, detalle, created_by } = body;
+    const { project_id, valor, detalle, created_by } = body;
 
     if (!project_id) return NextResponse.json({ error: 'project_id es requerido' }, { status: 400 });
-    const pct = Number(porcentaje);
-    if (!(pct > 0 && pct <= 100)) return NextResponse.json({ error: 'porcentaje debe estar entre 0 y 100' }, { status: 400 });
+    const monto = Number(valor);
+    if (!(monto > 0)) return NextResponse.json({ error: 'valor debe ser mayor a 0' }, { status: 400 });
+
+    const { data: addendum, error: addErr } = await supabaseAdmin
+      .from('purchase_order_addenda')
+      .select('valor_total')
+      .eq('id', id)
+      .single();
+    if (addErr) throw addErr;
 
     const { data: existing, error: exErr } = await supabaseAdmin
       .from('purchase_order_addendum_house_assignments')
-      .select('project_id, porcentaje')
+      .select('project_id, valor')
       .eq('addendum_id', id);
     if (exErr) throw exErr;
 
     const otros = (existing ?? []).filter((a) => a.project_id !== project_id);
-    const sumaOtros = otros.reduce((sum, a) => sum + Number(a.porcentaje), 0);
-    if (sumaOtros + pct > 100 + 1e-9) {
-      return NextResponse.json({ error: `La suma de porcentajes asignados sería ${(sumaOtros + pct).toFixed(1)}%, supera 100%.` }, { status: 400 });
+    const sumaOtros = otros.reduce((sum, a) => sum + Number(a.valor ?? 0), 0);
+    if (sumaOtros + monto > Number(addendum.valor_total) + 1e-6) {
+      return NextResponse.json({ error: `La suma de valores asignados sería $${(sumaOtros + monto).toLocaleString('es-CO')}, supera el valor del adicional ($${Number(addendum.valor_total).toLocaleString('es-CO')}).` }, { status: 400 });
     }
+
+    const pct = Number(addendum.valor_total) > 0 ? (monto / Number(addendum.valor_total)) * 100 : null;
 
     const { data, error } = await supabaseAdmin
       .from('purchase_order_addendum_house_assignments')
       .upsert(
-        { addendum_id: id, project_id, porcentaje: pct, detalle: detalle || null, created_by: created_by || null },
+        { addendum_id: id, project_id, valor: monto, porcentaje: pct, detalle: detalle || null, created_by: created_by || null },
         { onConflict: 'addendum_id,project_id' },
       )
       .select('*, project:crm_projects(id, title, conjunto, casa_numero)')

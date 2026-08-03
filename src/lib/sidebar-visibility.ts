@@ -23,6 +23,7 @@ export interface SidebarVisibility {
   visitas?: boolean;
   inventario?: boolean;
   facturacion?: boolean;
+  'facturacion-epc'?: boolean;
   reportes?: boolean;
   planner?: boolean;
   'ordenes-compra'?: boolean;
@@ -48,7 +49,8 @@ export const MENU_ITEM_CATALOG: Array<{ id: keyof SidebarVisibility; label: stri
   { id: 'inventario',    label: 'Inventario',              group: 'general' },
   { id: 'ordenes-compra', label: 'Órdenes de Compra',      group: 'general' },
   { id: 'presupuesto',   label: 'Presupuesto',             group: 'general' },
-  { id: 'facturacion',   label: 'Facturación',             group: 'general' },
+  { id: 'facturacion',   label: 'Facturación Cliente',      group: 'general' },
+  { id: 'facturacion-epc', label: 'Facturación EPC',        group: 'general' },
   { id: 'planner',       label: 'Planner',                 group: 'general' },
   { id: 'reportes',      label: 'Reportes',                group: 'general' },
   { id: 'usuarios',      label: 'Usuarios',                group: 'sistema' },

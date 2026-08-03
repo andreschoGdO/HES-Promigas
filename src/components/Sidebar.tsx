@@ -132,7 +132,8 @@ export function Sidebar() {
     { id: 'inventario',  label: 'Inventario', path: '/inventario', icon: Package },
     { id: 'ordenes-compra', label: 'Órdenes de Compra', path: '/ordenes-compra', icon: ShoppingCart },
     { id: 'presupuesto', label: 'Presupuesto', path: '/presupuesto', icon: Wallet },
-    { id: 'facturacion', label: 'Facturación', path: '/facturacion', icon: Receipt },
+    { id: 'facturacion', label: 'Facturación Cliente', path: '/facturacion', icon: Receipt },
+    { id: 'facturacion-epc', label: 'Facturación EPC', path: '/facturacion-epc', icon: Receipt },
     { id: 'planner',     label: 'Planner', path: '/planner', icon: CalendarRange },
     { id: 'reportes',    label: 'Reportes', path: '/reportes', icon: FileBarChart },
   ];

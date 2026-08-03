@@ -35,7 +35,10 @@ interface BudgetLine {
 let localKeySeq = 0;
 const newLocalKey = () => `local-${Date.now()}-${localKeySeq++}`;
 
-interface ExecutionRow { grupo: string; presupuestado: number; ejecutado: number; pct: number; }
+interface ExecutionRow {
+  grupo: string; presupuestado: number; ejecutado: number; pct: number;
+  pendiente: number; pctPendiente: number; ejecutadoInventario: number; diferenciaInventario: number;
+}
 
 const fmtCOP = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -196,26 +199,46 @@ export default function PresupuestoPage() {
 
           <section className="card">
             <div className="card-header"><span className="card-title">Ejecución por categoría</span></div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-              <thead>
-                <tr style={{ background: 'var(--bg-elevated)', textAlign: 'left' }}>
-                  <th style={{ padding: 8 }}>Categoría</th><th style={{ padding: 8 }}>Presupuestado</th><th style={{ padding: 8 }}>Ejecutado</th><th style={{ padding: 8 }}>%</th>
-                </tr>
-              </thead>
-              <tbody>
-                {execution.map((r) => (
-                  <tr key={r.grupo} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: 8 }}>{r.grupo}</td>
-                    <td style={{ padding: 8 }}>{fmtCOP(r.presupuestado)}</td>
-                    <td style={{ padding: 8 }}>{fmtCOP(r.ejecutado)}</td>
-                    <td style={{ padding: 8 }}>
-                      <span className={r.pct >= 100 ? 'badge-success' : r.pct >= 60 ? 'badge-warning' : 'badge-error'}>{r.pct.toFixed(0)}%</span>
-                    </td>
+            <p style={{ margin: '0 0 10px', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+              &quot;Ejecutado (inventario)&quot; suma el costo real de los equipos con status <strong>instalado</strong> en /inventario para esa categoría — si difiere mucho de &quot;Ejecutado (OC)&quot; algo no está bien asignado en las Órdenes de Compra.
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-elevated)', textAlign: 'left' }}>
+                    <th style={{ padding: 8 }}>Categoría</th>
+                    <th style={{ padding: 8 }}>Presupuestado</th>
+                    <th style={{ padding: 8 }}>Ejecutado (OC)</th>
+                    <th style={{ padding: 8 }}>Pendiente</th>
+                    <th style={{ padding: 8 }}>% Pendiente</th>
+                    <th style={{ padding: 8 }}>%</th>
+                    <th style={{ padding: 8 }}>Ejecutado (inventario)</th>
+                    <th style={{ padding: 8 }}>Diferencia</th>
                   </tr>
-                ))}
-                {execution.length === 0 && <tr><td colSpan={4} style={{ padding: 12, color: 'var(--text-muted)' }}>Sin datos de ejecución para {anio}.</td></tr>}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {execution.map((r) => (
+                    <tr key={r.grupo} style={{ borderTop: '1px solid var(--border)' }}>
+                      <td style={{ padding: 8 }}>{r.grupo}</td>
+                      <td style={{ padding: 8 }}>{fmtCOP(r.presupuestado)}</td>
+                      <td style={{ padding: 8 }}>{fmtCOP(r.ejecutado)}</td>
+                      <td style={{ padding: 8 }}>{fmtCOP(r.pendiente)}</td>
+                      <td style={{ padding: 8 }}>{r.pctPendiente.toFixed(0)}%</td>
+                      <td style={{ padding: 8 }}>
+                        <span className={r.pct >= 100 ? 'badge-success' : r.pct >= 60 ? 'badge-warning' : 'badge-error'}>{r.pct.toFixed(0)}%</span>
+                      </td>
+                      <td style={{ padding: 8 }}>{fmtCOP(r.ejecutadoInventario)}</td>
+                      <td style={{ padding: 8 }}>
+                        <span style={{ color: Math.abs(r.diferenciaInventario) > r.ejecutado * 0.1 ? 'var(--error)' : 'var(--text-muted)' }}>
+                          {fmtCOP(r.diferenciaInventario)}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {execution.length === 0 && <tr><td colSpan={8} style={{ padding: 12, color: 'var(--text-muted)' }}>Sin datos de ejecución para {anio}.</td></tr>}
+                </tbody>
+              </table>
+            </div>
           </section>
         </>
       )}

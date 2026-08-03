@@ -54,7 +54,7 @@ interface PurchaseOrder {
 
 const fmtCOP = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 
-type SortField = 'numero_oc' | 'proveedor' | 'fecha_documento' | 'posicion' | 'categoria' | 'codigo_servicio' | 'descripcion' | 'cantidad' | 'unidad' | 'precio_unitario' | 'valor_total';
+type SortField = 'numero_oc' | 'proveedor' | 'fecha_documento' | 'posicion' | 'categoria' | 'codigo_servicio' | 'descripcion' | 'cantidad' | 'unidad' | 'precio_unitario' | 'valor_total' | 'costo_ejecutado' | 'costo_no_ejecutado' | 'pct_pendiente' | 'tiene_adicionales';
 const COLUMNS: Array<{ field: SortField; label: string }> = [
   { field: 'numero_oc', label: 'N.° OC' },
   { field: 'proveedor', label: 'Proveedor' },
@@ -67,6 +67,10 @@ const COLUMNS: Array<{ field: SortField; label: string }> = [
   { field: 'unidad', label: 'Unidad' },
   { field: 'precio_unitario', label: 'Precio' },
   { field: 'valor_total', label: 'Valor' },
+  { field: 'costo_ejecutado', label: 'Precio ejecutado' },
+  { field: 'costo_no_ejecutado', label: 'Precio pendiente' },
+  { field: 'pct_pendiente', label: '% Pendiente' },
+  { field: 'tiene_adicionales', label: 'Adicionales' },
 ];
 
 export default function OrdenesDeCompraPage() {
@@ -96,12 +100,18 @@ export default function OrdenesDeCompraPage() {
       .some((v) => (v ?? '').toString().toLowerCase().includes(q));
   });
 
+  const pctPendiente = (o: PurchaseOrder) => o.valor_total > 0 ? (o.costo_no_ejecutado / o.valor_total) * 100 : null;
+
   const sorted = [...filtered].sort((a, b) => {
     const get = (r: typeof a) => sortField === 'numero_oc' ? r.oc.numero_oc
       : sortField === 'proveedor' ? r.oc.proveedor
       : sortField === 'fecha_documento' ? r.oc.fecha_documento
       : sortField === 'valor_total' ? r.item.valor_total
-      : r.item[sortField];
+      : sortField === 'costo_ejecutado' ? r.oc.costo_ejecutado
+      : sortField === 'costo_no_ejecutado' ? r.oc.costo_no_ejecutado
+      : sortField === 'pct_pendiente' ? pctPendiente(r.oc)
+      : sortField === 'tiene_adicionales' ? (r.oc.tiene_adicionales ? 1 : 0)
+      : r.item[sortField as keyof PurchaseOrderItem];
     const av = get(a); const bv = get(b);
     let cmp: number;
     if (typeof av === 'number' && typeof bv === 'number') cmp = av - bv;
@@ -112,10 +122,11 @@ export default function OrdenesDeCompraPage() {
   const downloadTable = () => {
     downloadCSV(
       `ordenes-de-compra-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['N. OC', 'Proveedor', 'Fecha documento', 'Posición', 'Categoría', 'Código de servicio', 'Detalle', 'Cantidad', 'Unidad', 'Precio', 'Valor'],
+      ['N. OC', 'Proveedor', 'Fecha documento', 'Posición', 'Categoría', 'Código de servicio', 'Detalle', 'Cantidad', 'Unidad', 'Precio', 'Valor', 'Precio ejecutado', 'Precio pendiente', '% Pendiente', 'Tiene adicionales'],
       sorted.map(({ oc, item: it }) => [
         oc.numero_oc, oc.proveedor, oc.fecha_documento ?? '', it.posicion, it.categoria, it.codigo_servicio ?? '', it.descripcion,
         it.cantidad ?? '', it.unidad ?? '', it.precio_unitario ?? '', it.valor_total,
+        oc.costo_ejecutado, oc.costo_no_ejecutado, pctPendiente(oc) != null ? pctPendiente(oc)!.toFixed(1) : '', oc.tiene_adicionales ? `Sí (${oc.adicionales_count})` : 'No',
       ]),
     );
   };
@@ -213,6 +224,14 @@ export default function OrdenesDeCompraPage() {
               it.unidad ?? '—',
               it.precio_unitario != null ? fmtCOP(it.precio_unitario) : '—',
               fmtCOP(it.valor_total),
+              fmtCOP(o.costo_ejecutado),
+              fmtCOP(o.costo_no_ejecutado),
+              pctPendiente(o) != null ? `${pctPendiente(o)!.toFixed(1)}%` : '—',
+              <span key="add" style={{
+                display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: '0.7rem', fontWeight: 700,
+                background: o.tiene_adicionales ? 'rgba(234, 179, 8, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                color: o.tiene_adicionales ? '#eab308' : 'var(--text-muted)',
+              }}>{o.tiene_adicionales ? `Sí (${o.adicionales_count})` : 'No'}</span>,
               <div key="acts" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                 <Link href={`/ordenes-compra/${o.id}`} className="icon-btn" aria-label="Ver detalle de la OC" title="Ver detalle de la OC">
                   <Eye size={14} />

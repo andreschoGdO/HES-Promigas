@@ -19,7 +19,8 @@ const TITLES: Record<string, string> = {
   '/presupuesto': 'Presupuesto',
   '/visitas': 'Visitas en Campo',
   '/inventario': 'Inventario',
-  '/facturacion': 'Facturación',
+  '/facturacion': 'Facturación Cliente',
+  '/facturacion-epc': 'Facturación EPC',
   '/cuenta': 'Mi cuenta',
 };
 

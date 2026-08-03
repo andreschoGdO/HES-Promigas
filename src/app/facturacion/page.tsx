@@ -385,7 +385,7 @@ export default function FacturacionPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Receipt size={22} style={{ color: 'var(--accent)' }} />
-            <h1 style={{ margin: 0 }}>Facturación</h1>
+            <h1 style={{ margin: 0 }}>Facturación Cliente</h1>
           </div>
           <p style={{ color: 'var(--text-secondary)', marginTop: 4, fontSize: '0.88rem' }}>
             Tabla consolidada por proyecto. Las celdas con borde turquesa son editables — clic para capturar costos.
@@ -687,7 +687,13 @@ export default function FacturacionPage() {
           overflow: auto;
           max-height: calc(100vh - 320px);
           min-height: 360px;
+          scrollbar-color: var(--text-muted) transparent;
+          scrollbar-width: auto;
         }
+        .fact-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+        .fact-scroll::-webkit-scrollbar-track { background: var(--bg-elevated); }
+        .fact-scroll::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 5px; border: 2px solid var(--bg-elevated); }
+        .fact-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
         .fact-table {
           width: 100%;
           border-collapse: separate;

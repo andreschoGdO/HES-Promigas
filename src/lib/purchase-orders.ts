@@ -11,8 +11,10 @@
  */
 export const EXECUTED_OPERATIONS_STAGES = [
   'instalacion',
-  'legalizacion',
   'operativo',
+  'documentacion',
+  'o_m',
+  'legalizacion',
   'logistica_inversa',
   'legalizado',
   'completado',

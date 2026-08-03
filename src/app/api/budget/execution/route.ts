@@ -32,7 +32,11 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const anio = Number(url.searchParams.get('anio') ?? new Date().getFullYear());
 
-  const [{ data: budgetItems, error: bErr }, { data: ocs, error: ocErr }, { data: items, error: itErr }, { data: assignments, error: aErr }, { data: solutionPrices, error: spErr }, { data: invItems, error: invErr }] = await Promise.all([
+  const [
+    { data: budgetItems, error: bErr }, { data: ocs, error: ocErr }, { data: items, error: itErr },
+    { data: assignments, error: aErr }, { data: solutionPrices, error: spErr }, { data: invItems, error: invErr },
+    { data: addenda, error: adErr }, { data: addendumItems, error: aiErr }, { data: addendumAssignments, error: aaErr },
+  ] = await Promise.all([
     supabaseAdmin.from('budget_items').select('grupo_nombre, precio_total').eq('anio', anio),
     supabaseAdmin.from('purchase_orders').select('id, kwp_total, valor_total, fecha_documento'),
     supabaseAdmin.from('purchase_order_items').select('oc_id, categoria, valor_total'),
@@ -41,6 +45,9 @@ export async function GET(request: Request) {
     supabaseAdmin.from('inventory_items')
       .select('acquired_cost_cop, acquired_at, category:inventory_categories(family, default_cost_cop)')
       .eq('status', 'installed'),
+    supabaseAdmin.from('purchase_order_addenda').select('id, fecha, valor_total'),
+    supabaseAdmin.from('purchase_order_addendum_items').select('addendum_id, categoria, valor_total'),
+    supabaseAdmin.from('purchase_order_addendum_house_assignments').select('addendum_id, valor, porcentaje, project:crm_projects(operations_stage)'),
   ]);
   if (bErr) return NextResponse.json({ error: bErr.message }, { status: 500 });
   if (ocErr) return NextResponse.json({ error: ocErr.message }, { status: 500 });
@@ -48,6 +55,9 @@ export async function GET(request: Request) {
   if (aErr) return NextResponse.json({ error: aErr.message }, { status: 500 });
   if (spErr) return NextResponse.json({ error: spErr.message }, { status: 500 });
   if (invErr) return NextResponse.json({ error: invErr.message }, { status: 500 });
+  if (adErr) return NextResponse.json({ error: adErr.message }, { status: 500 });
+  if (aiErr) return NextResponse.json({ error: aiErr.message }, { status: 500 });
+  if (aaErr) return NextResponse.json({ error: aaErr.message }, { status: 500 });
 
   // Ejecutado según inventario real (equipos con status 'installed'),
   // agregado por grupo — sirve para verificar que "lo ejecutado" en las OC
@@ -86,6 +96,40 @@ export async function GET(request: Request) {
     for (const item of itemsWithExecution) {
       const actual = ejecutadoPorCategoria.get(item.categoria) ?? 0;
       ejecutadoPorCategoria.set(item.categoria, actual + item.costo_ejecutado);
+    }
+  }
+
+  // Adicionales (otrosí) ejecutados — antes NO se sumaban acá, así que
+  // "ejecutado" quedaba corto respecto a lo que sí se ve en /ordenes-compra
+  // (columna "Adicionales"). Un adicional puede tener líneas de varias
+  // categorías (igual que una OC); el $ asignado a una casa se reparte
+  // entre esas categorías proporcional al peso de cada línea, y solo cuenta
+  // como ejecutado si la casa ya está en instalación+ (mismo criterio).
+  type AddendumAssignment = { addendum_id: string; valor: number | null; porcentaje: number | null; project: { operations_stage: string | null } | { operations_stage: string | null }[] | null };
+  const addendaById = new Map((addenda ?? []).map((a) => [a.id, a]));
+  const shareByAddendum = new Map<string, Array<{ categoria: string; share: number }>>();
+  for (const addendumId of new Set((addendumItems ?? []).map((i) => i.addendum_id))) {
+    const its = (addendumItems ?? []).filter((i) => i.addendum_id === addendumId);
+    const total = its.reduce((s, i) => s + Number(i.valor_total), 0);
+    shareByAddendum.set(addendumId, its.map((i) => ({ categoria: i.categoria, share: total > 0 ? Number(i.valor_total) / total : 0 })));
+  }
+
+  for (const asg of ((addendumAssignments ?? []) as AddendumAssignment[])) {
+    const stage = Array.isArray(asg.project) ? asg.project[0]?.operations_stage : asg.project?.operations_stage;
+    if (!isExecutedStage(stage)) continue;
+    const addendum = addendaById.get(asg.addendum_id);
+    if (!addendum) continue;
+    const anioAdd = addendum.fecha ? new Date(addendum.fecha).getFullYear() : null;
+    if (anioAdd !== anio) continue;
+
+    const valor = asg.valor != null ? Number(asg.valor) : asg.porcentaje != null ? Number(addendum.valor_total) * (Number(asg.porcentaje) / 100) : 0;
+    if (valor <= 0) continue;
+
+    const shares = shareByAddendum.get(asg.addendum_id) ?? [];
+    if (shares.length === 0) continue; // adicional sin líneas de detalle — no sabemos a qué categoría atribuirlo
+    for (const s of shares) {
+      const actual = ejecutadoPorCategoria.get(s.categoria) ?? 0;
+      ejecutadoPorCategoria.set(s.categoria, actual + valor * s.share);
     }
   }
 

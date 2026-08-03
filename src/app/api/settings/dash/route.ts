@@ -22,9 +22,9 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const map = new Map((data ?? []).map((s: { key: string; value: Record<string, unknown> }) => [s.key, s.value]));
   return NextResponse.json({
-    meta_anual_casas: (map.get('dash_meta_anual_casas') as { value?: number })?.value ?? 230,
+    meta_anual_casas: (map.get('dash_meta_anual_casas') as { value?: number })?.value ?? 100,
     standby_dias: map.get('dash_standby_dias') ?? {
-      dimensionado: 5, alistamiento: 5, instalacion: 4, legalizacion: 10, logistica_inversa: 30,
+      dimensionado: 5, alistamiento: 5, instalacion: 4, documentacion: 5, legalizacion: 10, logistica_inversa: 30,
     },
     solucion_umbrales: map.get('dash_solucion_umbrales') ?? {
       sol1_max_paneles: 5, sol2_max_paneles: 10, sol3_max_paneles: 16, sol4_max_paneles: 19,

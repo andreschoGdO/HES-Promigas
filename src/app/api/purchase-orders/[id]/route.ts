@@ -37,13 +37,17 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return sum + computeAssignmentCost(a.kwp_asignado, a.monto_fijo, precio);
   }, 0);
 
+  // Contra suma de líneas (neto), no oc.valor_total (Gran Total con IVA en
+  // las OC reales) — ver misma nota en /api/purchase-orders.
+  const ocLineasTotal = (items ?? []).reduce((sum, i) => sum + Number(i.valor_total), 0);
+
   return NextResponse.json({
     purchaseOrder: {
       ...oc,
       kwp_asignado: kwpAsignado,
       pct_kwp_asignado: oc.kwp_total && oc.kwp_total > 0 ? Math.min(100, (kwpAsignado / oc.kwp_total) * 100) : null,
       costo_ejecutado: costoEjecutado,
-      costo_no_ejecutado: Math.max(0, Number(oc.valor_total) - costoEjecutado),
+      costo_no_ejecutado: Math.max(0, ocLineasTotal - costoEjecutado),
       construccion_subtotal: construccionSubtotal,
       flat_subtotal: flatSubtotal,
       precio_kwp_construccion: precioKwpConstruccion,

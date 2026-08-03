@@ -64,6 +64,12 @@ export async function GET() {
     });
     const { items: itemsWithExecution, costoConstruccionEjecutado, costoFlatEjecutado } = computeItemExecution(ocItems, oc.kwp_total, executionAssignments, ocSolutionPrices);
     const costoEjecutado = costoConstruccionEjecutado + costoFlatEjecutado;
+    // costo_no_ejecutado se calcula contra la suma de líneas (neto), NO
+    // contra oc.valor_total: en las OC reales, valor_total de cabecera es
+    // el Gran Total CON IVA del PDF mientras que las líneas se cargan SIN
+    // IVA — restarle a esa cabecera un costoEjecutado neto inflaba
+    // "pendiente" en ~19% aunque la OC estuviera 100% ejecutada.
+    const ocLineasTotal = ocItems.reduce((sum, i) => sum + Number(i.valor_total), 0);
 
     const catAddenda = addendaByOcAndCategoria.get(oc.id);
     const itemsFinal = itemsWithExecution.map((item) => {
@@ -83,7 +89,7 @@ export async function GET() {
       kwp_asignado: kwpAsignado,
       pct_kwp_asignado: oc.kwp_total && oc.kwp_total > 0 ? Math.min(100, (kwpAsignado / oc.kwp_total) * 100) : null,
       costo_ejecutado: costoEjecutado,
-      costo_no_ejecutado: Math.max(0, Number(oc.valor_total) - costoEjecutado),
+      costo_no_ejecutado: Math.max(0, ocLineasTotal - costoEjecutado),
       casas_count: ocAssignments.length,
       tiene_adicionales: (addendaCountByOc.get(oc.id) ?? 0) > 0,
       adicionales_count: addendaCountByOc.get(oc.id) ?? 0,

@@ -150,8 +150,12 @@ export async function GET(request: Request) {
   // Umbrales de stand-by por etapa. Auto-migran si detectamos los valores
   // legacy sembrados por mig 39 (14/10/7/21/30) → los nuevos más estrictos
   // (5/5/4/10/30). Mismo patrón self-healing que meta anual.
+  // 'documentacion' se espera rápido, como alistamiento/instalación — sin
+  // umbral queda invisible al monitoreo de stand-by (mig 62 agregó la etapa).
+  // 'o_m' NO tiene umbral a propósito: es el nuevo estado estable de largo
+  // plazo (el rol que antes tenía 'operativo', que tampoco lo tiene).
   const STANDBY_DEFAULT_NEW: StandbyDias = {
-    dimensionado: 5, alistamiento: 5, instalacion: 4, legalizacion: 10, logistica_inversa: 30,
+    dimensionado: 5, alistamiento: 5, instalacion: 4, documentacion: 5, legalizacion: 10, logistica_inversa: 30,
   };
   const STANDBY_LEGACY: StandbyDias = {
     dimensionado: 14, alistamiento: 10, instalacion: 7, legalizacion: 21, logistica_inversa: 30,
@@ -165,6 +169,13 @@ export async function GET(request: Request) {
       .from('app_settings')
       .upsert({ key: 'dash_standby_dias', value: STANDBY_DEFAULT_NEW }, { onConflict: 'key' });
     standbyDias = STANDBY_DEFAULT_NEW;
+  } else if (standbyDias.documentacion === undefined) {
+    // Cuentas ya migradas a STANDBY_DEFAULT_NEW (sin ser legacy) se quedan
+    // sin la etapa 'documentacion' agregada después — auto-heal puntual.
+    standbyDias = { ...standbyDias, documentacion: STANDBY_DEFAULT_NEW.documentacion };
+    await supabaseAdmin
+      .from('app_settings')
+      .upsert({ key: 'dash_standby_dias', value: standbyDias }, { onConflict: 'key' });
   }
   const umbrales = (sMap.get('dash_solucion_umbrales') as unknown as Umbrales | undefined) ?? {
     sol1_max_paneles: 5, sol2_max_paneles: 10, sol3_max_paneles: 16, sol4_max_paneles: 19,
@@ -239,7 +250,11 @@ export async function GET(request: Request) {
 
   // 'logistica_inversa' se retiró del kanban en mig 47 pero se conserva en el
   // set por compat con proyectos legacy que aún puedan tener ese stage.
-  const INSTALADAS = new Set(['operativo', 'logistica_inversa', 'legalizacion']);
+  // 'documentacion'/'o_m' se agregaron en mig 62 ENTRE 'operativo' y
+  // 'legalizacion' — sin incluirlas acá, una casa que avanza más allá de
+  // operativo dejaba de contar como instalada (CAPEX, kWp/kWh acum., avance
+  // vs. meta, etc. se veían más bajos de lo real).
+  const INSTALADAS = new Set(['operativo', 'documentacion', 'o_m', 'logistica_inversa', 'legalizacion']);
   const CERRADAS_OK = new Set(['sin_renovacion']);
 
   const casasInstaladas = projects.filter((p) => INSTALADAS.has(p.operations_stage ?? '') || CERRADAS_OK.has(p.operations_stage ?? ''));

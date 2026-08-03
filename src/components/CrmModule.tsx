@@ -1291,6 +1291,7 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
 
         <StageSection title="Identificación" stage="dimensionado" canEdit={canEdit('dimensionado')}>
           <FormField label="Título" required value={form.title} onChange={(v) => set('title', v)} fullWidth disabled={!canEdit('dimensionado')} />
+          <FormField label="Fecha de firma del contrato" type="date" value={form.contrato_signed_at} onChange={(v) => set('contrato_signed_at', v)} disabled={!canEdit('dimensionado')} />
         </StageSection>
 
         <StageSection title="Cliente" stage="dimensionado" canEdit={canEdit('dimensionado')}>

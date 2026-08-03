@@ -37,10 +37,15 @@ const fmtLabel = (v: unknown): string => {
 /* ─────────────── GANTT + CURVA S — helpers y tipos ─────────────── */
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysBetween = (a: string, b: string) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / DAY_MS);
+// `new Date('YYYY-MM-DD')` parsea como UTC medianoche; sumar/leer con
+// getDate/setDate (locales) en un timezone detrás de UTC (Colombia, UTC-5)
+// devuelve el día anterior — cada etiqueta del eje del Gantt salía corrida
+// un día hacia atrás respecto a cronograma_fecha_inicio/installation_date
+// real. Fix: quedarse en UTC de punta a punta (parseo, suma y formato).
 const addDaysLabel = (iso: string, n: number) => {
-  const d = new Date(iso);
-  d.setDate(d.getDate() + n);
-  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', timeZone: 'UTC' });
 };
 
 interface GanttRow {
@@ -388,22 +393,21 @@ export default function DashPage() {
                   <div style={{ fontSize: '0.72rem', color: ACCENT, fontWeight: 600 }}>{s.casas} casa{s.casas === 1 ? '' : 's'}</div>
                 </div>
               ))}
-              {/* Total ponderado */}
-              {(() => {
-                const totCasas = report.global.usdWpBySolucion.reduce((a, s) => a + s.casas, 0);
-                if (totCasas === 0) return null;
-                const totKwp = report.global.kwpAcum;
-                const totUsdWp = totKwp > 0
-                  ? (report.global.capexVentaAcumM * 1_000_000 / TRM_COP) / (totKwp * 1000)
-                  : 0;
-                return (
-                  <div className="stat-card" style={{ borderLeft: '4px solid #64748b', background: 'var(--bg-elevated)' }}>
-                    <div className="stat-label">Promedio general</div>
-                    <div className="stat-value">${fmt1(totUsdWp)} USD/Wp</div>
-                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>{totCasas} casas · ${fmtInt(report.global.capexVentaAcumM)}M venta</div>
+              {/* Total ponderado — SOLO sobre las casas que tienen usd_wp cargado
+                  (no todas las instaladas: capex_venta/usd_wp solo se sembraron
+                  para un subconjunto en mig 46 y no hay forma de cargarlos para
+                  casas nuevas todavía; dividir su venta entre el kWp de TODAS
+                  las casas instaladas inflaba el denominador y subestimaba el
+                  promedio real). */}
+              {report.global.casasConUsdWp > 0 && (
+                <div className="stat-card" style={{ borderLeft: '4px solid #64748b', background: 'var(--bg-elevated)' }}>
+                  <div className="stat-label">Promedio general</div>
+                  <div className="stat-value">${fmt1(report.global.usdWpPromedioGeneral)} USD/Wp</div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    {report.global.casasConUsdWp} de {report.global.casasAcum} casas con dato · ${fmtInt(report.global.capexVentaAcumM)}M venta
                   </div>
-                );
-              })()}
+                </div>
+              )}
             </div>
           </div>
         )}

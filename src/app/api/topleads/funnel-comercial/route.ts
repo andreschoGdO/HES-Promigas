@@ -22,6 +22,13 @@ const STAGE_ORDER: Record<string, number> = {
   '5': 7,   // Dimensionado
   '44': 8,  // Pendiente por enviar oferta
   '7': 9,   // Oferta enviada
+  // '60' (Pendiente por enviar contrato) no estaba en este mapa — cualquier
+  // deal parado ahí caía a `?? 0` y desaparecía de TODOS los buckets del
+  // embudo (aunque seguía contando en totalLeads). Encontrado comparando
+  // en vivo /api/3/dealStages (17 etapas reales en el pipeline "Prospectos
+  // Sunny") contra este mapa (antes solo 16). Se ubica junto a "Contrato
+  // enviado" porque semánticamente ya está en el bucket "Contrato".
+  '60': 10, // Pendiente por enviar contrato
   '8': 10,  // Contrato enviado
   '47': 11, // Contrato firmado
   '55': 12, // Instalados

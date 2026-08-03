@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     const inicio = p.cronograma_fecha_inicio ? new Date(p.cronograma_fecha_inicio) : null;
     const estadoObra = p.operations_stage === 'legalizacion'
       ? 'Instalado — legalizándose'
-      : p.operations_stage === 'operativo'
+      : p.operations_stage === 'operativo' || p.operations_stage === 'documentacion' || p.operations_stage === 'o_m'
         ? (p.legalizado_at || p.agpe_fecha_aprobacion || p.agpe_estado === 'Legalizada' ? 'Instalado — legalizado' : 'Instalado — operativo')
         : p.operations_stage === 'instalacion'
           ? 'Instalación en curso'
@@ -86,13 +86,16 @@ export async function GET(request: Request) {
   // "Por instalar" = obra sin empezar (dimensionado/alistamiento).
   // "En instalación" = obra en curso (instalacion) — aparte de "Por
   // instalar", no incluida ahí.
-  // "Instalados" = obra terminada (operativo/legalizacion/legalizado/
-  // completado).
+  // "Instalados" = obra terminada (operativo/documentacion/o_m/
+  // legalizacion/legalizado/completado). 'documentacion'/'o_m' (mig 62,
+  // entre operativo y legalización) faltaban acá — una casa que avanzaba
+  // más allá de operativo desaparecía de esta tarjeta sin caer en ninguna
+  // otra (mismo bug que se encontró y corrigió en Dash Construcción).
   const opsStages = (opsData ?? []).map((p) => p.operations_stage);
   const summary = {
     por_instalar: opsStages.filter((s) => s === 'dimensionado' || s === 'alistamiento').length,
     en_instalacion: opsStages.filter((s) => s === 'instalacion').length,
-    instalados: opsStages.filter((s) => s === 'operativo' || s === 'legalizacion' || s === 'legalizado' || s === 'completado').length,
+    instalados: opsStages.filter((s) => s === 'operativo' || s === 'documentacion' || s === 'o_m' || s === 'legalizacion' || s === 'legalizado' || s === 'completado').length,
     legalizandose: opsStages.filter((s) => s === 'legalizacion').length,
   };
 

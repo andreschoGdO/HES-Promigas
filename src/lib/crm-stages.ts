@@ -205,6 +205,50 @@ export const TRANSITIONS: TransitionDef[] = [
     ],
     noteTemplate: 'Desistimiento previo a instalación.',
   },
+  // Desistir también debe poder pasar en cualquier otra etapa intermedia
+  // (antes solo existía desde dimensionado/operativo/o_m) — un cliente
+  // puede desistir en plena instalación, en documentación o durante el
+  // trámite de legalización, no solo al principio o al final.
+  {
+    action: 'alistamiento_to_desistido',
+    label: 'Marcar como desistido',
+    buttonLabel: 'Cliente desistió →',
+    fromModule: 'operations', fromStage: 'alistamiento', toModule: 'closed', toStage: 'desistido',
+    requiredFields: [
+      f('cancellation_reason', 'Motivo del desistimiento', 'textarea'),
+    ],
+    noteTemplate: 'Cliente desistió durante alistamiento. Iniciar recuperación de equipos reservados.',
+  },
+  {
+    action: 'instalacion_to_desistido',
+    label: 'Marcar como desistido',
+    buttonLabel: 'Cliente desistió →',
+    fromModule: 'operations', fromStage: 'instalacion', toModule: 'closed', toStage: 'desistido',
+    requiredFields: [
+      f('cancellation_reason', 'Motivo del desistimiento', 'textarea'),
+    ],
+    noteTemplate: 'Cliente desistió durante instalación. Iniciar recuperación de equipos instalados.',
+  },
+  {
+    action: 'documentacion_to_desistido',
+    label: 'Marcar como desistido',
+    buttonLabel: 'Cliente desistió →',
+    fromModule: 'operations', fromStage: 'documentacion', toModule: 'closed', toStage: 'desistido',
+    requiredFields: [
+      f('cancellation_reason', 'Motivo del desistimiento', 'textarea'),
+    ],
+    noteTemplate: 'Cliente desistió durante documentación. Iniciar logística inversa de recuperación de equipos.',
+  },
+  {
+    action: 'legalizacion_to_desistido',
+    label: 'Marcar como desistido',
+    buttonLabel: 'Cliente desistió →',
+    fromModule: 'operations', fromStage: 'legalizacion', toModule: 'closed', toStage: 'desistido',
+    requiredFields: [
+      f('cancellation_reason', 'Motivo del desistimiento', 'textarea'),
+    ],
+    noteTemplate: 'Cliente desistió durante legalización. Iniciar logística inversa de recuperación de equipos.',
+  },
   // Sin renovación: contrato termina, equipos retornan a bodega.
   {
     action: 'operations_to_sin_renovacion',

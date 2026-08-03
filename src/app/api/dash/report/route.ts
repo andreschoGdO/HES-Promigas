@@ -404,13 +404,22 @@ export async function GET(request: Request) {
 
   const contGroup = new Map<string, { asignadas: number; instaladas: number }>();
   projects.forEach((p) => {
-    if (!p.contractor_name) return;
+    // Antes: `if (!p.contractor_name) return;` descartaba silenciosamente
+    // casas sin constructor asignado — sus "instaladas" no sumaban al
+    // total de esta tabla (aunque sí al de "Instaladas esta semana"),
+    // haciendo que ambos números no cuadraran entre sí sin explicación.
     if (!(p.operations_stage === 'instalacion' || p.operations_stage === 'alistamiento' || INSTALADAS.has(p.operations_stage ?? ''))) return;
-    if (!inRange(p.installation_date, from, to)) return;
-    const cur = contGroup.get(p.contractor_name) ?? { asignadas: 0, instaladas: 0 };
+    // Mismo criterio de fecha que `instaladasSemana` (operativo_at, con
+    // installation_date de respaldo) — antes esta tabla solo miraba
+    // installation_date, así que una casa operativizada tarde podía contar
+    // en "Instaladas esta semana" pero faltar acá, sin que las dos cifras
+    // debieran diverger.
+    if (!inRange(p.operativo_at ?? p.installation_date, from, to)) return;
+    const nombre = p.contractor_name ?? 'Sin asignar';
+    const cur = contGroup.get(nombre) ?? { asignadas: 0, instaladas: 0 };
     cur.asignadas++;
     if (INSTALADAS.has(p.operations_stage ?? '')) cur.instaladas++;
-    contGroup.set(p.contractor_name, cur);
+    contGroup.set(nombre, cur);
   });
   const constructores = Array.from(contGroup.entries()).map(([constructor, v]) => ({
     constructor, asignadas: v.asignadas, instaladas: v.instaladas,
@@ -447,11 +456,11 @@ export async function GET(request: Request) {
 
   const contGroupG = new Map<string, { asignadas: number; instaladas: number }>();
   projects.forEach((p) => {
-    if (!p.contractor_name) return;
-    const cur = contGroupG.get(p.contractor_name) ?? { asignadas: 0, instaladas: 0 };
+    const nombre = p.contractor_name ?? 'Sin asignar';
+    const cur = contGroupG.get(nombre) ?? { asignadas: 0, instaladas: 0 };
     cur.asignadas++;
     if (INSTALADAS.has(p.operations_stage ?? '') || CERRADAS_OK.has(p.operations_stage ?? '')) cur.instaladas++;
-    contGroupG.set(p.contractor_name, cur);
+    contGroupG.set(nombre, cur);
   });
   const constructoresG = Array.from(contGroupG.entries())
     .map(([constructor, v]) => ({ constructor, asignadas: v.asignadas, instaladas: v.instaladas }))
@@ -644,12 +653,26 @@ export async function GET(request: Request) {
 
   // ─── USD/Wp POR SOLUCIÓN ───
   // Promedio ponderado por kWp de todas las casas instaladas de cada solución.
+  // `capex_venta`/`usd_wp` solo se sembraron (mig 46) para 33 de las 36
+  // casas y NO tienen forma de cargarse desde la UI para casas nuevas — no
+  // hay override manual como con `capex`. El promedio general por eso se
+  // calcula ponderado SOLO sobre las casas que sí tienen `usd_wp` (mismo
+  // universo que numerador y denominador), no sobre kwpAcum de TODAS las
+  // casas instaladas — dividir capexVentaAcumM (subset) entre el kWp total
+  // (todas) inflaba el denominador y subestimaba el promedio.
   const solGroups = new Map<string, { casas: number; sumUsdWpXKwp: number; sumKwp: number }>();
+  let sumUsdWpXKwpGeneral = 0;
+  let sumKwpConUsdWp = 0;
+  let casasConUsdWp = 0;
   for (const p of casasInstaladas) {
     const sol = solucionByProj.get(p.id);
     const usd = usdWpByProj.get(p.id);
     const kwp = Number(p.diseno_kwp ?? 0);
-    if (!sol || usd == null || kwp <= 0) continue;
+    if (usd == null || kwp <= 0) continue;
+    sumUsdWpXKwpGeneral += usd * kwp;
+    sumKwpConUsdWp += kwp;
+    casasConUsdWp++;
+    if (!sol) continue;
     const cur = solGroups.get(sol) ?? { casas: 0, sumUsdWpXKwp: 0, sumKwp: 0 };
     cur.casas++;
     cur.sumUsdWpXKwp += usd * kwp;
@@ -663,6 +686,7 @@ export async function GET(request: Request) {
       usdWpPromedio: v.sumKwp > 0 ? v.sumUsdWpXKwp / v.sumKwp : 0,
     }))
     .sort((a, b) => a.solucion.localeCompare(b.solucion));
+  const usdWpPromedioGeneral = sumKwpConUsdWp > 0 ? sumUsdWpXKwpGeneral / sumKwpConUsdWp : 0;
 
   const capexVentaAcumM = casasInstaladas.reduce(
     (s, p) => s + (capexVentaByProj.get(p.id) ?? 0) / MILLIONS,
@@ -682,6 +706,8 @@ export async function GET(request: Request) {
       mesesActivos,
       porMes,
       usdWpBySolucion,
+      usdWpPromedioGeneral,
+      casasConUsdWp,
     },
     semana: {
       casasInstaladas: instaladasSemana.length,

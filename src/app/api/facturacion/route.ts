@@ -350,6 +350,8 @@ export async function GET() {
       desmantelamiento_mo_is_derived: desmantelamientoR.isDerived,
       capex: capex.value,
       capex_is_derived: capex.isDerived,
+      capex_venta: (fact.capex_venta as number | null) ?? null,
+      usd_wp: (fact.usd_wp as number | null) ?? null,
 
       operador_red: (fact.operador_red as string | null) ?? null,
       has_record: factByProject.has(p.id),
@@ -403,6 +405,11 @@ const EDITABLE_NUM = [
   'costo_inversor', 'costo_bateria', 'costo_control_box', 'costo_top_cover',
   'costo_panel_solar', 'costo_medidor_solar', 'costo_medidor_generacion', 'costo_modem',
   'mano_de_obra', 'desmantelamiento_mo', 'capex',
+  // capex_venta/usd_wp: solo se sembraron por migración (mig 46) para las
+  // 33 casas originales — sin esto en EDITABLE_NUM no había NINGUNA forma
+  // de cargarlos para una casa nueva, y "USD/Wp promedio general" del Dash
+  // se quedaba corto para siempre a medida que se agregan casas.
+  'capex_venta', 'usd_wp',
   // Contrato comercial (Fase 3)
   'contract_duration_months', 'tariff_cop_per_kwh', 'monthly_fee_cop', 'system_warranty_months',
   // Manuales adicionales (Fase 31)

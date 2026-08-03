@@ -60,6 +60,8 @@ export interface DashReport {
     mesesActivos: number;
     porMes: AvanceGlobalMes[];
     usdWpBySolucion: UsdWpBySolucion[];  // métrica USD/Wp por solución (mig 46)
+    usdWpPromedioGeneral: number;  // ponderado SOLO sobre casas con usd_wp cargado, no sobre kwpAcum total
+    casasConUsdWp: number;
   };
   semana: {
     casasInstaladas: number; programadas: number;
@@ -117,7 +119,7 @@ export interface DashReport {
 export const DEFAULT_REPORT: DashReport = {
   periodo: { desde: '—', hasta: '—', anio: '—' },
   global: {
-    casasAcum: 0, kwpAcum: 0, kwhAcum: 0, capexAcumM: 0, capexVentaAcumM: 0,
+    casasAcum: 0, kwpAcum: 0, kwhAcum: 0, capexAcumM: 0, capexVentaAcumM: 0, usdWpPromedioGeneral: 0, casasConUsdWp: 0,
     avancePct: 0, metaCasas: 0, mesesActivos: 0,
     porMes: [], usdWpBySolucion: [],
   },

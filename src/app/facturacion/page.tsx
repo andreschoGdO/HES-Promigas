@@ -69,6 +69,8 @@ interface Row {
   desmantelamiento_mo_is_derived?: boolean;
   capex: number | null;
   capex_is_derived?: boolean;
+  capex_venta: number | null;
+  usd_wp: number | null;
   operador_red: string | null;
   has_record: boolean;
   frozen_at: string | null;
@@ -190,6 +192,8 @@ const GROUPS: Group[] = [
     id: 'cierre', label: 'Cierre', Icon: Calculator, color: '#07c5a8',
     cols: [
       { key: 'capex', label: 'Capex', type: 'money', editable: true, minWidth: 130 },
+      { key: 'capex_venta', label: 'Capex Venta', type: 'money', editable: true, minWidth: 130 },
+      { key: 'usd_wp', label: 'USD/Wp', type: 'num', editable: true, minWidth: 100 },
     ],
   },
 ];
@@ -358,7 +362,7 @@ export default function FacturacionPage() {
   // override comercial); incluirlo causaría double-counting.
   const rowSubtotal = (r: Row): number => {
     return COLUMNS
-      .filter((c) => c.type === 'money' && c.key !== 'capex')
+      .filter((c) => c.type === 'money' && c.key !== 'capex' && c.key !== 'capex_venta')
       .reduce((acc, c) => acc + ((r[c.key] as number | null) ?? 0), 0);
   };
 

@@ -116,3 +116,55 @@ export function computeAssignmentCost(
 ): number {
   return Number(kwpAsignado ?? 0) * precioKwp + Number(montoFijo ?? 0);
 }
+
+export interface AssignmentForExecution {
+  kwp_asignado: number | null;
+  monto_fijo: number | null;
+  solucion: number | null;
+  executed: boolean;
+}
+
+export interface ItemExecution {
+  costo_ejecutado: number;
+  costo_no_ejecutado: number;
+}
+
+/**
+ * Reparte lo "ejecutado" de una OC entre sus líneas — proporcional al peso
+ * de cada línea dentro de su propio subtotal (construcción u "otro tema").
+ * Fuente única de esta prorata: antes vivía duplicada (y ligeramente
+ * distinta) en /api/purchase-orders y /api/budget/execution, lo cual podía
+ * hacer que los números de ambas pantallas no cuadraran entre sí.
+ *
+ * IMPORTANTE: esto es por LÍNEA, no por OC — sumar `costo_ejecutado` de
+ * todas las líneas de una OC debe dar el mismo total que sumarlo a nivel
+ * OC (ver costoConstruccionEjecutado + costoFlatEjecutado que retorna).
+ */
+export function computeItemExecution<T extends PoItemLike>(
+  items: T[],
+  kwpTotal: number | null,
+  assignments: AssignmentForExecution[],
+  solutionPrices: SolutionPriceLike[],
+): { items: Array<T & ItemExecution>; costoConstruccionEjecutado: number; costoFlatEjecutado: number; construccionSubtotal: number; flatSubtotal: number } {
+  const { construccionSubtotal, flatSubtotal, precioKwpConstruccion } = computeOcPricing(items, kwpTotal);
+
+  let costoConstruccionEjecutado = 0;
+  let costoFlatEjecutado = 0;
+  for (const a of assignments) {
+    if (!a.executed) continue;
+    const precio = resolvePrecioKwp(a.solucion, solutionPrices, precioKwpConstruccion);
+    costoConstruccionEjecutado += Number(a.kwp_asignado ?? 0) * precio;
+    costoFlatEjecutado += Number(a.monto_fijo ?? 0);
+  }
+
+  const itemsOut = items.map((item) => {
+    const esConstruccion = CONSTRUCTION_CATEGORIES.includes(item.categoria);
+    const subtotal = esConstruccion ? construccionSubtotal : flatSubtotal;
+    const share = subtotal > 0 ? Number(item.valor_total) / subtotal : 0;
+    const costoEjecutadoOc = esConstruccion ? costoConstruccionEjecutado : costoFlatEjecutado;
+    const costoEjecutado = costoEjecutadoOc * share;
+    return { ...item, costo_ejecutado: costoEjecutado, costo_no_ejecutado: Math.max(0, Number(item.valor_total) - costoEjecutado) };
+  });
+
+  return { items: itemsOut, costoConstruccionEjecutado, costoFlatEjecutado, construccionSubtotal, flatSubtotal };
+}

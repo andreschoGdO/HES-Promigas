@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { isExecutedStage, computeOcPricing, resolvePrecioKwp, PURCHASE_ORDER_CATEGORIES, CONSTRUCTION_CATEGORIES } from '@/lib/purchase-orders';
-
-const CONSTRUCTION_SET = new Set(CONSTRUCTION_CATEGORIES);
+import { isExecutedStage, computeItemExecution, PURCHASE_ORDER_CATEGORIES } from '@/lib/purchase-orders';
 
 /**
  * GET /api/budget/execution?anio=2026
@@ -75,28 +73,19 @@ export async function GET(request: Request) {
     if (anioOc !== anio) continue; // solo OC del año consultado
 
     const ocItems = (items ?? []).filter((i) => i.oc_id === oc.id);
-    const { precioKwpConstruccion, construccionSubtotal, flatSubtotal } = computeOcPricing(ocItems, oc.kwp_total);
     const ocSolutionPrices = (solutionPrices ?? []).filter((sp) => sp.oc_id === oc.id);
-
     const ocAssignments = ((assignments ?? []) as Assignment[]).filter((a) => a.oc_id === oc.id);
-    let costoConstruccionEjecutado = 0;
-    let costoFlatEjecutado = 0;
-    for (const a of ocAssignments) {
+    const executionAssignments = ocAssignments.map((a) => {
       const stage = Array.isArray(a.project) ? a.project[0]?.operations_stage : a.project?.operations_stage;
-      if (!isExecutedStage(stage)) continue;
-      const precio = resolvePrecioKwp(a.solucion, ocSolutionPrices, precioKwpConstruccion);
-      costoConstruccionEjecutado += Number(a.kwp_asignado ?? 0) * precio;
-      costoFlatEjecutado += Number(a.monto_fijo ?? 0);
-    }
+      return { kwp_asignado: a.kwp_asignado, monto_fijo: a.monto_fijo, solucion: a.solucion, executed: isExecutedStage(stage) };
+    });
 
-    for (const item of ocItems) {
-      const esConstruccion = CONSTRUCTION_SET.has(item.categoria);
-      const share = esConstruccion
-        ? (construccionSubtotal > 0 ? Number(item.valor_total) / construccionSubtotal : 0)
-        : (flatSubtotal > 0 ? Number(item.valor_total) / flatSubtotal : 0);
-      const costoEjecutadoOc = esConstruccion ? costoConstruccionEjecutado : costoFlatEjecutado;
+    // Misma prorrata por línea que usa /api/purchase-orders — una sola
+    // fuente de verdad para que ambas pantallas cuadren entre sí.
+    const { items: itemsWithExecution } = computeItemExecution(ocItems, oc.kwp_total, executionAssignments, ocSolutionPrices);
+    for (const item of itemsWithExecution) {
       const actual = ejecutadoPorCategoria.get(item.categoria) ?? 0;
-      ejecutadoPorCategoria.set(item.categoria, actual + costoEjecutadoOc * share);
+      ejecutadoPorCategoria.set(item.categoria, actual + item.costo_ejecutado);
     }
   }
 

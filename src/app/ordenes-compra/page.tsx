@@ -32,6 +32,13 @@ interface PurchaseOrderItem {
   unidad: string | null;
   precio_unitario: number | null;
   valor_total: number;
+  // Calculados por línea (prorrateados dentro de la OC) — ver computeItemExecution.
+  costo_ejecutado: number;
+  costo_no_ejecutado: number;
+  pct_pendiente: number;
+  tiene_adicionales: boolean;
+  adicionales_count: number;
+  adicionales_valor: number;
 }
 
 interface PurchaseOrder {
@@ -100,17 +107,11 @@ export default function OrdenesDeCompraPage() {
       .some((v) => (v ?? '').toString().toLowerCase().includes(q));
   });
 
-  const pctPendiente = (o: PurchaseOrder) => o.valor_total > 0 ? (o.costo_no_ejecutado / o.valor_total) * 100 : null;
-
   const sorted = [...filtered].sort((a, b) => {
     const get = (r: typeof a) => sortField === 'numero_oc' ? r.oc.numero_oc
       : sortField === 'proveedor' ? r.oc.proveedor
       : sortField === 'fecha_documento' ? r.oc.fecha_documento
-      : sortField === 'valor_total' ? r.item.valor_total
-      : sortField === 'costo_ejecutado' ? r.oc.costo_ejecutado
-      : sortField === 'costo_no_ejecutado' ? r.oc.costo_no_ejecutado
-      : sortField === 'pct_pendiente' ? pctPendiente(r.oc)
-      : sortField === 'tiene_adicionales' ? (r.oc.tiene_adicionales ? 1 : 0)
+      : sortField === 'tiene_adicionales' ? (r.item.tiene_adicionales ? 1 : 0)
       : r.item[sortField as keyof PurchaseOrderItem];
     const av = get(a); const bv = get(b);
     let cmp: number;
@@ -126,7 +127,7 @@ export default function OrdenesDeCompraPage() {
       sorted.map(({ oc, item: it }) => [
         oc.numero_oc, oc.proveedor, oc.fecha_documento ?? '', it.posicion, it.categoria, it.codigo_servicio ?? '', it.descripcion,
         it.cantidad ?? '', it.unidad ?? '', it.precio_unitario ?? '', it.valor_total,
-        oc.costo_ejecutado, oc.costo_no_ejecutado, pctPendiente(oc) != null ? pctPendiente(oc)!.toFixed(1) : '', oc.tiene_adicionales ? `Sí (${oc.adicionales_count})` : 'No',
+        it.costo_ejecutado, it.costo_no_ejecutado, it.pct_pendiente.toFixed(1), it.tiene_adicionales ? `Sí (${it.adicionales_count})` : 'No',
       ]),
     );
   };
@@ -224,14 +225,14 @@ export default function OrdenesDeCompraPage() {
               it.unidad ?? '—',
               it.precio_unitario != null ? fmtCOP(it.precio_unitario) : '—',
               fmtCOP(it.valor_total),
-              fmtCOP(o.costo_ejecutado),
-              fmtCOP(o.costo_no_ejecutado),
-              pctPendiente(o) != null ? `${pctPendiente(o)!.toFixed(1)}%` : '—',
+              fmtCOP(it.costo_ejecutado),
+              fmtCOP(it.costo_no_ejecutado),
+              `${it.pct_pendiente.toFixed(1)}%`,
               <span key="add" style={{
                 display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: '0.7rem', fontWeight: 700,
-                background: o.tiene_adicionales ? 'rgba(234, 179, 8, 0.15)' : 'rgba(148, 163, 184, 0.15)',
-                color: o.tiene_adicionales ? '#eab308' : 'var(--text-muted)',
-              }}>{o.tiene_adicionales ? `Sí (${o.adicionales_count})` : 'No'}</span>,
+                background: it.tiene_adicionales ? 'rgba(234, 179, 8, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                color: it.tiene_adicionales ? '#eab308' : 'var(--text-muted)',
+              }}>{it.tiene_adicionales ? `Sí (${it.adicionales_count})` : 'No'}</span>,
               <div key="acts" style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                 <Link href={`/ordenes-compra/${o.id}`} className="icon-btn" aria-label="Ver detalle de la OC" title="Ver detalle de la OC">
                   <Eye size={14} />

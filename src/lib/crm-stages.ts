@@ -113,8 +113,11 @@ export const TRANSITIONS: TransitionDef[] = [
     label: 'Marcar operativo',
     buttonLabel: 'Sistema generando →',
     fromModule: 'operations', fromStage: 'instalacion', toModule: 'operations', toStage: 'operativo',
+    // "Lectura inicial (kWh)" se sacó de acá a pedido del usuario — el
+    // dato de OC/adicionales/checklist ya se pide aparte en el modal (ver
+    // isToOperativo en TransitionModal). requiredFields vacío: el
+    // crm_stage_fields correspondiente ya no tiene esa fila tampoco.
     requiredFields: [
-      f('lectura_inicial_kwh', 'Lectura inicial (kWh)', 'number'),
       f('visita_instalacion_id', 'ID visita instalación', 'text', false, { help: 'UUID del acta de instalación en /visitas.' }),
     ],
     noteTemplate: 'Instalación completada. Sistema generando.',

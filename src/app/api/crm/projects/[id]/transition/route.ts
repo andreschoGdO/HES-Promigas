@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { TRANSITIONS, type CrmModule } from '@/lib/crm-stages';
+import { recoverProjectEquipment } from '@/lib/crm-equipment-recovery';
 
 interface Ctx { params: Promise<{ id: string }>; }
 
@@ -420,6 +421,19 @@ export async function POST(request: Request, context: Ctx) {
     if (def.action === 'operations_back_to_dimensionado') {
       const r = await cancelActiveReservation(updated[0], body.actor_email ?? null);
       if (r) sideEffects.reservation_cancelled = r;
+    }
+    // Desistido / sin renovación → recuperar a bodega equipos reservados e
+    // instalados de esta casa (antes solo lo hacía el botón "Cancelar"
+    // aparte del detalle del proyecto; la transición normal dejaba los
+    // equipos marcados como instalados/reservados para siempre, aunque la
+    // descripción de la etapa dice "Equipos se recuperan a bodega").
+    if (def.toStage === 'desistido' || def.toStage === 'sin_renovacion') {
+      const r = await recoverProjectEquipment(
+        updated[0],
+        body.actor_email ?? null,
+        `Recuperado por transición a ${def.toStage} — proyecto ${updated[0].code}`,
+      );
+      if (r) sideEffects.equipment_recovered = r;
     }
 
     return NextResponse.json({ project: updated[0], action: def.action, side_effects: sideEffects });

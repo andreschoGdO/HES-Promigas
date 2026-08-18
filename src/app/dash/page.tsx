@@ -76,6 +76,7 @@ interface GanttRow {
   id: string; cliente_casa: string; zona: string; constructor: string; conjunto: string;
   cronograma_fecha_inicio: string; cronograma_fecha_fin: string;
   operations_stage: string; inst_progreso_pct: number; operativo_at: string | null;
+  marca: string | null;
 }
 interface ScurvePoint { week: string; planeado: number; real: number; }
 interface ScurveResp { total: number; from: string; to: string; points: ScurvePoint[]; }
@@ -551,7 +552,10 @@ export default function DashPage() {
       {sections.construccion && (
       <section className="card">
         <SectionHeader eyebrow="Weekly" title="Construcción" size="large" />
-        <SemanaResumenTable report={report} />
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: -8, marginBottom: 16 }}>
+          Casas en Alistamiento (reserva de equipos) o Instalación (obra en sitio) ahora mismo. Al pasar a Operativo salen de esta lista.
+        </p>
+        <SemanaResumenTable rows={ganttRows} loading={ganttLoading} />
 
         {/* Detalle por marca / zona / constructor (semanal — puede estar vacío si no hay instalaciones) */}
         {report.detalle.marcas.length + report.detalle.zonas.length + report.detalle.constructores.length > 0 && (
@@ -1015,70 +1019,69 @@ function DetalleMarcaZonaConstructor({
   );
 }
 
-interface SemanaFila {
-  casa: string; estado: string; zona: string; constructor: string; marca: string; fecha: string;
-}
+const ETAPA_CONSTRUCCION_LABEL: Record<string, string> = {
+  alistamiento: 'Alistamiento (reserva de equipos)',
+  instalacion: 'Instalación (obra en sitio)',
+};
+const ETAPA_CONSTRUCCION_COLOR: Record<string, string> = {
+  alistamiento: '#3b82f6',
+  instalacion: '#8b5cf6',
+};
 
 /**
- * Tabla única de "Weekly Construcción" — cada fila es una casa (o un grupo,
- * cuando la API solo trae el conteo agrupado, como en la planeación de la
- * próxima semana). Las 5 métricas que antes eran StatCards ahora son
- * columnas: "Estado" (Instalada esta semana / En curso / Próxima semana) +
- * Zona/Constructor/Marca/Fecha, que ya existían como columnas de la tabla
- * de distribución.
+ * Tabla única de "Weekly Construcción" — una fila por casa que está AHORA
+ * MISMO en Alistamiento o Instalación (las 2 etapas de obra del CRM, ver
+ * OPERATIONS_STAGES en crm-stages.ts). Se arma con la misma data que ya
+ * carga el Gantt (/api/dash/gantt), así que en cuanto una casa pasa a
+ * Operativo, sale sola de la lista — no hace falta filtrar nada a mano.
+ * Las fechas son explícitamente las del cronograma (inicio/fin planeados),
+ * no un "Fecha" genérico.
  */
-function SemanaResumenTable({ report }: { report: DashReport }) {
-  const filas: SemanaFila[] = [
-    ...(report.semana.detalle?.instaladas ?? []).map((casa) => ({
-      casa, estado: 'Instalada esta semana', zona: '—', constructor: '—', marca: '—', fecha: '—',
-    })),
-    ...(report.semana.detalle?.porIniciar ?? []).map((casa) => ({
-      casa, estado: 'En curso (alistamiento/instalación)', zona: '—', constructor: '—', marca: '—', fecha: '—',
-    })),
-    ...report.planeacion.distribucion.map((p) => ({
-      casa: `${fmtInt(p.casas)} casa${p.casas === 1 ? '' : 's'}`,
-      estado: 'Próxima semana', zona: p.zona, constructor: p.constructor, marca: p.marca, fecha: p.fecha,
-    })),
-  ];
-  const ESTADO_COLOR: Record<string, string> = {
-    'Instalada esta semana': '#10b981',
-    'En curso (alistamiento/instalación)': '#3b82f6',
-    'Próxima semana': '#94a3b8',
-  };
+function SemanaResumenTable({ rows, loading }: { rows: GanttRow[]; loading: boolean }) {
+  const filas = rows
+    .filter((r) => r.operations_stage === 'alistamiento' || r.operations_stage === 'instalacion')
+    .sort((a, b) => a.cronograma_fecha_inicio.localeCompare(b.cronograma_fecha_inicio));
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
+
   return (
-    <div>
-      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-          <thead>
-            <tr style={{ background: '#1f2937', color: '#fff' }}>
-              {['Casa', 'Estado', 'Zona', 'Constructor', 'Marca', 'Fecha'].map((h) => (
-                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.78rem' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filas.length === 0 && (
-              <tr>
-                <td colSpan={6} style={{ padding: '14px 16px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                  Sin casas instaladas, en curso o planeadas esta semana.
-                </td>
-              </tr>
-            )}
-            {filas.map((f, i) => (
-              <tr key={i} style={{ background: i % 2 ? 'var(--bg-elevated)' : 'var(--bg-card)', borderTop: '1px solid var(--border)' }}>
-                <td style={{ padding: '10px 12px', fontWeight: 600 }}>{f.casa}</td>
-                <td style={{ padding: '10px 12px' }}>
-                  <span style={{ color: ESTADO_COLOR[f.estado] ?? 'inherit', fontWeight: 600 }}>{f.estado}</span>
-                </td>
-                <td style={{ padding: '10px 12px' }}>{f.zona}</td>
-                <td style={{ padding: '10px 12px' }}>{f.constructor}</td>
-                <td style={{ padding: '10px 12px' }}>{f.marca}</td>
-                <td style={{ padding: '10px 12px' }}>{f.fecha}</td>
-              </tr>
+    <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+        <thead>
+          <tr style={{ background: '#1f2937', color: '#fff' }}>
+            {['Casa', 'Etapa', 'Kit', 'Constructor', 'Zona', 'Fecha inicio cronograma', 'Fecha fin cronograma (plan)', 'Avance instalación'].map((h) => (
+              <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.78rem' }}>{h}</th>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </tr>
+        </thead>
+        <tbody>
+          {filas.length === 0 && (
+            <tr>
+              <td colSpan={8} style={{ padding: '14px 16px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                Ninguna casa en Alistamiento o Instalación ahora mismo.
+              </td>
+            </tr>
+          )}
+          {filas.map((r) => (
+            <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}>
+              <td style={{ padding: '10px 12px', fontWeight: 600 }}>{r.cliente_casa}</td>
+              <td style={{ padding: '10px 12px' }}>
+                <span style={{ color: ETAPA_CONSTRUCCION_COLOR[r.operations_stage] ?? 'inherit', fontWeight: 600 }}>
+                  {ETAPA_CONSTRUCCION_LABEL[r.operations_stage] ?? r.operations_stage}
+                </span>
+              </td>
+              <td style={{ padding: '10px 12px' }}>{r.marca ? labelForMarca(r.marca) : '—'}</td>
+              <td style={{ padding: '10px 12px' }}>{r.constructor}</td>
+              <td style={{ padding: '10px 12px' }}>{r.zona}</td>
+              <td style={{ padding: '10px 12px' }}>{r.cronograma_fecha_inicio}</td>
+              <td style={{ padding: '10px 12px' }}>{r.cronograma_fecha_fin}</td>
+              <td style={{ padding: '10px 12px' }}>
+                {r.operations_stage === 'instalacion' ? `${r.inst_progreso_pct}%` : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

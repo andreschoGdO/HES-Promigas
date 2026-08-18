@@ -20,6 +20,7 @@ interface Row {
   operations_stage: string; current_module: string;
   inst_paneles_dc: boolean; inst_equipos_ac: boolean; inst_config_cierre: boolean;
   operativo_at: string | null;
+  diseno_bateria_marca: string | null;
 }
 
 function deriveZona(zona: string | null, city: string | null): string {
@@ -44,7 +45,7 @@ export async function GET() {
     .select(`
       id, code, title, client_name, conjunto, casa_numero, zona, client_city, contractor_name,
       cronograma_fecha_inicio, installation_date, operations_stage, current_module,
-      inst_paneles_dc, inst_equipos_ac, inst_config_cierre, operativo_at
+      inst_paneles_dc, inst_equipos_ac, inst_config_cierre, operativo_at, diseno_bateria_marca
     `)
     .neq('current_module', 'closed')
     .not('cronograma_fecha_inicio', 'is', null)
@@ -66,6 +67,7 @@ export async function GET() {
       operations_stage: p.operations_stage,
       inst_progreso_pct: p.operations_stage === 'instalacion' ? Math.round((done / 3) * 100) : (p.operativo_at ? 100 : 0),
       operativo_at: p.operativo_at,
+      marca: p.diseno_bateria_marca,
     };
   });
 

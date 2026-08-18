@@ -11,7 +11,7 @@ const MUTED    = '#6b7280';
 const BORDER   = '#e5e7eb';
 const HEAD_BG  = '#f3f4f6';
 
-const fmtInt = (n: number) => n.toLocaleString('es-CO');
+const fmtInt = (n: number) => n.toLocaleString('es-CO', { maximumFractionDigits: 1 });
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtCOP = (n: number) => `$${fmtInt(n)}M COP`;
 

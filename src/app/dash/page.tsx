@@ -16,7 +16,7 @@ import { SimpleTable, PaginatedTable } from '@/components/DataTable';
 const ACCENT = '#07c5a8';
 const MARCA_COLORS = ['#07c5a8', '#3b82f6', '#f59e0b', '#8b5cf6'];
 
-const fmtInt = (n: number) => n.toLocaleString('es-CO');
+const fmtInt = (n: number) => n.toLocaleString('es-CO', { maximumFractionDigits: 1 });
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** Watt-peak por panel para calcular cuántos paneles equivalen a un kWp acumulado. */

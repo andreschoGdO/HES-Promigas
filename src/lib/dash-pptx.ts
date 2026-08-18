@@ -19,7 +19,7 @@ const MUTED = '6B7280';
 const HEAD_BG = 'F3F4F6';
 const CARD_BG = 'FFFFFF';
 
-const fmtInt = (n: number) => n.toLocaleString('es-CO');
+const fmtInt = (n: number) => n.toLocaleString('es-CO', { maximumFractionDigits: 1 });
 const fmt1   = (n: number) => n.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtCOP = (n: number) => `$${fmtInt(n)}M COP`;
 

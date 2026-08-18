@@ -48,6 +48,30 @@ const addDaysLabel = (iso: string, n: number) => {
   return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', timeZone: 'UTC' });
 };
 
+interface FunnelBandaFila { label: string; value: number; activos?: boolean }
+interface FunnelBanda { nombre: string; total: number; filas: FunnelBandaFila[] }
+
+/** Secciones que se pueden activar/desactivar desde el panel al final del dashboard. */
+type SectionKey =
+  | 'resumenEjecucion' | 'avanceGlobal' | 'detalleGlobal' | 'ordenesCompra'
+  | 'construccion' | 'gantt' | 'curvaS' | 'legalizaciones' | 'postventa' | 'logistica';
+const SECTION_DEFS: { key: SectionKey; label: string }[] = [
+  { key: 'resumenEjecucion', label: 'Resumen de ejecución (ventas)' },
+  { key: 'avanceGlobal', label: 'Avance global' },
+  { key: 'detalleGlobal', label: 'Detalle por marca, zona y constructor' },
+  { key: 'ordenesCompra', label: 'Desglose Órdenes de Compra' },
+  { key: 'construccion', label: 'Construcción (semanal)' },
+  { key: 'gantt', label: 'Gantt de obra' },
+  { key: 'curvaS', label: 'Curva S' },
+  { key: 'legalizaciones', label: 'Legalizaciones' },
+  { key: 'postventa', label: 'Postventa' },
+  { key: 'logistica', label: 'Logística' },
+];
+const DEFAULT_SECTIONS: Record<SectionKey, boolean> = SECTION_DEFS.reduce(
+  (acc, s) => ({ ...acc, [s.key]: true }), {} as Record<SectionKey, boolean>,
+);
+const SECTIONS_STORAGE_KEY = 'dash-construccion-secciones';
+
 interface GanttRow {
   id: string; cliente_casa: string; zona: string; constructor: string; conjunto: string;
   cronograma_fecha_inicio: string; cronograma_fecha_fin: string;
@@ -184,6 +208,43 @@ export default function DashPage() {
   };
   useEffect(() => { void loadScurve('', ''); }, []);
 
+  // ─── Resumen de ejecución (ventas) — datos de TopLeads/ActiveCampaign,
+  // independientes del CRM de construcción. Casas Firmadas = "Firmado" del
+  // funnel comercial (contrato firmado o más avanzado); el desglose viene
+  // de la banda EJECUCIÓN de esa misma API.
+  const [casasFirmadas, setCasasFirmadas] = useState(0);
+  const [ejecucionBanda, setEjecucionBanda] = useState<FunnelBanda | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/topleads/funnel-comercial');
+        if (r.ok) {
+          const j = await r.json();
+          const funnel: { key: string; value: number }[] = j.funnel ?? [];
+          setCasasFirmadas(funnel.find((f) => f.key === 'firmado')?.value ?? 0);
+          setEjecucionBanda((j.bandas ?? []).find((b: FunnelBanda) => b.nombre === 'EJECUCIÓN') ?? null);
+        }
+      } catch (e) { console.error('[dash] funnel comercial load fallo', e); }
+    })();
+  }, []);
+  const ejecucionFila = (label: string) => ejecucionBanda?.filas.find((f) => f.label === label)?.value ?? 0;
+
+  // ─── Secciones visibles — preferencia local del usuario, no compartida. ───
+  const [sections, setSections] = useState<Record<SectionKey, boolean>>(DEFAULT_SECTIONS);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(SECTIONS_STORAGE_KEY);
+      if (raw) setSections({ ...DEFAULT_SECTIONS, ...JSON.parse(raw) });
+    } catch (e) { console.error('[dash] preferencias de secciones inválidas', e); }
+  }, []);
+  const toggleSection = (key: SectionKey) => {
+    setSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try { window.localStorage.setItem(SECTIONS_STORAGE_KEY, JSON.stringify(next)); } catch (e) { console.error('[dash] no se pudo guardar preferencia', e); }
+      return next;
+    });
+  };
+
   const [downloadingPptx, setDownloadingPptx] = useState(false);
   const handleDownload = async () => {
     setDownloading(true);
@@ -289,7 +350,28 @@ export default function DashPage() {
         </div>
       </section>
 
+      {/* ─── RESUMEN DE EJECUCIÓN (VENTAS) — antes de Avance global ─── */}
+      {sections.resumenEjecucion && (
+        <section className="card">
+          <SectionHeader eyebrow="Ejecución" title="Resumen global de ventas y ejecución" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+            <StatCard label="Casas Firmadas" value={fmtInt(casasFirmadas)} hint="contrato firmado o más avanzado" />
+            <StatCard label="Energizados" value={fmtInt(ejecucionFila('Energizados'))} hint="ganado / instalación terminada" />
+            <StatCard label="En Construcción" value={fmtInt(ejecucionFila('En Construcción'))} hint="obra en curso" />
+            <StatCard label="Instalados" value={fmtInt(ejecucionFila('Instalados'))} hint="pendiente de energizar" />
+            <StatCard label="Firmados sin Instalar" value={fmtInt(ejecucionFila('Firmados sin Instalar'))} hint="contrato firmado, obra sin empezar" />
+            <StatCard
+              label="Avance vs. meta anual"
+              value={`${report.global.avancePct}%`}
+              hint={`${report.global.casasAcum} de ${report.global.metaCasas} casas meta`}
+              tag={`Faltan ${Math.max(0, report.global.metaCasas - report.global.casasAcum)} casas`}
+            />
+          </div>
+        </section>
+      )}
+
       {/* ─── SLIDE 2: AVANCE GLOBAL ─── */}
+      {sections.avanceGlobal && (
       <section className="card">
         <SectionHeader eyebrow="Avance global" title="Total instalado hasta la fecha" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
@@ -322,12 +404,6 @@ export default function DashPage() {
             value={`$${fmtInt(ocCapexEjecutado / 1_000_000)}M COP`}
             hint="ejecutado — casas en instalación o posterior"
             tag="adicional al de arriba"
-          />
-          <StatCard
-            label="Avance vs. meta anual"
-            value={`${report.global.avancePct}%`}
-            hint={`${report.global.casasAcum} de ${report.global.metaCasas} casas meta`}
-            tag={`Faltan ${Math.max(0, report.global.metaCasas - report.global.casasAcum)} casas`}
           />
         </div>
 
@@ -412,8 +488,10 @@ export default function DashPage() {
           </div>
         )}
       </section>
+      )}
 
       {/* ─── SLIDE 3 (NUEVA): DETALLE GLOBAL POR MARCA, ZONA Y CONSTRUCTOR ─── */}
+      {sections.detalleGlobal && (
       <DetalleMarcaZonaConstructor
         eyebrow="Avance global"
         title="Detalle por marca, zona y constructor"
@@ -421,8 +499,10 @@ export default function DashPage() {
         zonas={report.detalleGlobal?.zonas ?? report.detalle.zonas}
         constructores={report.detalleGlobal?.constructores ?? report.detalle.constructores}
       />
+      )}
 
       {/* ─── SLIDE 3B (NUEVA): DESGLOSE DE EJECUCIÓN — ÓRDENES DE COMPRA ─── */}
+      {sections.ordenesCompra && (
       <section className="card">
         <SectionHeader eyebrow={`Presupuesto ${new Date().getFullYear()}`} title="Desglose de ejecución — Órdenes de Compra" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16 }}>
@@ -460,8 +540,10 @@ export default function DashPage() {
           </div>
         </div>
       </section>
+      )}
 
       {/* ─── SLIDE 4: CONSTRUCCIÓN (semanal + planeación unificados) ─── */}
+      {sections.construccion && (
       <section className="card">
         <SectionHeader eyebrow="Weekly" title="Construcción" size="large" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
@@ -562,8 +644,10 @@ export default function DashPage() {
           </div>
         )}
       </section>
+      )}
 
       {/* ─── GANTT DE OBRA ─── */}
+      {sections.gantt && (
       <section className="card">
         <SectionHeader eyebrow="Cronograma" title="Gantt de obra" size="large" />
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: -8, marginBottom: 16 }}>
@@ -589,8 +673,10 @@ export default function DashPage() {
         </div>
         <GanttChart rows={ganttRows} loading={ganttLoading} zona={ganttZona} constructor={ganttConstructor} conjunto={ganttConjunto} />
       </section>
+      )}
 
       {/* ─── CURVA S ─── */}
+      {sections.curvaS && (
       <section className="card">
         <SectionHeader eyebrow="Cronograma" title="Curva S — planeado vs real" size="large" />
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: -8, marginBottom: 16 }}>
@@ -607,8 +693,10 @@ export default function DashPage() {
         </div>
         <SCurveChart scurve={scurve} loading={scurveLoading} />
       </section>
+      )}
 
       {/* ─── SLIDE 7: LEGALIZACIONES ─── */}
+      {sections.legalizaciones && (
       <section className="card">
         <SectionHeader eyebrow="Legalizaciones" title="Trámites para venta de excedentes (AGPE)" />
         <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: -8, marginBottom: 16 }}>
@@ -631,8 +719,10 @@ export default function DashPage() {
           ])}
         />
       </section>
+      )}
 
       {/* ─── SLIDE 7: POSTVENTA ─── */}
+      {sections.postventa && (
       <section className="card">
         <SectionHeader eyebrow="Postventa" title="Garantías: equipos y retorno a bodega" />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 16 }}>
@@ -652,8 +742,10 @@ export default function DashPage() {
           ])}
         />
       </section>
+      )}
 
       {/* ─── SLIDE 8: LOGÍSTICA ─── */}
+      {sections.logistica && (
       <section className="card">
         <SectionHeader eyebrow="Logística" title="Estado de inventario en bodega" />
         {/* Stock por bodega — union de marcas para que las 3 tablas tengan las mismas filas */}
@@ -776,6 +868,23 @@ export default function DashPage() {
           <p style={{ marginTop: 8, fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
             Simulación con el stock actual y las prioridades por ciudad. Los equipos no se reutilizan entre kits.
           </p>
+        </div>
+      </section>
+      )}
+
+      {/* ─── PANEL: SECCIONES VISIBLES ─── */}
+      <section className="card">
+        <SectionHeader eyebrow="Preferencias" title="Secciones visibles en este dashboard" />
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: -8, marginBottom: 16 }}>
+          Activa o desactiva qué secciones se muestran acá abajo. Se guarda solo en este navegador.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+          {SECTION_DEFS.map((s) => (
+            <label key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={sections[s.key]} onChange={() => toggleSection(s.key)} />
+              {s.label}
+            </label>
+          ))}
         </div>
       </section>
 

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { listDealsByGroup } from '@/lib/activecampaign';
 
-const PIPELINE_VENTAS_ID = '1';   // "Prospectos Sunny" — el embudo es SOLO este pipeline
+const PIPELINE_VENTAS_ID = '1';   // "Prospectos Sunny" — el embudo (etapas/bandas) es SOLO este pipeline
+const PIPELINE_ESPERA_ID = '5';   // "Lista de Espera" — se suma solo a "Total Leads", no entra en el resto del embudo
 
 /**
  * Orden de las etapas del pipeline de ventas — reconstruido a partir de
@@ -31,6 +32,13 @@ const STAGE_ORDER: Record<string, number> = {
   '60': 10, // Pendiente por enviar contrato
   '8': 10,  // Contrato enviado
   '47': 11, // Contrato firmado
+  // '61' (En construcción) es otra etapa que faltaba por completo en este
+  // mapa (18va etapa real del pipeline, encontrada en vivo vía
+  // /api/3/dealGroups) — mismo bug que tuvo '60': cualquier deal parado ahí
+  // caía a `?? 0` y desaparecía de Contrato/Firmado aunque ya había pasado
+  // "Contrato firmado". Se ubica al mismo nivel que "Instalados" (ambas son
+  // "obra en curso o terminada", posteriores a firmado).
+  '61': 12, // En construcción
   '55': 12, // Instalados
   '30': 13, // PRUEBAS
   '45': 13, // Validar con negocio
@@ -47,8 +55,12 @@ const STAGE_ORDER: Record<string, number> = {
  * (Interesados/Evaluación/Cierre/Ejecución) que se ve en la tabla de
  * control diaria de esa herramienta.
  *
- * El embudo es SOLO el pipeline "Prospectos Sunny" (id 1) — "Lista de
- * Espera" es otro pipeline aparte y no se mezcla acá.
+ * El embudo (etapas, bandas EVALUACIÓN/CIERRE/EJECUCIÓN) es SOLO el
+ * pipeline "Prospectos Sunny" (id 1). "Lista de Espera" (id 5) es otro
+ * pipeline aparte, sin etapas equivalentes — solo se suma a "Total Leads"
+ * (tarjeta superior y primera fila de la banda INTERESADOS), igual que en
+ * la herramienta de referencia: 411 (Prospectos Sunny) + 90 (Lista de
+ * Espera) = 501.
  *
  * NOTA DE PRECISIÓN: la mayoría de los números están verificados contra
  * capturas reales del Kanban (En Dimensionamiento, Dimensionado, Pend.
@@ -63,7 +75,10 @@ const STAGE_ORDER: Record<string, number> = {
  */
 export async function GET() {
   try {
-    const ventas = await listDealsByGroup(PIPELINE_VENTAS_ID);
+    const [ventas, espera] = await Promise.all([
+      listDealsByGroup(PIPELINE_VENTAS_ID),
+      listDealsByGroup(PIPELINE_ESPERA_ID),
+    ]);
 
     const open = ventas.filter((d) => d.status === '0');
     const lost = ventas.filter((d) => d.status === '2');
@@ -82,9 +97,11 @@ export async function GET() {
       return o === 1 || o === 2;
     }).length;
     const descartados = lost.length;
-    // El embudo es solo el pipeline "Prospectos Sunny" — "Lista de Espera"
-    // es otro pipeline aparte y no se mezcla acá.
-    const totalLeads = ventas.length;
+    // "Total Leads" combina los dos pipelines (ventas + lista de espera) —
+    // el resto de buckets (completos/incompletos/descartados/etapas) siguen
+    // siendo solo de "ventas", ya que "Lista de Espera" no tiene etapas
+    // equivalentes.
+    const totalLeads = ventas.length + espera.length;
     const completos = ventas.length - incompletos - descartados; // resto — incluye ganados
 
     // Funnel acumulado (izquierda): cada bucket = abiertos con orden >= X,
@@ -100,17 +117,17 @@ export async function GET() {
     const energizados = won.length;
 
     // Bandas (derecha): valores puntuales por etapa cruda, todos abiertos —
-    // salvo "Energizados", filtrado por ganado. "En instalación" son los
-    // abiertos parados en la etapa "Instalados" (obra en curso, sin
-    // terminar todavía) — separado de "Firmados sin Instalar" (contrato
-    // firmado, obra sin empezar) para no mezclar "en cola" con "en obra".
+    // salvo "Energizados", filtrado por ganado. "Instalados" y
+    // "En Construcción" son dos etapas AC distintas (55 y 61) y se muestran
+    // como filas separadas — igual que la herramienta de referencia.
     const enDimensionamiento = openAtStage('34');
     const dimensionado = openAtStage('5');
     const pendientesOferta = openAtStage('44');
     const pendConfirmOferta = openAtStage('7');
     const pendConfirmContrato = openAtStage('8');
     const firmadosSinInstalar = openAtStage('47');
-    const enInstalacionBanda = openAtStage('55');
+    const instaladosBanda = openAtStage('55');
+    const enConstruccion = openAtStage('61');
 
     return NextResponse.json({
       capturedAt: new Date().toISOString(),
@@ -134,6 +151,7 @@ export async function GET() {
           total: totalLeads,
           filas: [
             { label: 'Total Leads', value: totalLeads },
+            { label: 'En Lista de Espera', value: espera.length },
             { label: 'Leads Incompletos', value: incompletos, activos: true },
             { label: 'Leads Completos', value: completos, activos: true },
           ],
@@ -157,10 +175,11 @@ export async function GET() {
         },
         {
           nombre: 'EJECUCIÓN',
-          total: firmadosSinInstalar + enInstalacionBanda + energizados,
+          total: firmadosSinInstalar + instaladosBanda + enConstruccion + energizados,
           filas: [
             { label: 'Firmados sin Instalar', value: firmadosSinInstalar },
-            { label: 'En instalación', value: enInstalacionBanda },
+            { label: 'Instalados', value: instaladosBanda },
+            { label: 'En Construcción', value: enConstruccion },
             { label: 'Energizados', value: energizados },
           ],
         },

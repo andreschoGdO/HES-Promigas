@@ -637,17 +637,6 @@ export default function DashPage() {
         )}
 
         {/* Motivos de stand-by (si hay) */}
-        {report.semana.motivos.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-              STAND BY — REQUIERE ACCIÓN ({report.semana.standBy} CASAS)
-            </div>
-            <SimpleTable
-              head={['Motivo', 'Casas', 'Acción']}
-              rows={report.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion])}
-            />
-          </div>
-        )}
       </section>
       )}
 

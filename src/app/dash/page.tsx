@@ -551,38 +551,7 @@ export default function DashPage() {
       {sections.construccion && (
       <section className="card">
         <SectionHeader eyebrow="Weekly" title="Construcción" size="large" />
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
-          <StatCard
-            label="Instaladas esta semana"
-            value={fmtInt(report.semana.casasInstaladas)}
-            hint={report.semana.casasInstaladas > 0 ? 'ya operativas' : 'ninguna esta semana'}
-            detalle={report.semana.detalle?.instaladas}
-          />
-          <StatCard
-            label="En curso"
-            value={fmtInt(report.semana.porIniciar)}
-            hint="alistamiento o instalación"
-            detalle={report.semana.detalle?.porIniciar}
-          />
-          <StatCard
-            label="Próxima semana"
-            value={fmtInt(report.planeacion.casasAsignadas)}
-            hint="en gestión + planeadas"
-            tag={report.planeacion.casasAsignadas > 0 ? `${report.planeacion.distribucion.length} grupos` : undefined}
-          />
-          <StatCard
-            label="kWp instalados"
-            value={`${fmt1(report.semana.kwpSemana)} kWp`}
-            hint="esta semana"
-            tag={report.semana.kwpSemana > 0 ? `~${fmtInt(Math.round(report.semana.kwpSemana * 1000 / PANEL_WP))} paneles` : undefined}
-          />
-          <StatCard
-            label="kWh batería"
-            value={`${fmtInt(report.semana.kwhSemana)} kWh`}
-            hint="esta semana"
-            tag={report.semana.kwhSemana > 0 ? `~${fmtInt(Math.round(report.semana.kwhSemana / KWH_POR_BATERIA))} baterías` : undefined}
-          />
-        </div>
+        <SemanaResumenTable report={report} />
 
         {/* Detalle por marca / zona / constructor (semanal — puede estar vacío si no hay instalaciones) */}
         {report.detalle.marcas.length + report.detalle.zonas.length + report.detalle.constructores.length > 0 && (
@@ -623,20 +592,6 @@ export default function DashPage() {
           </div>
         )}
 
-        {/* Distribución planeación próxima semana */}
-        {report.planeacion.distribucion.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-              PRÓXIMA SEMANA — DISTRIBUCIÓN POR ZONA Y CONSTRUCTOR
-            </div>
-            <SimpleTable
-              head={['Zona', 'Constructor', 'Casas', 'Marca', 'Fecha']}
-              rows={report.planeacion.distribucion.map((p) => [p.zona, p.constructor, fmtInt(p.casas), p.marca, p.fecha])}
-            />
-          </div>
-        )}
-
-        {/* Motivos de stand-by (si hay) */}
       </section>
       )}
 
@@ -1057,6 +1012,64 @@ function DetalleMarcaZonaConstructor({
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Tabla única de "Weekly Construcción" — antes eran 5 StatCards (resumen
+ * de la semana) + una tabla aparte de distribución próxima semana. Se
+ * unieron en una sola tabla: el resumen va como fila destacada arriba,
+ * seguido de la distribución por zona/constructor con las mismas columnas
+ * que ya tenía esa tabla.
+ */
+function SemanaResumenTable({ report }: { report: DashReport }) {
+  const chip = (label: string, value: string, extra?: string) => (
+    <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
+      {extra && <span style={{ fontSize: '0.72rem', color: ACCENT, fontWeight: 600 }}>{extra}</span>}
+    </div>
+  );
+  const rows = report.planeacion.distribucion;
+  return (
+    <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+        <tbody>
+          <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
+            <td colSpan={5} style={{ padding: '14px 16px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+                {chip('Instaladas esta semana', fmtInt(report.semana.casasInstaladas), report.semana.casasInstaladas > 0 ? 'ya operativas' : 'ninguna esta semana')}
+                {chip('En curso', fmtInt(report.semana.porIniciar), 'alistamiento o instalación')}
+                {chip('Próxima semana', fmtInt(report.planeacion.casasAsignadas), report.planeacion.casasAsignadas > 0 ? `en gestión + planeadas · ${rows.length} grupos` : 'en gestión + planeadas')}
+                {chip('kWp instalados', `${fmt1(report.semana.kwpSemana)} kWp`, 'esta semana')}
+                {chip('kWh batería', `${fmtInt(report.semana.kwhSemana)} kWh`, 'esta semana')}
+              </div>
+            </td>
+          </tr>
+          <tr style={{ background: '#1f2937', color: '#fff' }}>
+            {['Zona', 'Constructor', 'Casas', 'Marca', 'Fecha'].map((h) => (
+              <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.78rem' }}>{h}</th>
+            ))}
+          </tr>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={5} style={{ padding: '14px 16px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                Sin casas planeadas para la próxima semana todavía.
+              </td>
+            </tr>
+          )}
+          {rows.map((p, i) => (
+            <tr key={i} style={{ background: i % 2 ? 'var(--bg-elevated)' : 'var(--bg-card)', borderTop: '1px solid var(--border)' }}>
+              <td style={{ padding: '10px 12px' }}>{p.zona}</td>
+              <td style={{ padding: '10px 12px' }}>{p.constructor}</td>
+              <td style={{ padding: '10px 12px' }}>{fmtInt(p.casas)}</td>
+              <td style={{ padding: '10px 12px' }}>{p.marca}</td>
+              <td style={{ padding: '10px 12px' }}>{p.fecha}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

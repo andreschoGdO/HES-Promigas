@@ -563,7 +563,7 @@ export default function DashPage() {
         <SemanaResumenTable rows={ganttRows} loading={ganttLoading} />
 
         {/* Detalle por marca / zona / constructor (semanal — puede estar vacío si no hay instalaciones) */}
-        {report.detalle.marcas.length + report.detalle.zonas.length + report.detalle.constructores.length > 0 && (
+        {report.detalle.marcas.length + report.detalle.zonas.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginTop: 12 }}>
             {report.detalle.marcas.length > 0 && (
               <div>
@@ -584,17 +584,6 @@ export default function DashPage() {
                 <SimpleTable
                   head={['Zona', 'Casas', 'CAPEX']}
                   rows={report.detalle.zonas.map((z) => [z.zona, fmtInt(z.casas), z.capex])}
-                />
-              </div>
-            )}
-            {report.detalle.constructores.length > 0 && (
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-                  CONSTRUCTOR
-                </div>
-                <SimpleTable
-                  head={['Constructor', 'Asignadas', 'Instaladas']}
-                  rows={report.detalle.constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)])}
                 />
               </div>
             )}

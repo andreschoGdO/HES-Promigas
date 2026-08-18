@@ -466,12 +466,12 @@ export default function DashPage() {
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
               USD/Wp POR SOLUCIÓN · TRM {new Intl.NumberFormat('es-CO').format(TRM_COP)} COP/USD
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(180px, 1fr))`, gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(120px, 1fr))`, gap: 8 }}>
               {report.global.usdWpBySolucion.map((s) => (
-                <div key={s.solucion} className="stat-card" style={{ borderLeft: '4px solid var(--accent)' }}>
-                  <div className="stat-label">{s.solucion}</div>
-                  <div className="stat-value">${fmt1(s.usdWpPromedio)} USD/Wp</div>
-                  <div style={{ fontSize: '0.72rem', color: ACCENT, fontWeight: 600 }}>{s.casas} casa{s.casas === 1 ? '' : 's'}</div>
+                <div key={s.solucion} className="stat-card" style={{ borderLeft: '3px solid var(--accent)', padding: '10px 12px', gap: 2 }}>
+                  <div className="stat-label" style={{ fontSize: '0.64rem' }}>Sol. {s.solucion}</div>
+                  <div className="stat-value" style={{ fontSize: '1.05rem' }}>${fmt1(s.usdWpPromedio)} USD/Wp</div>
+                  <div style={{ fontSize: '0.66rem', color: ACCENT, fontWeight: 600 }}>{s.casas} casa{s.casas === 1 ? '' : 's'}</div>
                 </div>
               ))}
               {/* Total ponderado — SOLO sobre las casas que tienen usd_wp cargado
@@ -481,10 +481,10 @@ export default function DashPage() {
                   las casas instaladas inflaba el denominador y subestimaba el
                   promedio real). */}
               {report.global.casasConUsdWp > 0 && (
-                <div className="stat-card" style={{ borderLeft: '4px solid #64748b', background: 'var(--bg-elevated)' }}>
-                  <div className="stat-label">Promedio general</div>
-                  <div className="stat-value">${fmt1(report.global.usdWpPromedioGeneral)} USD/Wp</div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                <div className="stat-card" style={{ borderLeft: '3px solid #64748b', background: 'var(--bg-elevated)', padding: '10px 12px', gap: 2 }}>
+                  <div className="stat-label" style={{ fontSize: '0.64rem' }}>Promedio general</div>
+                  <div className="stat-value" style={{ fontSize: '1.05rem' }}>${fmt1(report.global.usdWpPromedioGeneral)} USD/Wp</div>
+                  <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                     {report.global.casasConUsdWp} de {report.global.casasAcum} casas con dato · ${fmtInt(report.global.capexVentaAcumM)}M venta
                   </div>
                 </div>

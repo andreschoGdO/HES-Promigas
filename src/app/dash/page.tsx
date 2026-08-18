@@ -382,9 +382,9 @@ export default function DashPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
           <StatCard
             label="Casas instaladas (acum.)"
-            value={fmtInt(report.global.casasAcum)}
-            hint="desde inicio de operación"
-            tag={report.global.mesesActivos > 0 ? `~${fmt1(report.global.casasAcum / report.global.mesesActivos)} casas/mes` : undefined}
+            value={fmtInt(energizados)}
+            hint="Energizados — funnel comercial (TopLeads)"
+            tag={report.global.mesesActivos > 0 ? `~${fmt1(energizados / report.global.mesesActivos)} casas/mes` : undefined}
           />
           <StatCard
             label="kWp solar (acum.)"

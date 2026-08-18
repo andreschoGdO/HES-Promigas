@@ -79,7 +79,7 @@ interface GanttRow {
   marca: string | null;
 }
 interface ScurvePoint { week: string; planeado: number; real: number; }
-interface ScurveResp { total: number; from: string; to: string; points: ScurvePoint[]; }
+interface ScurveResp { total: number; from: string; to: string; points: ScurvePoint[]; zonaOptions?: string[]; constructorOptions?: string[]; }
 
 function SectionHeader({ eyebrow, title, size = 'normal' }: { eyebrow: string; title: string; size?: 'normal' | 'large' }) {
   const titleSize = size === 'large' ? '2.2rem' : '1.4rem';
@@ -191,12 +191,16 @@ export default function DashPage() {
   const [scurveLoading, setScurveLoading] = useState(true);
   const [scurveFrom, setScurveFrom] = useState('');
   const [scurveTo, setScurveTo] = useState('');
-  const loadScurve = async (f: string, t: string) => {
+  const [scurveZona, setScurveZona] = useState('');
+  const [scurveConstructor, setScurveConstructor] = useState('');
+  const loadScurve = async (f: string, t: string, zona: string, constructor: string) => {
     setScurveLoading(true);
     try {
       const params = new URLSearchParams();
       if (f) params.set('from', f);
       if (t) params.set('to', t);
+      if (zona) params.set('zona', zona);
+      if (constructor) params.set('constructor', constructor);
       const r = await fetch(`/api/dash/scurve?${params}`);
       if (r.ok) {
         const j = await r.json();
@@ -207,7 +211,7 @@ export default function DashPage() {
     } catch (e) { console.error('[dash] scurve load fallo', e); }
     finally { setScurveLoading(false); }
   };
-  useEffect(() => { void loadScurve('', ''); }, []);
+  useEffect(() => { void loadScurve('', '', '', ''); }, []);
 
   // ─── Resumen de ejecución (ventas) — datos de TopLeads/ActiveCampaign,
   // independientes del CRM de construcción. Casas Firmadas = "Firmado" del
@@ -637,11 +641,21 @@ export default function DashPage() {
           quedaron realmente operativas.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
-          <input type="date" value={scurveFrom} onChange={(e) => void loadScurve(e.target.value, scurveTo)}
-            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }} />
+          <input type="date" value={scurveFrom} onChange={(e) => void loadScurve(e.target.value, scurveTo, scurveZona, scurveConstructor)}
+            style={{ width: 'auto', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }} />
           <span style={{ color: 'var(--text-muted)' }}>→</span>
-          <input type="date" value={scurveTo} onChange={(e) => void loadScurve(scurveFrom, e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }} />
+          <input type="date" value={scurveTo} onChange={(e) => void loadScurve(scurveFrom, e.target.value, scurveZona, scurveConstructor)}
+            style={{ width: 'auto', padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }} />
+          <select value={scurveZona} onChange={(e) => { setScurveZona(e.target.value); void loadScurve(scurveFrom, scurveTo, e.target.value, scurveConstructor); }}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }}>
+            <option value="">Todas las zonas</option>
+            {(scurve?.zonaOptions ?? []).map((z) => <option key={z} value={z}>{z}</option>)}
+          </select>
+          <select value={scurveConstructor} onChange={(e) => { setScurveConstructor(e.target.value); void loadScurve(scurveFrom, scurveTo, scurveZona, e.target.value); }}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }}>
+            <option value="">Todos los constructores</option>
+            {(scurve?.constructorOptions ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           {scurve && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{scurve.total} casas con fin de cronograma en el rango</span>}
         </div>
         <SCurveChart scurve={scurve} loading={scurveLoading} />

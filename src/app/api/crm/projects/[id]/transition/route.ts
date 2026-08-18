@@ -358,17 +358,6 @@ export async function POST(request: Request, context: Ctx) {
       await removeProjectTag(id, 'no se instaló');
     }
 
-    // ─── Para Cerrar Proyecto: validar que todos los items siguen instalados en la casa
-    if (def.action === 'operations_to_completado') {
-      const blockers = await checkReadyForClose(id);
-      if (blockers.length > 0) {
-        return NextResponse.json({
-          error: `No se puede cerrar el proyecto. Pendientes: ${blockers.join(', ')}.`,
-          blockers,
-        }, { status: 409 });
-      }
-    }
-
     // UPDATE condicional con guard contra race: solo aplica si el estado no ha cambiado
     // desde nuestra lectura. Si otra request paralela ya ejecutó la transición, count=0.
     const stageCol = 'operations_stage';
@@ -410,10 +399,6 @@ export async function POST(request: Request, context: Ctx) {
     // Auto-crear tareas en el Planner para visibilidad de fechas
     if (def.action === 'operations_to_instalacion') {
       const t = await createPlannerTaskInstalacion(updated[0], body.actor_email ?? null);
-      if (t) sideEffects.planner_task = t;
-    }
-    if (def.action === 'operations_to_logistica_inversa') {
-      const t = await createPlannerTaskTicket(updated[0], body.actor_email ?? null, coerced.notes as string | undefined);
       if (t) sideEffects.planner_task = t;
     }
     // Devolver a Dimensionado desde Alistamiento → cancelar reserva activa
@@ -951,33 +936,6 @@ async function createPlannerTaskInstalacion(project: CrmProjectFull, actorEmail:
 }
 
 /**
- * Auto-crea una tarea para un ticket de logística inversa (garantía / cambio).
- * Sin start/due — el usuario las ajusta después.
- */
-async function createPlannerTaskTicket(project: CrmProjectFull, actorEmail: string | null, motivo: string | undefined): Promise<null | { id: string; title: string }> {
-  const casaLabel = project.conjunto && project.casa_numero
-    ? `${project.conjunto} · Casa ${project.casa_numero}`
-    : (project.client_name ?? project.title);
-  const { data: task, error } = await supabaseAdmin
-    .from('planner_tasks')
-    .insert({
-      title: `Ticket garantía / cambio: ${casaLabel}`,
-      description: motivo ?? `Ticket abierto en proyecto ${project.code ?? project.title}.`,
-      assigned_to: actorEmail,
-      urgency: 'high',
-      status: 'todo',
-      tags: ['logistica-inversa-auto', 'garantia'],
-      team: 'Operaciones',
-      project_id: project.id,
-      created_by: actorEmail,
-    })
-    .select('id, title')
-    .single();
-  if (error) return null;
-  return task;
-}
-
-/**
  * Preflight Alistamiento → Instalación: validar que contractor_name y
  * installation_date estén presentes (o se estén capturando en esta transición).
  * Devuelve lista de bloqueadores (vacío si todo OK).
@@ -995,39 +953,6 @@ async function checkReadyForInstalacion(projectId: string, incomingFields: Recor
   if (!contractor || !String(contractor).trim()) blockers.push('contratista');
   if (!date) blockers.push('fecha de instalación');
   if (!p.reservation_id) blockers.push('reserva de inventario (regresa a alistamiento)');
-  return blockers;
-}
-
-/**
- * Preflight Operativo → Cerrado: validar que el proyecto está limpio para cerrar.
- * Bloqueadores: no hay equipos installed en la casa o queda algo en reserved.
- */
-async function checkReadyForClose(projectId: string): Promise<string[]> {
-  const { data: p } = await supabaseAdmin
-    .from('crm_projects')
-    .select('house_id, reservation_id')
-    .eq('id', projectId)
-    .single();
-  if (!p?.house_id) return ['casa no asignada — no se puede verificar el estado de los equipos'];
-
-  const blockers: string[] = [];
-  // ¿Hay items en la reserva que NO estén installed?
-  if (p.reservation_id) {
-    const { data: lines } = await supabaseAdmin
-      .from('inventory_reservation_items')
-      .select('inventory_items(serial_number, status)')
-      .eq('reservation_id', p.reservation_id);
-    type LI = { serial_number: string | null; status: string | null };
-    const pending: string[] = [];
-    for (const l of (lines ?? []) as Array<{ inventory_items: LI | LI[] | null }>) {
-      const it = Array.isArray(l.inventory_items) ? l.inventory_items[0] : l.inventory_items;
-      if (!it) continue;
-      if (it.status !== 'installed') pending.push(`${it.serial_number ?? '?'} (${it.status ?? 'unknown'})`);
-    }
-    if (pending.length > 0) {
-      blockers.push(`${pending.length} equipo(s) sin instalar: ${pending.slice(0, 5).join(', ')}${pending.length > 5 ? '…' : ''}`);
-    }
-  }
   return blockers;
 }
 

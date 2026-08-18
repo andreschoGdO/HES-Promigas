@@ -1333,8 +1333,14 @@ function EditProjectModal({ project, userEmail, onClose, onSaved }: {
         </StageSection>
 
         <StageSection title="Cronograma de instalación" stage="dimensionado" canEdit={canEdit('dimensionado')}>
-          <FormField label="Contratista" value={form.contractor_name} onChange={(v) => set('contractor_name', v)} disabled={!canEdit('dimensionado')} />
-          <FormField label="Email contratista" value={form.contractor_email} onChange={(v) => set('contractor_email', v)} disabled={!canEdit('dimensionado')} />
+          <div style={{ gridColumn: '1 / -1' }}>
+            <ContratistaPicker
+              nombre={form.contractor_name}
+              email={form.contractor_email}
+              onChange={(nombre, email) => { set('contractor_name', nombre); set('contractor_email', email); }}
+              disabled={!canEdit('dimensionado')}
+            />
+          </div>
           <FormField label="Fecha inicio cronograma" type="date" value={form.cronograma_fecha_inicio} onChange={(v) => set('cronograma_fecha_inicio', v)} disabled={!canEdit('dimensionado')} />
           <FormField label="Fecha fin cronograma" type="date" value={form.installation_date} onChange={(v) => set('installation_date', v)} disabled={!canEdit('dimensionado')} />
         </StageSection>
@@ -2098,8 +2104,13 @@ function CreateProjectModal({ userEmail, module, onClose, onCreated }: {
             </FormSection>
 
             <FormSection title="Cronograma de instalación">
-              <FormField label="Contratista" required value={form.contractor_name ?? ''} onChange={(v) => set('contractor_name', v)} placeholder="Energía Solar SAS" />
-              <FormField label="Email del contratista" value={form.contractor_email ?? ''} onChange={(v) => set('contractor_email', v)} placeholder="contacto@contratista.com" />
+              <div style={{ gridColumn: '1 / -1' }}>
+                <ContratistaPicker
+                  nombre={form.contractor_name ?? ''}
+                  email={form.contractor_email ?? ''}
+                  onChange={(nombre, email) => { set('contractor_name', nombre); set('contractor_email', email); }}
+                />
+              </div>
               <FormField label="Fecha inicio cronograma" required type="date" value={form.cronograma_fecha_inicio ?? ''} onChange={(v) => set('cronograma_fecha_inicio', v)} />
               <FormField label="Fecha fin cronograma" required type="date" value={form.installation_date ?? ''} onChange={(v) => set('installation_date', v)} />
               <p style={{ gridColumn: '1 / -1', margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
@@ -2278,6 +2289,89 @@ function HousePicker({ value, onChange, casaHint, disabled }: {
               </button>
             ))
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface Contratista { id: string; nombre: string; email: string | null; telefono: string | null; empresa: string | null }
+
+/**
+ * Selector de contratista contra el catálogo (`contratistas`) en vez de
+ * texto libre — antes se re-escribía nombre + email a mano en cada
+ * proyecto. Al elegir uno, autocompleta el email; "+ Nuevo contratista"
+ * abre un mini-form que lo agrega al catálogo (una sola vez) y lo deja
+ * seleccionado.
+ */
+function ContratistaPicker({ nombre, email, onChange, disabled }: {
+  nombre: string; email: string; onChange: (nombre: string, email: string) => void; disabled?: boolean;
+}) {
+  const [options, setOptions] = useState<Contratista[]>([]);
+  const [showNew, setShowNew] = useState(false);
+  const [newForm, setNewForm] = useState({ nombre: '', email: '', telefono: '' });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = async () => {
+    const r = await fetch('/api/contratistas');
+    const j = await r.json();
+    setOptions(j.contratistas ?? []);
+  };
+  useEffect(() => { void load(); }, []);
+
+  const handleSelect = (val: string) => {
+    if (val === '__new__') { setShowNew(true); return; }
+    const c = options.find((o) => o.nombre === val);
+    onChange(val, c?.email ?? '');
+  };
+
+  const createContratista = async () => {
+    if (!newForm.nombre.trim()) { setErr('El nombre es requerido'); return; }
+    setSaving(true);
+    setErr(null);
+    const r = await fetch('/api/contratistas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newForm),
+    });
+    const j = await r.json();
+    setSaving(false);
+    if (!r.ok) { setErr(j.error ?? 'Error'); return; }
+    await load();
+    onChange(j.contratista.nombre, j.contratista.email ?? '');
+    setShowNew(false);
+    setNewForm({ nombre: '', email: '', telefono: '' });
+  };
+
+  // Si el proyecto ya tiene un contratista guardado que no está en el catálogo
+  // (dato histórico), lo agrego a la lista de opciones para no perderlo de vista.
+  const allOptions = nombre && !options.some((o) => o.nombre === nombre)
+    ? [...options, { id: 'legacy', nombre, email: email || null, telefono: null, empresa: null }]
+    : options;
+
+  return (
+    <div>
+      <label className="input-label" style={{ fontSize: '0.74rem' }}>Contratista</label>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <select value={nombre || ''} onChange={(e) => handleSelect(e.target.value)} disabled={disabled} style={{ flex: 1 }}>
+          <option value="">— Selecciona —</option>
+          {allOptions.map((o) => <option key={o.id} value={o.nombre}>{o.nombre}</option>)}
+          {!disabled && <option value="__new__">+ Nuevo contratista…</option>}
+        </select>
+        {email && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{email}</span>}
+      </div>
+
+      {showNew && (
+        <div style={{ marginTop: 8, padding: 10, background: 'var(--bg-elevated)', borderRadius: 8, display: 'grid', gap: 6 }}>
+          {err && <div className="alert-error" style={{ fontSize: '0.76rem' }}>{err}</div>}
+          <input placeholder="Nombre *" value={newForm.nombre} onChange={(e) => setNewForm((f) => ({ ...f, nombre: e.target.value }))} />
+          <input placeholder="Email" value={newForm.email} onChange={(e) => setNewForm((f) => ({ ...f, email: e.target.value }))} />
+          <input placeholder="Teléfono" value={newForm.telefono} onChange={(e) => setNewForm((f) => ({ ...f, telefono: e.target.value }))} />
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <button type="button" className="secondary-btn" onClick={() => setShowNew(false)} disabled={saving} style={{ padding: '4px 10px', fontSize: '0.76rem' }}>Cancelar</button>
+            <button type="button" className="primary-btn" onClick={createContratista} disabled={saving} style={{ padding: '4px 10px', fontSize: '0.76rem' }}>{saving ? 'Guardando…' : 'Agregar al catálogo'}</button>
+          </div>
         </div>
       )}
     </div>

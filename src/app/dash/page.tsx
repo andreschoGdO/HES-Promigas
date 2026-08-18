@@ -228,6 +228,11 @@ export default function DashPage() {
     })();
   }, []);
   const ejecucionFila = (label: string) => ejecucionBanda?.filas.find((f) => f.label === label)?.value ?? 0;
+  // "Avance vs. meta anual" se mide contra Energizados (funnel comercial),
+  // no contra casasAcum del CRM — son dos fuentes distintas y esta tarjeta
+  // vive junto a "Energizados" en la misma sección.
+  const energizados = ejecucionFila('Energizados');
+  const avancePctEnergizados = report.global.metaCasas > 0 ? Math.round((energizados / report.global.metaCasas) * 100) : 0;
 
   // ─── Secciones visibles — preferencia local del usuario, no compartida. ───
   const [sections, setSections] = useState<Record<SectionKey, boolean>>(DEFAULT_SECTIONS);
@@ -356,15 +361,15 @@ export default function DashPage() {
           <SectionHeader eyebrow="Ejecución" title="Resumen global de ventas y ejecución" />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
             <StatCard label="Casas Firmadas" value={fmtInt(casasFirmadas)} hint="contrato firmado o más avanzado" />
-            <StatCard label="Energizados" value={fmtInt(ejecucionFila('Energizados'))} hint="ganado / instalación terminada" />
+            <StatCard label="Energizados" value={fmtInt(energizados)} hint="ganado / instalación terminada" />
             <StatCard label="En Construcción" value={fmtInt(ejecucionFila('En Construcción'))} hint="obra en curso" />
             <StatCard label="Instalados" value={fmtInt(ejecucionFila('Instalados'))} hint="pendiente de energizar" />
             <StatCard label="Firmados sin Instalar" value={fmtInt(ejecucionFila('Firmados sin Instalar'))} hint="contrato firmado, obra sin empezar" />
             <StatCard
               label="Avance vs. meta anual"
-              value={`${report.global.avancePct}%`}
-              hint={`${report.global.casasAcum} de ${report.global.metaCasas} casas meta`}
-              tag={`Faltan ${Math.max(0, report.global.metaCasas - report.global.casasAcum)} casas`}
+              value={`${avancePctEnergizados}%`}
+              hint={`${energizados} de ${report.global.metaCasas} casas meta`}
+              tag={`Faltan ${Math.max(0, report.global.metaCasas - energizados)} casas`}
             />
           </div>
         </section>

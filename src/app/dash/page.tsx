@@ -1047,11 +1047,6 @@ function SemanaResumenTable({ report }: { report: DashReport }) {
   };
   return (
     <div>
-      {/* kWp/kWh son totales de la semana, no se pueden repartir por casa individual */}
-      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 10, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-        <span><strong>{fmt1(report.semana.kwpSemana)} kWp</strong> instalados esta semana</span>
-        <span><strong>{fmtInt(report.semana.kwhSemana)} kWh</strong> batería esta semana</span>
-      </div>
       <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
           <thead>

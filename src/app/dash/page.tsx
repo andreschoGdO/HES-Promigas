@@ -982,14 +982,26 @@ function DetalleMarcaZonaConstructor({
   return (
     <section className="card">
       <SectionHeader eyebrow={eyebrow} title={title} />
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+          CASAS Y CAPEX POR ZONA
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+          {zonas.map((z) => (
+            <StatCard key={z.zona} label={z.zona} value={z.capex} hint={`${fmtInt(z.casas)} casas`} />
+          ))}
+          {zonas.length === 0 && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Sin datos por zona todavía.</p>}
+        </div>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
         <div>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
             CASAS INSTALADAS POR MARCA
           </div>
-          <div style={{ height: 260 }}>
+          <div style={{ height: 300 }}>
             <ResponsiveContainer>
-              <PieChart>
+              <PieChart margin={{ top: 24, right: 8, bottom: 0, left: 8 }}>
                 <Pie
                   data={pieMarcas}
                   dataKey="value"
@@ -1018,51 +1030,38 @@ function DetalleMarcaZonaConstructor({
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-              CASAS Y CAPEX POR ZONA
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
-              {zonas.map((z) => (
-                <StatCard key={z.zona} label={z.zona} value={z.capex} hint={`${fmtInt(z.casas)} casas`} />
-              ))}
-              {zonas.length === 0 && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Sin datos por zona todavía.</p>}
-            </div>
+        <div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+            CASAS ASIGNADAS POR CONSTRUCTOR
           </div>
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-              CASAS ASIGNADAS POR CONSTRUCTOR
-            </div>
-            <div style={{ height: 220 }}>
-              <ResponsiveContainer>
-                <PieChart>
-                  <Pie
-                    data={pieConstructores}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={50}
-                    outerRadius={80}
-                    label={(props: unknown) => {
-                      const p = props as { payload?: { pct?: number } };
-                      return p.payload?.pct !== undefined ? `${p.payload.pct}%` : '';
-                    }}
-                  >
-                    {pieConstructores.map((_, i) => (
-                      <Cell key={i} fill={MARCA_COLORS[i % MARCA_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<ConstructorPieTooltip />} />
-                  <Legend
-                    wrapperStyle={{ fontSize: 11 }}
-                    formatter={(value: string, entry: unknown) => {
-                      const e = entry as { payload?: { value?: number; instaladas?: number } };
-                      return `${value} — ${e.payload?.value ?? 0} asig. / ${e.payload?.instaladas ?? 0} inst.`;
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+          <div style={{ height: 300 }}>
+            <ResponsiveContainer>
+              <PieChart margin={{ top: 24, right: 8, bottom: 0, left: 8 }}>
+                <Pie
+                  data={pieConstructores}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={50}
+                  outerRadius={80}
+                  label={(props: unknown) => {
+                    const p = props as { payload?: { pct?: number } };
+                    return p.payload?.pct !== undefined ? `${p.payload.pct}%` : '';
+                  }}
+                >
+                  {pieConstructores.map((_, i) => (
+                    <Cell key={i} fill={MARCA_COLORS[i % MARCA_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<ConstructorPieTooltip />} />
+                <Legend
+                  wrapperStyle={{ fontSize: 11 }}
+                  formatter={(value: string, entry: unknown) => {
+                    const e = entry as { payload?: { value?: number; instaladas?: number } };
+                    return `${value} — ${e.payload?.value ?? 0} asig. / ${e.payload?.instaladas ?? 0} inst.`;
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>

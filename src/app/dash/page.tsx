@@ -1015,60 +1015,75 @@ function DetalleMarcaZonaConstructor({
   );
 }
 
+interface SemanaFila {
+  casa: string; estado: string; zona: string; constructor: string; marca: string; fecha: string;
+}
+
 /**
- * Tabla única de "Weekly Construcción" — antes eran 5 StatCards (resumen
- * de la semana) + una tabla aparte de distribución próxima semana. Se
- * unieron en una sola tabla: el resumen va como fila destacada arriba,
- * seguido de la distribución por zona/constructor con las mismas columnas
- * que ya tenía esa tabla.
+ * Tabla única de "Weekly Construcción" — cada fila es una casa (o un grupo,
+ * cuando la API solo trae el conteo agrupado, como en la planeación de la
+ * próxima semana). Las 5 métricas que antes eran StatCards ahora son
+ * columnas: "Estado" (Instalada esta semana / En curso / Próxima semana) +
+ * Zona/Constructor/Marca/Fecha, que ya existían como columnas de la tabla
+ * de distribución.
  */
 function SemanaResumenTable({ report }: { report: DashReport }) {
-  const chip = (label: string, value: string, extra?: string) => (
-    <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
-      <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
-      {extra && <span style={{ fontSize: '0.72rem', color: ACCENT, fontWeight: 600 }}>{extra}</span>}
-    </div>
-  );
-  const rows = report.planeacion.distribucion;
+  const filas: SemanaFila[] = [
+    ...(report.semana.detalle?.instaladas ?? []).map((casa) => ({
+      casa, estado: 'Instalada esta semana', zona: '—', constructor: '—', marca: '—', fecha: '—',
+    })),
+    ...(report.semana.detalle?.porIniciar ?? []).map((casa) => ({
+      casa, estado: 'En curso (alistamiento/instalación)', zona: '—', constructor: '—', marca: '—', fecha: '—',
+    })),
+    ...report.planeacion.distribucion.map((p) => ({
+      casa: `${fmtInt(p.casas)} casa${p.casas === 1 ? '' : 's'}`,
+      estado: 'Próxima semana', zona: p.zona, constructor: p.constructor, marca: p.marca, fecha: p.fecha,
+    })),
+  ];
+  const ESTADO_COLOR: Record<string, string> = {
+    'Instalada esta semana': '#10b981',
+    'En curso (alistamiento/instalación)': '#3b82f6',
+    'Próxima semana': '#94a3b8',
+  };
   return (
-    <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-        <tbody>
-          <tr style={{ background: 'var(--bg-elevated)', borderBottom: '1px solid var(--border)' }}>
-            <td colSpan={5} style={{ padding: '14px 16px' }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
-                {chip('Instaladas esta semana', fmtInt(report.semana.casasInstaladas), report.semana.casasInstaladas > 0 ? 'ya operativas' : 'ninguna esta semana')}
-                {chip('En curso', fmtInt(report.semana.porIniciar), 'alistamiento o instalación')}
-                {chip('Próxima semana', fmtInt(report.planeacion.casasAsignadas), report.planeacion.casasAsignadas > 0 ? `en gestión + planeadas · ${rows.length} grupos` : 'en gestión + planeadas')}
-                {chip('kWp instalados', `${fmt1(report.semana.kwpSemana)} kWp`, 'esta semana')}
-                {chip('kWh batería', `${fmtInt(report.semana.kwhSemana)} kWh`, 'esta semana')}
-              </div>
-            </td>
-          </tr>
-          <tr style={{ background: '#1f2937', color: '#fff' }}>
-            {['Zona', 'Constructor', 'Casas', 'Marca', 'Fecha'].map((h) => (
-              <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.78rem' }}>{h}</th>
+    <div>
+      {/* kWp/kWh son totales de la semana, no se pueden repartir por casa individual */}
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 10, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+        <span><strong>{fmt1(report.semana.kwpSemana)} kWp</strong> instalados esta semana</span>
+        <span><strong>{fmtInt(report.semana.kwhSemana)} kWh</strong> batería esta semana</span>
+      </div>
+      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+          <thead>
+            <tr style={{ background: '#1f2937', color: '#fff' }}>
+              {['Casa', 'Estado', 'Zona', 'Constructor', 'Marca', 'Fecha'].map((h) => (
+                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: '0.78rem' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filas.length === 0 && (
+              <tr>
+                <td colSpan={6} style={{ padding: '14px 16px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  Sin casas instaladas, en curso o planeadas esta semana.
+                </td>
+              </tr>
+            )}
+            {filas.map((f, i) => (
+              <tr key={i} style={{ background: i % 2 ? 'var(--bg-elevated)' : 'var(--bg-card)', borderTop: '1px solid var(--border)' }}>
+                <td style={{ padding: '10px 12px', fontWeight: 600 }}>{f.casa}</td>
+                <td style={{ padding: '10px 12px' }}>
+                  <span style={{ color: ESTADO_COLOR[f.estado] ?? 'inherit', fontWeight: 600 }}>{f.estado}</span>
+                </td>
+                <td style={{ padding: '10px 12px' }}>{f.zona}</td>
+                <td style={{ padding: '10px 12px' }}>{f.constructor}</td>
+                <td style={{ padding: '10px 12px' }}>{f.marca}</td>
+                <td style={{ padding: '10px 12px' }}>{f.fecha}</td>
+              </tr>
             ))}
-          </tr>
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={5} style={{ padding: '14px 16px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
-                Sin casas planeadas para la próxima semana todavía.
-              </td>
-            </tr>
-          )}
-          {rows.map((p, i) => (
-            <tr key={i} style={{ background: i % 2 ? 'var(--bg-elevated)' : 'var(--bg-card)', borderTop: '1px solid var(--border)' }}>
-              <td style={{ padding: '10px 12px' }}>{p.zona}</td>
-              <td style={{ padding: '10px 12px' }}>{p.constructor}</td>
-              <td style={{ padding: '10px 12px' }}>{fmtInt(p.casas)}</td>
-              <td style={{ padding: '10px 12px' }}>{p.marca}</td>
-              <td style={{ padding: '10px 12px' }}>{p.fecha}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

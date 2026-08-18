@@ -508,6 +508,7 @@ export default function DashPage() {
         marcas={report.detalleGlobal?.marcas ?? report.detalle.marcas}
         zonas={report.detalleGlobal?.zonas ?? report.detalle.zonas}
         constructores={report.detalleGlobal?.constructores ?? report.detalle.constructores}
+        ganttRows={ganttRows}
       />
       )}
 
@@ -919,12 +920,13 @@ function ConstructorPieTooltip({ active, payload }: { active?: boolean; payload?
 }
 
 function DetalleMarcaZonaConstructor({
-  eyebrow, title, marcas, zonas, constructores,
+  eyebrow, title, marcas, zonas, constructores, ganttRows,
 }: {
   eyebrow: string; title: string;
   marcas: DashReport['detalle']['marcas'];
   zonas: DashReport['detalle']['zonas'];
   constructores: DashReport['detalle']['constructores'];
+  ganttRows: GanttRow[];
 }) {
   const total = marcas.reduce((s, m) => s + m.casas, 0);
   const pieMarcas = marcas.map((m) => ({
@@ -941,6 +943,25 @@ function DetalleMarcaZonaConstructor({
     instaladas: c.instaladas,
     pct: totalAsignadas ? Math.round((c.asignadas / totalAsignadas) * 100) : 0,
   }));
+
+  // "En Ejecución" por constructor — no viene agregado del backend, se cuenta
+  // acá de las casas que el Gantt ya trae en alistamiento/instalación (mismo
+  // criterio que usa SemanaResumenTable para Weekly Construcción).
+  const enEjecucionPorConstructor = new Map<string, number>();
+  for (const r of ganttRows) {
+    if (r.operations_stage === 'alistamiento' || r.operations_stage === 'instalacion') {
+      enEjecucionPorConstructor.set(r.constructor, (enEjecucionPorConstructor.get(r.constructor) ?? 0) + 1);
+    }
+  }
+  const barConstructores = constructores.map((c) => ({
+    constructor: c.constructor,
+    Asignadas: c.asignadas,
+    Completadas: c.instaladas,
+    'En Ejecución': enEjecucionPorConstructor.get(c.constructor) ?? 0,
+  }));
+  const avanceConstructores = constructores
+    .filter((c) => c.asignadas > 0)
+    .map((c) => ({ constructor: c.constructor, avance: Math.round((c.instaladas / c.asignadas) * 100) }));
   return (
     <section className="card">
       <SectionHeader eyebrow={eyebrow} title={title} />
@@ -1027,6 +1048,59 @@ function DetalleMarcaZonaConstructor({
               </PieChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginTop: 24 }}>
+        <div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+            CASAS ASIGNADAS VS. COMPLETADAS VS. EN EJECUCIÓN POR CONSTRUCTOR
+          </div>
+          {barConstructores.length === 0 ? (
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Sin constructores asignados todavía.</p>
+          ) : (
+            <div style={{ height: 280 }}>
+              <ResponsiveContainer>
+                <BarChart data={barConstructores} margin={{ top: 16, right: 8, left: -12, bottom: 0 }}>
+                  <XAxis dataKey="constructor" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="Asignadas" fill="#94a3b8">
+                    <LabelList dataKey="Asignadas" position="top" style={{ fontSize: 10, fontWeight: 700 }} formatter={fmtLabel} />
+                  </Bar>
+                  <Bar dataKey="Completadas" fill="#10b981">
+                    <LabelList dataKey="Completadas" position="top" style={{ fontSize: 10, fontWeight: 700 }} formatter={fmtLabel} />
+                  </Bar>
+                  <Bar dataKey="En Ejecución" fill="#3b82f6">
+                    <LabelList dataKey="En Ejecución" position="top" style={{ fontSize: 10, fontWeight: 700 }} formatter={fmtLabel} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
+            AVANCE % POR CONSTRUCTOR (COMPLETADAS / ASIGNADAS)
+          </div>
+          {avanceConstructores.length === 0 ? (
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Sin constructores asignados todavía.</p>
+          ) : (
+            <div style={{ height: Math.max(220, avanceConstructores.length * 44) }}>
+              <ResponsiveContainer>
+                <BarChart data={avanceConstructores} layout="vertical" margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
+                  <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 10 }} />
+                  <YAxis type="category" dataKey="constructor" width={130} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: unknown) => `${v}%`} />
+                  <Bar dataKey="avance" fill={ACCENT}>
+                    <LabelList dataKey="avance" position="right" formatter={(v: unknown) => `${v}%`} style={{ fontSize: 11, fontWeight: 700 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
       </div>
     </section>

@@ -1009,8 +1009,9 @@ function DetalleMarcaZonaConstructor({
                   innerRadius={50}
                   outerRadius={80}
                   label={(props: unknown) => {
-                    const p = props as { payload?: { pct?: number } };
-                    return p.payload?.pct !== undefined ? `${p.payload.pct}%` : '';
+                    const p = props as { payload?: { pct?: number; value?: number } };
+                    if (p.payload?.pct === undefined) return '';
+                    return `${p.payload.pct}% · ${p.payload.value ?? 0} casas`;
                   }}
                 >
                   {pieMarcas.map((_, i) => (
@@ -1044,8 +1045,9 @@ function DetalleMarcaZonaConstructor({
                   innerRadius={50}
                   outerRadius={80}
                   label={(props: unknown) => {
-                    const p = props as { payload?: { pct?: number } };
-                    return p.payload?.pct !== undefined ? `${p.payload.pct}%` : '';
+                    const p = props as { payload?: { pct?: number; value?: number; instaladas?: number } };
+                    if (p.payload?.pct === undefined) return '';
+                    return `${p.payload.pct}% · ${p.payload.value ?? 0} asig. / ${p.payload.instaladas ?? 0} inst.`;
                   }}
                 >
                   {pieConstructores.map((_, i) => (

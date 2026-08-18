@@ -416,6 +416,7 @@ export async function GET(request: Request) {
     // debieran diverger.
     if (!inRange(p.operativo_at ?? p.installation_date, from, to)) return;
     const nombre = p.contractor_name ?? 'Sin asignar';
+    if (nombre.toLowerCase().includes('prueba')) return; // contratistas de prueba no deben verse en los gráficos
     const cur = contGroup.get(nombre) ?? { asignadas: 0, instaladas: 0 };
     cur.asignadas++;
     if (INSTALADAS.has(p.operations_stage ?? '')) cur.instaladas++;
@@ -457,6 +458,7 @@ export async function GET(request: Request) {
   const contGroupG = new Map<string, { asignadas: number; instaladas: number }>();
   projects.forEach((p) => {
     const nombre = p.contractor_name ?? 'Sin asignar';
+    if (nombre.toLowerCase().includes('prueba')) return; // contratistas de prueba no deben verse en los gráficos
     const cur = contGroupG.get(nombre) ?? { asignadas: 0, instaladas: 0 };
     cur.asignadas++;
     if (INSTALADAS.has(p.operations_stage ?? '') || CERRADAS_OK.has(p.operations_stage ?? '')) cur.instaladas++;

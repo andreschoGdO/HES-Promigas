@@ -110,6 +110,31 @@ export interface DashReport {
 }
 
 /**
+ * Datos que usan los exports (PDF/PPTX) pero que NO viven en `/api/dash/report`
+ * — cada uno tiene su propia fuente, cargada aparte en `/dash`:
+ *   - casasFirmadas/energizados/enConstruccion/instalados/firmadosSinInstalar:
+ *     `/api/topleads/funnel-comercial` (TopLeads/ActiveCampaign).
+ *   - ocCapexEjecutado: `/api/purchase-orders`.
+ *   - ganttRows: `/api/dash/gantt` (crm_projects con cronograma cargado).
+ * Se pasan explícitamente desde `/dash` para que el PDF/PPTX muestren
+ * exactamente lo mismo que ya está en pantalla, sin volver a pedirlo.
+ */
+export interface DashGanttRow {
+  cliente_casa: string; zona: string; constructor: string;
+  cronograma_fecha_inicio: string; cronograma_fecha_fin: string;
+  operations_stage: string; inst_progreso_pct: number; marca: string | null;
+}
+export interface DashExtras {
+  casasFirmadas: number;
+  energizados: number;
+  enConstruccion: number;
+  instalados: number;
+  firmadosSinInstalar: number;
+  ocCapexEjecutado: number;
+  ganttRows: DashGanttRow[];
+}
+
+/**
  * Placeholder VACÍO — todo en cero. Se usa como estado inicial mientras
  * `/api/dash/report` responde. Antes había mocks (142 casas, marcas Huawei/
  * Tesla, motivos de stand-by inventados, etc.) que aparecían por 1-2s cada

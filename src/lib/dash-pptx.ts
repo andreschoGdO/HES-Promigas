@@ -1,7 +1,12 @@
 'use client';
 
 import PptxGenJS from 'pptxgenjs';
-import type { DashReport } from './dash-report-data';
+import type { DashReport, DashExtras } from './dash-report-data';
+
+const ETAPA_CONSTRUCCION_LABEL: Record<string, string> = {
+  alistamiento: 'Alistamiento (reserva de equipos)',
+  instalacion: 'Instalación (obra en sitio)',
+};
 
 /**
  * Genera un archivo .pptx editable con el mismo contenido del PDF corporativo.
@@ -93,7 +98,7 @@ function addTable(slide: PptxGenJS.Slide, y: number, head: string[], rows: strin
   });
 }
 
-export function generateDashPPTX(r: DashReport): void {
+export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE';   // 16:9 widescreen
   pptx.author = 'Sunny · GdO';
@@ -119,17 +124,35 @@ export function generateDashPPTX(r: DashReport): void {
     fontSize: 12, color: MUTED, fontFace: 'Inter',
   });
 
+  // ─── SLIDE 1b: RESUMEN DE EJECUCIÓN (VENTAS) — TopLeads/ActiveCampaign ───
+  const s1b = pptx.addSlide();
+  addSectionHeader(s1b, 'Ejecución', 'Resumen global de ventas y ejecución');
+  const avancePctEnergizados = r.global.metaCasas > 0 ? Math.round((extra.energizados / r.global.metaCasas) * 100) : 0;
+  addStatRow(s1b, 1.4, [
+    { label: 'Casas Firmadas', value: fmtInt(extra.casasFirmadas), hint: 'contrato firmado o más avanzado' },
+    { label: 'Energizados',    value: fmtInt(extra.energizados),   hint: 'ganado / instalación terminada' },
+    { label: 'En Construcción', value: fmtInt(extra.enConstruccion), hint: 'obra en curso' },
+  ]);
+  addStatRow(s1b, 2.7, [
+    { label: 'Instalados',            value: fmtInt(extra.instalados),          hint: 'pendiente de energizar' },
+    { label: 'Firmados sin Instalar', value: fmtInt(extra.firmadosSinInstalar), hint: 'contrato firmado, obra sin empezar' },
+    { label: 'Avance vs. meta anual', value: `${avancePctEnergizados}%`,         hint: `${extra.energizados} de ${r.global.metaCasas} casas meta` },
+  ]);
+  s1b.addText('Fuente: TopLeads/ActiveCampaign — funnel comercial, independiente del CRM de construcción.', {
+    x: 0.4, y: 4, w: 12.5, h: 0.4, fontSize: 9, italic: true, color: MUTED, fontFace: 'Inter',
+  });
+
   // ─── SLIDE 2: AVANCE GLOBAL ───
   const s2 = pptx.addSlide();
   addSectionHeader(s2, 'Avance global', 'Total instalado hasta la fecha');
   addStatRow(s2, 1.4, [
-    { label: 'Casas instaladas (acum.)', value: fmtInt(r.global.casasAcum), hint: 'desde inicio de operación' },
+    { label: 'Casas instaladas (acum.)', value: fmtInt(extra.energizados), hint: 'Energizados — funnel comercial (TopLeads)' },
     { label: 'kWp solar (acum.)',        value: `${fmt1(r.global.kwpAcum)} kWp`, hint: 'instalados a la fecha' },
     { label: 'kWh batería (acum.)',      value: `${fmtInt(r.global.kwhAcum)} kWh`, hint: 'instalados a la fecha' },
   ]);
   addStatRow(s2, 2.7, [
-    { label: 'CAPEX ejecutado (acum.)', value: fmtCOP(r.global.capexAcumM), hint: 'desde inicio de operación' },
-    { label: 'Avance vs. meta anual',   value: `${r.global.avancePct}%`,     hint: `${r.global.casasAcum} de ${r.global.metaCasas} casas meta` },
+    { label: 'CAPEX ejecutado (acum.)', value: fmtCOP(r.global.capexAcumM), hint: 'desde inicio de operación — equipos (Facturación)' },
+    { label: 'CAPEX Órdenes de Compra', value: `$${fmtInt(extra.ocCapexEjecutado / 1_000_000)}M COP`, hint: 'ejecutado — adicional al de arriba' },
   ]);
   // Detalle mensual: si son más de 8 meses, paginar en slides adicionales
   const mesesRows = r.global.porMes.map((m) => [m.mes, fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh), `$${fmtInt(m.capexM)}M`]);
@@ -183,24 +206,44 @@ export function generateDashPPTX(r: DashReport): void {
     }
   }
 
-  // ─── SLIDE 3: CONSTRUCCIÓN (semanal + planeación) ───
+  // ─── SLIDE 2c: DETALLE GLOBAL POR KIT, ZONA Y CONSTRUCTOR ───
+  const dg = r.detalleGlobal ?? r.detalle;
+  const s2c = pptx.addSlide();
+  addSectionHeader(s2c, 'Avance global', 'Detalle por kit, zona y constructor');
+  addTable(s2c, 1.4, ['Kit', 'Casas', 'kWp', 'kWh'],
+    dg.marcas.map((m) => [kitLabel(m.marca), fmtInt(m.casas), fmt1(m.kwp), fmtInt(m.kwh)]),
+    { x: 0.4, w: 6.1 });
+  addTable(s2c, 1.4, ['Zona', 'Casas', 'CAPEX (COP)'],
+    dg.zonas.map((z) => [z.zona, fmtInt(z.casas), z.capex]),
+    { x: 6.7, w: 6.2 });
+  addTable(s2c, 4.2, ['Constructor', 'Asignadas', 'Instaladas'],
+    dg.constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)]),
+    { x: 6.7, w: 6.2 });
+
+  // ─── SLIDE 3: WEEKLY CONSTRUCCIÓN — casas en Alistamiento/Instalación AHORA ───
   const s3 = pptx.addSlide();
   addSectionHeader(s3, 'Weekly', 'Construcción');
-  addStatRow(s3, 1.4, [
-    { label: 'Instaladas esta semana', value: fmtInt(r.semana.casasInstaladas), hint: 'ya operativas' },
-    { label: 'En curso',                value: fmtInt(r.semana.porIniciar),      hint: 'alistamiento o instalación' },
-    { label: 'Próxima semana',          value: fmtInt(r.planeacion.casasAsignadas), hint: 'en gestión + planeadas' },
-  ]);
-  addStatRow(s3, 2.7, [
-    { label: 'kWp instalados',    value: `${fmt1(r.semana.kwpSemana)} kWp`, hint: 'esta semana' },
-    { label: 'kWh batería',        value: `${fmtInt(r.semana.kwhSemana)} kWh`, hint: 'esta semana' },
-    { label: 'CAPEX ejecutado',    value: fmtCOP(r.semana.capexSemanaM), hint: 'acumulado semana' },
-  ]);
-  if (r.planeacion.distribucion.length > 0) {
-    addTable(s3, 4.1,
-      ['Zona', 'Constructor', 'Casas', 'Kit', 'Fecha'],
-      r.planeacion.distribucion.map((p) => [p.zona, p.constructor, fmtInt(p.casas), kitLabel(p.marca), p.fecha]),
+  const enObra = extra.ganttRows
+    .filter((g) => g.operations_stage === 'alistamiento' || g.operations_stage === 'instalacion')
+    .sort((a, b) => a.cronograma_fecha_inicio.localeCompare(b.cronograma_fecha_inicio));
+  if (enObra.length > 0) {
+    addTable(s3, 1.4,
+      ['Casa', 'Etapa', 'Kit', 'Constructor', 'Zona', 'Inicio', 'Fin (plan)', 'Avance'],
+      enObra.map((g) => [
+        g.cliente_casa,
+        ETAPA_CONSTRUCCION_LABEL[g.operations_stage] ?? g.operations_stage,
+        g.marca ? kitLabel(g.marca) : '—',
+        g.constructor,
+        g.zona,
+        g.cronograma_fecha_inicio,
+        g.cronograma_fecha_fin,
+        g.operations_stage === 'instalacion' ? `${g.inst_progreso_pct}%` : '—',
+      ]),
     );
+  } else {
+    s3.addText('Ninguna casa en Alistamiento o Instalación ahora mismo.', {
+      x: 0.4, y: 1.6, w: 12.5, h: 0.4, fontSize: 12, italic: true, color: MUTED, fontFace: 'Inter',
+    });
   }
 
   // ─── SLIDE 4: LEGALIZACIONES ───

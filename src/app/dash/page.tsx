@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import { generateDashPDF } from '@/lib/dash-pdf';
 import { generateDashPPTX } from '@/lib/dash-pptx';
-import { DEFAULT_REPORT, type DashReport } from '@/lib/dash-report-data';
+import { DEFAULT_REPORT, type DashReport, type DashExtras } from '@/lib/dash-report-data';
 import { StatCard } from '@/components/StatCard';
 import { SimpleTable, PaginatedTable } from '@/components/DataTable';
 
@@ -256,10 +256,23 @@ export default function DashPage() {
   };
 
   const [downloadingPptx, setDownloadingPptx] = useState(false);
+  // Mismo paquete de datos "extra" (fuera de DashReport) para PDF y PPTX —
+  // así los exports muestran exactamente lo mismo que ya está en pantalla:
+  // Resumen de ejecución (TopLeads), CAPEX de OC y la tabla de Alistamiento/
+  // Instalación (ganttRows), ninguno de los cuales vive en /api/dash/report.
+  const buildDashExtras = (): DashExtras => ({
+    casasFirmadas,
+    energizados,
+    enConstruccion: ejecucionFila('En Construcción'),
+    instalados: ejecucionFila('Instalados'),
+    firmadosSinInstalar: ejecucionFila('Firmados sin Instalar'),
+    ocCapexEjecutado,
+    ganttRows,
+  });
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      generateDashPDF(report);
+      generateDashPDF(report, buildDashExtras());
     } finally {
       setTimeout(() => setDownloading(false), 400);
     }
@@ -267,7 +280,7 @@ export default function DashPage() {
   const handleDownloadPptx = async () => {
     setDownloadingPptx(true);
     try {
-      generateDashPPTX(report);
+      generateDashPPTX(report, buildDashExtras());
     } finally {
       setTimeout(() => setDownloadingPptx(false), 400);
     }

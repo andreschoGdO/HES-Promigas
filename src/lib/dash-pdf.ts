@@ -2,7 +2,12 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { DashReport } from './dash-report-data';
+import type { DashReport, DashExtras } from './dash-report-data';
+
+const ETAPA_CONSTRUCCION_LABEL: Record<string, string> = {
+  alistamiento: 'Alistamiento (reserva de equipos)',
+  instalacion: 'Instalación (obra en sitio)',
+};
 
 const ACCENT   = '#07c5a8';
 const DARK     = '#1f2937';
@@ -125,7 +130,7 @@ function drawDetalleSlide(
   title: string,
   marcas: Array<{ marca: string; casas: number; kwp: number; kwh: number }>,
   zonas: Array<{ zona: string; casas: number; capex: string }>,
-  constructores: Array<{ constructor: string; asignadas: number; instaladas: number }>,
+  constructores?: Array<{ constructor: string; asignadas: number; instaladas: number }>,
 ) {
   doc.addPage();
   drawHeader(doc, section, title);
@@ -154,22 +159,24 @@ function drawDetalleSlide(
     theme: 'grid',
     styles: { lineColor: BORDER, lineWidth: 0.1 },
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const y2 = (doc as any).lastAutoTable.finalY + 10;
-  autoTable(doc, {
-    startY: y2,
-    head: [['Constructor', 'Asignadas', 'Instaladas']],
-    body: constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)]),
-    headStyles: tableHeaderStyles(),
-    bodyStyles: { fontSize: 9, textColor: TEXT },
-    alternateRowStyles: { fillColor: HEAD_BG },
-    margin: { left: 20 + colW + 8, right: 20 },
-    theme: 'grid',
-    styles: { lineColor: BORDER, lineWidth: 0.1 },
-  });
+  if (constructores) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const y2 = (doc as any).lastAutoTable.finalY + 10;
+    autoTable(doc, {
+      startY: y2,
+      head: [['Constructor', 'Asignadas', 'Instaladas']],
+      body: constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)]),
+      headStyles: tableHeaderStyles(),
+      bodyStyles: { fontSize: 9, textColor: TEXT },
+      alternateRowStyles: { fillColor: HEAD_BG },
+      margin: { left: 20 + colW + 8, right: 20 },
+      theme: 'grid',
+      styles: { lineColor: BORDER, lineWidth: 0.1 },
+    });
+  }
 }
 
-export function generateDashPDF(r: DashReport): void {
+export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -203,18 +210,35 @@ export function generateDashPDF(r: DashReport): void {
   doc.line(20, pageH / 2 - 20, 80, pageH / 2 - 20);
   doc.setLineWidth(0.2);
 
+  // ─── SLIDE 1b: RESUMEN DE EJECUCIÓN (VENTAS) — TopLeads/ActiveCampaign ───
+  doc.addPage();
+  drawHeader(doc, 'Ejecución', 'Resumen global de ventas y ejecución');
+  let y = 44;
+  const avancePctEnergizados = r.global.metaCasas > 0 ? Math.round((extra.energizados / r.global.metaCasas) * 100) : 0;
+  y = drawStatRow(doc, y, [
+    { label: 'Casas Firmadas', value: fmtInt(extra.casasFirmadas), hint: 'contrato firmado o más avanzado' },
+    { label: 'Energizados',    value: fmtInt(extra.energizados),   hint: 'ganado / instalación terminada' },
+    { label: 'En Construcción', value: fmtInt(extra.enConstruccion), hint: 'obra en curso' },
+  ]);
+  y = drawStatRow(doc, y, [
+    { label: 'Instalados',            value: fmtInt(extra.instalados),           hint: 'pendiente de energizar' },
+    { label: 'Firmados sin Instalar', value: fmtInt(extra.firmadosSinInstalar),  hint: 'contrato firmado, obra sin empezar' },
+    { label: 'Avance vs. meta anual', value: `${avancePctEnergizados}%`,          hint: `${extra.energizados} de ${r.global.metaCasas} casas meta` },
+  ]);
+  drawFooter(doc, '* Fuente: TopLeads/ActiveCampaign — funnel comercial, independiente del CRM de construcción.');
+
   // ─── SLIDE 2: AVANCE GLOBAL ───
   doc.addPage();
   drawHeader(doc, 'Avance global', 'Total instalado hasta la fecha');
-  let y = 44;
+  y = 44;
   y = drawStatRow(doc, y, [
-    { label: 'Casas instaladas (acum.)', value: fmtInt(r.global.casasAcum), hint: 'desde inicio de operación' },
+    { label: 'Casas instaladas (acum.)', value: fmtInt(extra.energizados), hint: 'Energizados — funnel comercial (TopLeads)' },
     { label: 'kWp solar (acum.)',        value: `${fmt1(r.global.kwpAcum)} kWp`, hint: 'instalados a la fecha' },
     { label: 'kWh batería (acum.)',      value: `${fmtInt(r.global.kwhAcum)} kWh`, hint: 'instalados a la fecha' },
   ]);
   y = drawStatRow(doc, y, [
-    { label: 'CAPEX ejecutado (acum.)', value: fmtCOP(r.global.capexAcumM), hint: 'desde inicio de operación' },
-    { label: 'Avance vs. meta anual',   value: `${r.global.avancePct}%`,     hint: `${r.global.casasAcum} de ${r.global.metaCasas} casas meta` },
+    { label: 'CAPEX ejecutado (acum.)', value: fmtCOP(r.global.capexAcumM), hint: 'desde inicio de operación — equipos (Facturación)' },
+    { label: 'CAPEX Órdenes de Compra', value: `$${fmtInt(extra.ocCapexEjecutado / 1_000_000)}M COP`, hint: 'ejecutado — adicional al de arriba' },
   ]);
   autoTable(doc, {
     startY: y,
@@ -258,55 +282,44 @@ export function generateDashPDF(r: DashReport): void {
     dg.marcas, dg.zonas, dg.constructores);
   drawFooter(doc, '* Detalle acumulado: incluye todas las casas ya instaladas desde inicio de operación.');
 
-  // ─── SLIDE 4: WEEKLY CONSTRUCCIÓN (unificado — semana + planeación próxima semana) ───
+  // ─── SLIDE 4: WEEKLY CONSTRUCCIÓN — casas en Alistamiento/Instalación AHORA ───
   doc.addPage();
   drawHeader(doc, 'Weekly', 'Construcción');
   y = 44;
-  y = drawStatRow(doc, y, [
-    { label: 'Instaladas esta semana', value: fmtInt(r.semana.casasInstaladas), hint: 'ya operativas' },
-    { label: 'En curso',               value: fmtInt(r.semana.porIniciar),      hint: 'alistamiento o instalación' },
-    { label: 'Próxima semana',         value: fmtInt(r.planeacion.casasAsignadas), hint: 'en gestión + planeadas' },
-  ]);
-  y = drawStatRow(doc, y, [
-    { label: 'kWp solar instalados',    value: `${fmt1(r.semana.kwpSemana)} kWp`, hint: 'esta semana' },
-    { label: 'kWh batería instalados', value: `${fmtInt(r.semana.kwhSemana)} kWh`, hint: 'esta semana' },
-    { label: 'CAPEX ejecutado',        value: fmtCOP(r.semana.capexSemanaM),      hint: 'acumulado semana' },
-  ]);
-  // Distribución próxima semana (planeación)
-  if (r.planeacion.distribucion.length > 0) {
+  const enObra = extra.ganttRows.filter((g) => g.operations_stage === 'alistamiento' || g.operations_stage === 'instalacion')
+    .sort((a, b) => a.cronograma_fecha_inicio.localeCompare(b.cronograma_fecha_inicio));
+  if (enObra.length > 0) {
     autoTable(doc, {
       startY: y,
-      head: [['Próxima semana — Zona', 'Constructor', 'Casas', 'Kit', 'Fecha']],
-      body: r.planeacion.distribucion.map((p) => [p.zona, p.constructor, fmtInt(p.casas), kitLabel(p.marca), p.fecha]),
+      head: [['Casa', 'Etapa', 'Kit', 'Constructor', 'Zona', 'Inicio cronograma', 'Fin cronograma (plan)', 'Avance']],
+      body: enObra.map((g) => [
+        g.cliente_casa,
+        ETAPA_CONSTRUCCION_LABEL[g.operations_stage] ?? g.operations_stage,
+        g.marca ? kitLabel(g.marca) : '—',
+        g.constructor,
+        g.zona,
+        g.cronograma_fecha_inicio,
+        g.cronograma_fecha_fin,
+        g.operations_stage === 'instalacion' ? `${g.inst_progreso_pct}%` : '—',
+      ]),
       headStyles: tableHeaderStyles(),
-      bodyStyles: { fontSize: 9, textColor: TEXT },
+      bodyStyles: { fontSize: 8.5, textColor: TEXT },
       alternateRowStyles: { fillColor: HEAD_BG },
       margin: { left: 20, right: 20 },
       theme: 'grid',
       styles: { lineColor: BORDER, lineWidth: 0.1 },
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    y = (doc as any).lastAutoTable.finalY + 6;
+  } else {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(10);
+    doc.setTextColor(MUTED);
+    doc.text('Ninguna casa en Alistamiento o Instalación ahora mismo.', 20, y + 10);
   }
-  // Motivos de stand by (si hay)
-  if (r.semana.motivos.length > 0) {
-    autoTable(doc, {
-      startY: y,
-      head: [['Motivo (stand by)', 'Casas', 'Acción en curso']],
-      body: r.semana.motivos.map((m) => [m.motivo, fmtInt(m.casas), m.accion]),
-      headStyles: tableHeaderStyles(),
-      bodyStyles: { fontSize: 9, textColor: TEXT },
-      alternateRowStyles: { fillColor: HEAD_BG },
-      margin: { left: 20, right: 20 },
-      theme: 'grid',
-      styles: { lineColor: BORDER, lineWidth: 0.1 },
-    });
-  }
-  drawFooter(doc, '* Semana actual + planeación próxima semana en un solo panel.');
+  drawFooter(doc, '* Casas en obra ahora mismo — al pasar a Operativo salen solas de esta tabla.');
 
-  // ─── SLIDE 5: DETALLE SEMANAL POR KIT, ZONA Y CONSTRUCTOR ───
-  drawDetalleSlide(doc, 'Weekly', 'Detalle por kit, zona y constructor',
-    r.detalle.marcas, r.detalle.zonas, r.detalle.constructores);
+  // ─── SLIDE 5: DETALLE SEMANAL POR KIT Y ZONA ───
+  drawDetalleSlide(doc, 'Weekly', 'Detalle por kit y zona',
+    r.detalle.marcas, r.detalle.zonas);
   drawFooter(doc, '* Detalle de la ventana seleccionada. Si no hay instalaciones, esta sección queda vacía.');
 
   // ─── SLIDE 7: LEGALIZACIONES ───

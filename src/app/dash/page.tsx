@@ -612,35 +612,6 @@ export default function DashPage() {
           Casas en Alistamiento (reserva de equipos) o Instalación (obra en sitio) ahora mismo. Al pasar a Operativo salen de esta lista.
         </p>
         <SemanaResumenTable rows={ganttRows} loading={ganttLoading} />
-
-        {/* Detalle por marca / zona / constructor (semanal — puede estar vacío si no hay instalaciones) */}
-        {report.detalle.marcas.length + report.detalle.zonas.length > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginTop: 12 }}>
-            {report.detalle.marcas.length > 0 && (
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-                  KIT (SEMANA)
-                </div>
-                <SimpleTable
-                  head={['Kit', 'Casas', 'kWp']}
-                  rows={report.detalle.marcas.map((m) => [labelForMarca(m.marca), fmtInt(m.casas), fmt1(m.kwp)])}
-                />
-              </div>
-            )}
-            {report.detalle.zonas.length > 0 && (
-              <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
-                  ZONA (SEMANA)
-                </div>
-                <SimpleTable
-                  head={['Zona', 'Casas', 'CAPEX']}
-                  rows={report.detalle.zonas.map((z) => [z.zona, fmtInt(z.casas), z.capex])}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
       </section>
       )}
 

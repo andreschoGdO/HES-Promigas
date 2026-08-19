@@ -373,12 +373,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   }
   drawFooter(doc, '* Casas en obra ahora mismo — al pasar a Operativo salen solas de esta tabla.');
 
-  // ─── SLIDE 9: DETALLE SEMANAL POR KIT Y ZONA ───
-  drawDetalleSlide(doc, 'Weekly', 'Detalle por kit y zona',
-    r.detalle.marcas, r.detalle.zonas);
-  drawFooter(doc, '* Detalle de la ventana seleccionada. Si no hay instalaciones, esta sección queda vacía.');
-
-  // ─── SLIDE 10: GANTT DE OBRA ───
+  // ─── SLIDE 9: GANTT DE OBRA ───
   if (extra.charts.gantt) {
     doc.addPage();
     drawHeader(doc, 'Cronograma', 'Gantt de obra');
@@ -386,7 +381,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
     drawFooter(doc, '* Casas activas con cronograma cargado — relleno de la barra = avance físico real en Instalación.');
   }
 
-  // ─── SLIDE 11: CURVA S — PLANEADO VS REAL ───
+  // ─── SLIDE 10: CURVA S — PLANEADO VS REAL ───
   if (extra.charts.scurve) {
     doc.addPage();
     drawHeader(doc, 'Cronograma', 'Curva S — planeado vs real');
@@ -394,7 +389,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
     drawFooter(doc, '* % acumulado de casas con fin de cronograma planeado vs. cuándo quedaron operativas.');
   }
 
-  // ─── SLIDE 12: LEGALIZACIONES ───
+  // ─── SLIDE 11: LEGALIZACIONES ───
   doc.addPage();
   drawHeader(doc, 'Legalizaciones', 'Trámites para venta de excedentes (AGPE)');
   doc.setFontSize(10);
@@ -419,7 +414,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   });
   drawFooter(doc, '* Reemplace "Casa 1, 2, 3..." por el identificador real del cliente o dirección.');
 
-  // ─── SLIDE 13: POSTVENTA (desde inventario / in_repair) ───
+  // ─── SLIDE 12: POSTVENTA (desde inventario / in_repair) ───
   doc.addPage();
   drawHeader(doc, 'Postventa', 'Equipos en garantía / RMA (desde inventario)');
   y = 44;
@@ -448,7 +443,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   }
   drawFooter(doc, '* Los tickets se gestionan por equipo desde /inventario (status in_repair / rma).');
 
-  // ─── SLIDE 14: LOGÍSTICA — STOCK POR BODEGA + KITS ARMABLES ───
+  // ─── SLIDE 13: LOGÍSTICA — STOCK POR BODEGA + KITS ARMABLES ───
   doc.addPage();
   drawHeader(doc, 'Logística', 'Stock por bodega + kits armables');
   y = 44;
@@ -524,7 +519,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   }
   drawFooter(doc, '* Simulación con stock actual respetando las prioridades por ciudad. Los equipos no se reutilizan entre kits.');
 
-  // ─── SLIDE 15: GRACIAS ───
+  // ─── SLIDE 14: GRACIAS ───
   doc.addPage();
   drawSunLogo(doc, pageW / 2, pageH / 2 - 20, 14);
   doc.setFont('helvetica', 'bold');

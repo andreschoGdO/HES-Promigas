@@ -55,13 +55,14 @@ interface FunnelBanda { nombre: string; total: number; filas: FunnelBandaFila[] 
 /** Secciones que se pueden activar/desactivar desde el panel al final del dashboard. */
 type SectionKey =
   | 'resumenEjecucion' | 'avanceGlobal' | 'detalleGlobal' | 'ordenesCompra'
-  | 'construccion' | 'gantt' | 'curvaS' | 'legalizaciones' | 'postventa' | 'logistica';
+  | 'construccion' | 'proyectos' | 'gantt' | 'curvaS' | 'legalizaciones' | 'postventa' | 'logistica';
 const SECTION_DEFS: { key: SectionKey; label: string }[] = [
   { key: 'resumenEjecucion', label: 'Resumen de ejecución (ventas)' },
   { key: 'avanceGlobal', label: 'Avance global' },
   { key: 'detalleGlobal', label: 'Detalle por marca, zona y constructor' },
   { key: 'ordenesCompra', label: 'Desglose Órdenes de Compra' },
   { key: 'construccion', label: 'Construcción (semanal)' },
+  { key: 'proyectos', label: 'Proyectos (registro completo)' },
   { key: 'gantt', label: 'Gantt de obra' },
   { key: 'curvaS', label: 'Curva S' },
   { key: 'legalizaciones', label: 'Legalizaciones' },
@@ -81,6 +82,13 @@ interface GanttRow {
 }
 interface ScurvePoint { week: string; planeado: number; real: number; }
 interface ScurveResp { total: number; from: string; to: string; points: ScurvePoint[]; zonaOptions?: string[]; constructorOptions?: string[]; }
+interface ProyectoRow {
+  id: string; proyecto: string; casa: string; equipoInversor: string; tipo: string;
+  ciudad: string; zona: string; estado: string; fechaInstalacion: string | null; epc: string;
+}
+const PROYECTO_ESTADO_COLOR: Record<string, string> = {
+  Instalado: '#10b981', 'En proceso': '#3b82f6', 'Por instalar': '#94a3b8', Cancelado: '#ef4444',
+};
 
 function SectionHeader({ eyebrow, title, size = 'normal' }: { eyebrow: string; title: string; size?: 'normal' | 'large' }) {
   const titleSize = size === 'large' ? '2.2rem' : '1.4rem';
@@ -184,6 +192,21 @@ export default function DashPage() {
         if (r.ok) { const j = await r.json(); setGanttRows(j.rows ?? []); }
       } catch (e) { console.error('[dash] gantt load fallo', e); }
       finally { setGanttLoading(false); }
+    })();
+  }, []);
+
+  // ─── PROYECTOS (registro completo — todos, no solo con cronograma) ───
+  const [proyectos, setProyectos] = useState<ProyectoRow[]>([]);
+  const [proyectosLoading, setProyectosLoading] = useState(true);
+  const [proyectosSearch, setProyectosSearch] = useState('');
+  useEffect(() => {
+    void (async () => {
+      setProyectosLoading(true);
+      try {
+        const r = await fetch('/api/dash/proyectos');
+        if (r.ok) { const j = await r.json(); setProyectos(j.rows ?? []); }
+      } catch (e) { console.error('[dash] proyectos load fallo', e); }
+      finally { setProyectosLoading(false); }
     })();
   }, []);
 
@@ -612,6 +635,41 @@ export default function DashPage() {
           Casas en Alistamiento (reserva de equipos) o Instalación (obra en sitio) ahora mismo. Al pasar a Operativo salen de esta lista.
         </p>
         <SemanaResumenTable rows={ganttRows} loading={ganttLoading} />
+      </section>
+      )}
+
+      {/* ─── PROYECTOS (REGISTRO COMPLETO) ─── */}
+      {sections.proyectos && (
+      <section className="card">
+        <SectionHeader eyebrow="Construcción" title="Proyectos — registro completo" size="large" />
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: -8, marginBottom: 16 }}>
+          Todas las casas del CRM (no solo las que están en obra ahora) — Proyecto, equipo, tipo de red, ciudad, zona, estado y EPC seleccionado.
+        </p>
+        <input
+          value={proyectosSearch}
+          onChange={(e) => setProyectosSearch(e.target.value)}
+          placeholder="Buscar por proyecto, casa o EPC…"
+          style={{ width: '100%', marginBottom: 12, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-strong)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '0.8rem' }}
+        />
+        {proyectosLoading ? (
+          <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>
+        ) : (
+          <PaginatedTable
+            head={['Proyecto', 'Casa', 'Equipo Inversor', 'Tipo', 'Ciudad', 'Zona', 'Estado', 'Fecha Instalación', 'EPC Seleccionado']}
+            pageSize={15}
+            rows={proyectos
+              .filter((p) => {
+                if (!proyectosSearch.trim()) return true;
+                const q = proyectosSearch.trim().toLowerCase();
+                return [p.proyecto, p.casa, p.epc].some((v) => v.toLowerCase().includes(q));
+              })
+              .map((p) => [
+                p.proyecto, p.casa, p.equipoInversor, p.tipo, p.ciudad, p.zona,
+                <span key="e" style={{ color: PROYECTO_ESTADO_COLOR[p.estado] ?? 'inherit', fontWeight: 600 }}>{p.estado}</span>,
+                p.fechaInstalacion ?? '—', p.epc,
+              ])}
+          />
+        )}
       </section>
       )}
 

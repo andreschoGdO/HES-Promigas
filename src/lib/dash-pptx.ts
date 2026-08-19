@@ -134,7 +134,7 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     fontSize: 12, color: MUTED, fontFace: 'Inter',
   });
 
-  // ─── SLIDE 1b: RESUMEN DE EJECUCIÓN (VENTAS) — TopLeads/ActiveCampaign ───
+  // ─── SLIDE 2: RESUMEN DE EJECUCIÓN (VENTAS) — TopLeads/ActiveCampaign ───
   const s1b = pptx.addSlide();
   addSectionHeader(s1b, 'Ejecución', 'Resumen global de ventas y ejecución');
   const avancePctEnergizados = r.global.metaCasas > 0 ? Math.round((extra.energizados / r.global.metaCasas) * 100) : 0;
@@ -152,7 +152,7 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     x: 0.4, y: 4, w: 12.5, h: 0.4, fontSize: 9, italic: true, color: MUTED, fontFace: 'Inter',
   });
 
-  // ─── SLIDE 2: AVANCE GLOBAL ───
+  // ─── SLIDE 3: AVANCE GLOBAL ───
   const s2 = pptx.addSlide();
   addSectionHeader(s2, 'Avance global', 'Total instalado hasta la fecha');
   addStatRow(s2, 1.4, [
@@ -182,14 +182,14 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     }
   }
 
-  // ─── SLIDE 2a: CASAS POR MES, POR SOLUCIÓN (gráfica) ───
+  // ─── SLIDE 3a: CASAS POR MES, POR SOLUCIÓN (gráfica) ───
   if (extra.charts.porMes) {
     const s2a = pptx.addSlide();
     addSectionHeader(s2a, 'Avance global', 'Casas por mes, por solución');
     addImageFit(s2a, extra.charts.porMes, 0.4, 1.4, 12.5, 5.6);
   }
 
-  // ─── SLIDE 2b: USD/Wp POR SOLUCIÓN (slide propio) ───
+  // ─── SLIDE 4: USD/Wp POR SOLUCIÓN (slide propio) ───
   if (r.global.usdWpBySolucion?.length > 0) {
     const s2b = pptx.addSlide();
     addSectionHeader(s2b, 'Avance global', 'Rentabilidad · USD/Wp por solución');
@@ -223,7 +223,7 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     }
   }
 
-  // ─── SLIDE 2c: DETALLE GLOBAL POR KIT, ZONA Y CONSTRUCTOR ───
+  // ─── SLIDE 5: DETALLE GLOBAL POR KIT, ZONA Y CONSTRUCTOR ───
   const dg = r.detalleGlobal ?? r.detalle;
   const s2c = pptx.addSlide();
   addSectionHeader(s2c, 'Avance global', 'Detalle por kit, zona y constructor');
@@ -237,7 +237,7 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     dg.constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)]),
     { x: 6.7, w: 6.2 });
 
-  // ─── SLIDE 2d: DETALLE GRÁFICO — MARCA Y CONSTRUCTOR (donuts) ───
+  // ─── SLIDE 6: DETALLE GRÁFICO — MARCA Y CONSTRUCTOR (donuts) ───
   if (extra.charts.marcaPie || extra.charts.constructorPie) {
     const s2d = pptx.addSlide();
     addSectionHeader(s2d, 'Avance global', 'Detalle gráfico — marca y constructor');
@@ -245,7 +245,22 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     if (extra.charts.constructorPie) addImageFit(s2d, extra.charts.constructorPie, 6.8, 1.4, 6.1, 5.6);
   }
 
-  // ─── SLIDE 3: WEEKLY CONSTRUCCIÓN — casas en Alistamiento/Instalación AHORA ───
+  // ─── SLIDE 7: PRESUPUESTO — DESGLOSE DE EJECUCIÓN (ÓRDENES DE COMPRA) ───
+  if (extra.ocExecution.length > 0 || extra.ocByHouse.length > 0) {
+    const s2e = pptx.addSlide();
+    addSectionHeader(s2e, `Presupuesto ${r.periodo.anio}`, 'Desglose de ejecución — Órdenes de Compra');
+    addTable(s2e, 1.4, ['Categoría', 'Presupuestado', 'Ejecutado', '%'],
+      extra.ocExecution.map((row) => [row.grupo, `$${fmtInt(row.presupuestado)}`, `$${fmtInt(row.ejecutado)}`, `${row.pct.toFixed(0)}%`]),
+      { x: 0.4, w: 6.1 });
+    addTable(s2e, 1.4, ['Casa', 'OC', 'Adicionales', 'Costo total', 'Estado'],
+      extra.ocByHouse.map((h) => [
+        h.casa, h.ocs.join(', ') || '—', h.adicionales.length > 0 ? h.adicionales.join(', ') : '—',
+        `$${fmtInt(h.costoTotal)}`, h.ejecutado ? 'Ejecutado' : 'Comprometido',
+      ]),
+      { x: 6.7, w: 6.2 });
+  }
+
+  // ─── SLIDE 8: WEEKLY CONSTRUCCIÓN — casas en Alistamiento/Instalación AHORA ───
   const s3 = pptx.addSlide();
   addSectionHeader(s3, 'Weekly', 'Construcción');
   const enObra = extra.ganttRows
@@ -271,21 +286,21 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     });
   }
 
-  // ─── SLIDE 3b: GANTT DE OBRA ───
+  // ─── SLIDE 10: GANTT DE OBRA ───
   if (extra.charts.gantt) {
     const s3b = pptx.addSlide();
     addSectionHeader(s3b, 'Cronograma', 'Gantt de obra');
     addImageFit(s3b, extra.charts.gantt, 0.4, 1.4, 12.5, 5.8);
   }
 
-  // ─── SLIDE 3c: CURVA S — PLANEADO VS REAL ───
+  // ─── SLIDE 11: CURVA S — PLANEADO VS REAL ───
   if (extra.charts.scurve) {
     const s3c = pptx.addSlide();
     addSectionHeader(s3c, 'Cronograma', 'Curva S — planeado vs real');
     addImageFit(s3c, extra.charts.scurve, 0.4, 1.4, 12.5, 5.8);
   }
 
-  // ─── SLIDE 4: LEGALIZACIONES ───
+  // ─── SLIDE 12: LEGALIZACIONES ───
   const s4 = pptx.addSlide();
   addSectionHeader(s4, 'Legalizaciones', 'Trámites AGPE ante operador de red');
   addStatRow(s4, 1.4, [
@@ -300,7 +315,7 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     );
   }
 
-  // ─── SLIDE 5: POSTVENTA (desde inventario / in_repair) ───
+  // ─── SLIDE 13: POSTVENTA (desde inventario / in_repair) ───
   const s5 = pptx.addSlide();
   addSectionHeader(s5, 'Postventa', 'Equipos en garantía / RMA (desde inventario)');
   addStatRow(s5, 1.4, [
@@ -320,7 +335,7 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     });
   }
 
-  // ─── SLIDE 6: LOGÍSTICA — STOCK POR BODEGA + KITS ARMABLES ───
+  // ─── SLIDE 14: LOGÍSTICA — STOCK POR BODEGA + KITS ARMABLES ───
   const s6 = pptx.addSlide();
   addSectionHeader(s6, 'Logística', 'Stock por bodega + kits armables');
   const bodegas = r.logistica.stockPorBodega ?? [];
@@ -361,7 +376,7 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     })));
   }
 
-  // ─── SLIDE 7: CIERRE ───
+  // ─── SLIDE 15: CIERRE ───
   const s7 = pptx.addSlide();
   s7.background = { color: CARD_BG };
   s7.addText('Gracias', {

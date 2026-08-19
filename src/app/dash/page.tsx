@@ -296,6 +296,8 @@ export default function DashPage() {
       instalados: ejecucionFila('Instalados'),
       firmadosSinInstalar: ejecucionFila('Firmados sin Instalar'),
       ocCapexEjecutado,
+      ocExecution,
+      ocByHouse,
       ganttRows,
       charts: { porMes, marcaPie, constructorPie, gantt, scurve: scurveImg },
     };

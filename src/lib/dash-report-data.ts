@@ -134,6 +134,8 @@ export interface DashExtras {
   instalados: number;
   firmadosSinInstalar: number;
   ocCapexEjecutado: number;
+  ocExecution: Array<{ grupo: string; presupuestado: number; ejecutado: number; pct: number }>;
+  ocByHouse: Array<{ casa: string; ocs: string[]; adicionales: string[]; costoTotal: number; ejecutado: boolean }>;
   ganttRows: DashGanttRow[];
   charts: {
     porMes?: DashChartImage;

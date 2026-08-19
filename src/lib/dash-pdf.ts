@@ -191,7 +191,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
 
-  // ─── SLIDE 1: PORTADA ───
+  // ─── SLIDE 1: PORTADA — mismo orden top-to-bottom que /dash en pantalla ───
   // Logo sol arriba izq + wordmark
   drawSunLogo(doc, 30, 25, 8);
   doc.setFont('helvetica', 'bold');
@@ -220,7 +220,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   doc.line(20, pageH / 2 - 20, 80, pageH / 2 - 20);
   doc.setLineWidth(0.2);
 
-  // ─── SLIDE 1b: RESUMEN DE EJECUCIÓN (VENTAS) — TopLeads/ActiveCampaign ───
+  // ─── SLIDE 2: RESUMEN DE EJECUCIÓN (VENTAS) — TopLeads/ActiveCampaign ───
   doc.addPage();
   drawHeader(doc, 'Ejecución', 'Resumen global de ventas y ejecución');
   let y = 44;
@@ -237,7 +237,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   ]);
   drawFooter(doc, '* Fuente: TopLeads/ActiveCampaign — funnel comercial, independiente del CRM de construcción.');
 
-  // ─── SLIDE 2: AVANCE GLOBAL ───
+  // ─── SLIDE 3: AVANCE GLOBAL ───
   doc.addPage();
   drawHeader(doc, 'Avance global', 'Total instalado hasta la fecha');
   y = 44;
@@ -266,7 +266,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   });
   drawFooter(doc, '* Detalle mensual con instalación acumulada y CAPEX ejecutado.');
 
-  // ─── SLIDE 2b: AVANCE GLOBAL — RENTABILIDAD USD/Wp ───
+  // ─── SLIDE 4: AVANCE GLOBAL — RENTABILIDAD USD/Wp ───
   if (r.global.usdWpBySolucion?.length > 0) {
     doc.addPage();
     drawHeader(doc, 'Avance global', 'Rentabilidad · USD/Wp por solución');
@@ -289,13 +289,13 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
     drawFooter(doc, '* Promedio ponderado por kWp. Valores del CSV de cierre (respetando la TRM del momento contable).');
   }
 
-  // ─── SLIDE 3: DETALLE GLOBAL POR KIT, ZONA Y CONSTRUCTOR ───
+  // ─── SLIDE 5: DETALLE GLOBAL POR KIT, ZONA Y CONSTRUCTOR ───
   const dg = r.detalleGlobal ?? r.detalle;
   drawDetalleSlide(doc, 'Avance global', 'Detalle por kit, zona y constructor',
     dg.marcas, dg.zonas, dg.constructores);
   drawFooter(doc, '* Detalle acumulado: incluye todas las casas ya instaladas desde inicio de operación.');
 
-  // ─── SLIDE 3b: DETALLE GRÁFICO — MARCA Y CONSTRUCTOR (donuts) ───
+  // ─── SLIDE 6: DETALLE GRÁFICO — MARCA Y CONSTRUCTOR (donuts) ───
   if (extra.charts.marcaPie || extra.charts.constructorPie) {
     doc.addPage();
     drawHeader(doc, 'Avance global', 'Detalle gráfico — marca y constructor');
@@ -305,7 +305,40 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
     drawFooter(doc, '* Casas instaladas por marca (izq.) y casas asignadas por constructor (der.).');
   }
 
-  // ─── SLIDE 4: WEEKLY CONSTRUCCIÓN — casas en Alistamiento/Instalación AHORA ───
+  // ─── SLIDE 7: PRESUPUESTO — DESGLOSE DE EJECUCIÓN (ÓRDENES DE COMPRA) ───
+  if (extra.ocExecution.length > 0 || extra.ocByHouse.length > 0) {
+    doc.addPage();
+    drawHeader(doc, `Presupuesto ${r.periodo.anio}`, 'Desglose de ejecución — Órdenes de Compra');
+    const colW2 = (pageW - 20 * 2 - 8) / 2;
+    autoTable(doc, {
+      startY: 44,
+      head: [['Categoría', 'Presupuestado', 'Ejecutado', '%']],
+      body: extra.ocExecution.map((r2) => [r2.grupo, `$${fmtInt(r2.presupuestado)}`, `$${fmtInt(r2.ejecutado)}`, `${r2.pct.toFixed(0)}%`]),
+      headStyles: tableHeaderStyles(),
+      bodyStyles: { fontSize: 9, textColor: TEXT },
+      alternateRowStyles: { fillColor: HEAD_BG },
+      margin: { left: 20, right: pageW - 20 - colW2 },
+      theme: 'grid',
+      styles: { lineColor: BORDER, lineWidth: 0.1 },
+    });
+    autoTable(doc, {
+      startY: 44,
+      head: [['Casa', 'OC', 'Adicionales', 'Costo total', 'Estado']],
+      body: extra.ocByHouse.map((h) => [
+        h.casa, h.ocs.join(', ') || '—', h.adicionales.length > 0 ? h.adicionales.join(', ') : '—',
+        `$${fmtInt(h.costoTotal)}`, h.ejecutado ? 'Ejecutado' : 'Comprometido',
+      ]),
+      headStyles: tableHeaderStyles(),
+      bodyStyles: { fontSize: 8.5, textColor: TEXT },
+      alternateRowStyles: { fillColor: HEAD_BG },
+      margin: { left: 20 + colW2 + 8, right: 20 },
+      theme: 'grid',
+      styles: { lineColor: BORDER, lineWidth: 0.1 },
+    });
+    drawFooter(doc, '* Aditivo al CAPEX de Facturación — casas en instalación o posterior.');
+  }
+
+  // ─── SLIDE 8: WEEKLY CONSTRUCCIÓN — casas en Alistamiento/Instalación AHORA ───
   doc.addPage();
   drawHeader(doc, 'Weekly', 'Construcción');
   y = 44;
@@ -340,12 +373,12 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   }
   drawFooter(doc, '* Casas en obra ahora mismo — al pasar a Operativo salen solas de esta tabla.');
 
-  // ─── SLIDE 5: DETALLE SEMANAL POR KIT Y ZONA ───
+  // ─── SLIDE 9: DETALLE SEMANAL POR KIT Y ZONA ───
   drawDetalleSlide(doc, 'Weekly', 'Detalle por kit y zona',
     r.detalle.marcas, r.detalle.zonas);
   drawFooter(doc, '* Detalle de la ventana seleccionada. Si no hay instalaciones, esta sección queda vacía.');
 
-  // ─── SLIDE 5b: GANTT DE OBRA ───
+  // ─── SLIDE 10: GANTT DE OBRA ───
   if (extra.charts.gantt) {
     doc.addPage();
     drawHeader(doc, 'Cronograma', 'Gantt de obra');
@@ -353,7 +386,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
     drawFooter(doc, '* Casas activas con cronograma cargado — relleno de la barra = avance físico real en Instalación.');
   }
 
-  // ─── SLIDE 5c: CURVA S — PLANEADO VS REAL ───
+  // ─── SLIDE 11: CURVA S — PLANEADO VS REAL ───
   if (extra.charts.scurve) {
     doc.addPage();
     drawHeader(doc, 'Cronograma', 'Curva S — planeado vs real');
@@ -361,7 +394,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
     drawFooter(doc, '* % acumulado de casas con fin de cronograma planeado vs. cuándo quedaron operativas.');
   }
 
-  // ─── SLIDE 7: LEGALIZACIONES ───
+  // ─── SLIDE 12: LEGALIZACIONES ───
   doc.addPage();
   drawHeader(doc, 'Legalizaciones', 'Trámites para venta de excedentes (AGPE)');
   doc.setFontSize(10);
@@ -386,7 +419,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   });
   drawFooter(doc, '* Reemplace "Casa 1, 2, 3..." por el identificador real del cliente o dirección.');
 
-  // ─── SLIDE 6: POSTVENTA (desde inventario / in_repair) ───
+  // ─── SLIDE 13: POSTVENTA (desde inventario / in_repair) ───
   doc.addPage();
   drawHeader(doc, 'Postventa', 'Equipos en garantía / RMA (desde inventario)');
   y = 44;
@@ -415,7 +448,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   }
   drawFooter(doc, '* Los tickets se gestionan por equipo desde /inventario (status in_repair / rma).');
 
-  // ─── SLIDE 7: LOGÍSTICA — STOCK POR BODEGA + KITS ARMABLES ───
+  // ─── SLIDE 14: LOGÍSTICA — STOCK POR BODEGA + KITS ARMABLES ───
   doc.addPage();
   drawHeader(doc, 'Logística', 'Stock por bodega + kits armables');
   y = 44;
@@ -491,7 +524,7 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   }
   drawFooter(doc, '* Simulación con stock actual respetando las prioridades por ciudad. Los equipos no se reutilizan entre kits.');
 
-  // ─── SLIDE 9: GRACIAS ───
+  // ─── SLIDE 15: GRACIAS ───
   doc.addPage();
   drawSunLogo(doc, pageW / 2, pageH / 2 - 20, 14);
   doc.setFont('helvetica', 'bold');

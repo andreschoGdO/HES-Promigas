@@ -76,6 +76,16 @@ function addStatRow(slide: PptxGenJS.Slide, y: number, cards: Array<{ label: str
   });
 }
 
+/** Inserta una gráfica capturada (PNG) manteniendo su aspect ratio dentro de maxW×maxH (pulgadas). Retorna el borde inferior (y + h). */
+function addImageFit(slide: PptxGenJS.Slide, img: DashExtras['charts']['porMes'], x: number, y: number, maxW: number, maxH: number): number {
+  if (!img || img.width <= 0 || img.height <= 0) return y;
+  const scale = Math.min(maxW / img.width, maxH / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  slide.addImage({ data: img.dataUrl, x, y, w, h });
+  return y + h;
+}
+
 /** Tabla estándar con encabezado oscuro y filas alternadas. */
 function addTable(slide: PptxGenJS.Slide, y: number, head: string[], rows: string[][], opts?: { x?: number; w?: number }) {
   const x = opts?.x ?? 0.4;
@@ -172,6 +182,13 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     }
   }
 
+  // ─── SLIDE 2a: CASAS POR MES, POR SOLUCIÓN (gráfica) ───
+  if (extra.charts.porMes) {
+    const s2a = pptx.addSlide();
+    addSectionHeader(s2a, 'Avance global', 'Casas por mes, por solución');
+    addImageFit(s2a, extra.charts.porMes, 0.4, 1.4, 12.5, 5.6);
+  }
+
   // ─── SLIDE 2b: USD/Wp POR SOLUCIÓN (slide propio) ───
   if (r.global.usdWpBySolucion?.length > 0) {
     const s2b = pptx.addSlide();
@@ -220,6 +237,14 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     dg.constructores.map((c) => [c.constructor, fmtInt(c.asignadas), fmtInt(c.instaladas)]),
     { x: 6.7, w: 6.2 });
 
+  // ─── SLIDE 2d: DETALLE GRÁFICO — MARCA Y CONSTRUCTOR (donuts) ───
+  if (extra.charts.marcaPie || extra.charts.constructorPie) {
+    const s2d = pptx.addSlide();
+    addSectionHeader(s2d, 'Avance global', 'Detalle gráfico — marca y constructor');
+    if (extra.charts.marcaPie) addImageFit(s2d, extra.charts.marcaPie, 0.4, 1.4, 6.1, 5.6);
+    if (extra.charts.constructorPie) addImageFit(s2d, extra.charts.constructorPie, 6.8, 1.4, 6.1, 5.6);
+  }
+
   // ─── SLIDE 3: WEEKLY CONSTRUCCIÓN — casas en Alistamiento/Instalación AHORA ───
   const s3 = pptx.addSlide();
   addSectionHeader(s3, 'Weekly', 'Construcción');
@@ -244,6 +269,20 @@ export function generateDashPPTX(r: DashReport, extra: DashExtras): void {
     s3.addText('Ninguna casa en Alistamiento o Instalación ahora mismo.', {
       x: 0.4, y: 1.6, w: 12.5, h: 0.4, fontSize: 12, italic: true, color: MUTED, fontFace: 'Inter',
     });
+  }
+
+  // ─── SLIDE 3b: GANTT DE OBRA ───
+  if (extra.charts.gantt) {
+    const s3b = pptx.addSlide();
+    addSectionHeader(s3b, 'Cronograma', 'Gantt de obra');
+    addImageFit(s3b, extra.charts.gantt, 0.4, 1.4, 12.5, 5.8);
+  }
+
+  // ─── SLIDE 3c: CURVA S — PLANEADO VS REAL ───
+  if (extra.charts.scurve) {
+    const s3c = pptx.addSlide();
+    addSectionHeader(s3c, 'Cronograma', 'Curva S — planeado vs real');
+    addImageFit(s3c, extra.charts.scurve, 0.4, 1.4, 12.5, 5.8);
   }
 
   // ─── SLIDE 4: LEGALIZACIONES ───

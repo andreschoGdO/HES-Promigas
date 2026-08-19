@@ -124,6 +124,9 @@ export interface DashGanttRow {
   cronograma_fecha_inicio: string; cronograma_fecha_fin: string;
   operations_stage: string; inst_progreso_pct: number; marca: string | null;
 }
+/** Imagen PNG capturada de una gráfica ya renderizada en pantalla (html-to-image). */
+export interface DashChartImage { dataUrl: string; width: number; height: number; }
+
 export interface DashExtras {
   casasFirmadas: number;
   energizados: number;
@@ -132,6 +135,13 @@ export interface DashExtras {
   firmadosSinInstalar: number;
   ocCapexEjecutado: number;
   ganttRows: DashGanttRow[];
+  charts: {
+    porMes?: DashChartImage;
+    marcaPie?: DashChartImage;
+    constructorPie?: DashChartImage;
+    gantt?: DashChartImage;
+    scurve?: DashChartImage;
+  };
 }
 
 /**

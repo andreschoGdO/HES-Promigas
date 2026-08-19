@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, type RefObject } from 'react';
+import { toPng } from 'html-to-image';
 import { Download, Sun, RefreshCw } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -256,23 +257,53 @@ export default function DashPage() {
   };
 
   const [downloadingPptx, setDownloadingPptx] = useState(false);
+
+  // ─── Refs de las gráficas ya renderizadas — se capturan como PNG (html-to-image)
+  // al descargar PDF/PPTX, mismo patrón que ya usa /dashboard para exportar gráficas. ───
+  const porMesChartRef = useRef<HTMLDivElement>(null);
+  const marcaPieChartRef = useRef<HTMLDivElement>(null);
+  const constructorPieChartRef = useRef<HTMLDivElement>(null);
+  const ganttChartRef = useRef<HTMLDivElement>(null);
+  const scurveChartRef = useRef<HTMLDivElement>(null);
+
+  /** Captura un div de gráfica a PNG. Si el ref no está montado (sección apagada/vacía) o falla, no rompe el export. */
+  const captureChart = async (ref: RefObject<HTMLDivElement | null>) => {
+    if (!ref.current) return undefined;
+    try {
+      const rect = ref.current.getBoundingClientRect();
+      const dataUrl = await toPng(ref.current, { backgroundColor: '#ffffff', pixelRatio: 2 });
+      return { dataUrl, width: rect.width, height: rect.height };
+    } catch (e) {
+      console.error('[dash] captura de gráfica fallo', e);
+      return undefined;
+    }
+  };
+
   // Mismo paquete de datos "extra" (fuera de DashReport) para PDF y PPTX —
   // así los exports muestran exactamente lo mismo que ya está en pantalla:
-  // Resumen de ejecución (TopLeads), CAPEX de OC y la tabla de Alistamiento/
-  // Instalación (ganttRows), ninguno de los cuales vive en /api/dash/report.
-  const buildDashExtras = (): DashExtras => ({
-    casasFirmadas,
-    energizados,
-    enConstruccion: ejecucionFila('En Construcción'),
-    instalados: ejecucionFila('Instalados'),
-    firmadosSinInstalar: ejecucionFila('Firmados sin Instalar'),
-    ocCapexEjecutado,
-    ganttRows,
-  });
+  // Resumen de ejecución (TopLeads), CAPEX de OC, la tabla de Alistamiento/
+  // Instalación (ganttRows) y las gráficas capturadas — nada de esto vive
+  // en /api/dash/report.
+  const buildDashExtras = async (): Promise<DashExtras> => {
+    const [porMes, marcaPie, constructorPie, gantt, scurveImg] = await Promise.all([
+      captureChart(porMesChartRef), captureChart(marcaPieChartRef), captureChart(constructorPieChartRef),
+      captureChart(ganttChartRef), captureChart(scurveChartRef),
+    ]);
+    return {
+      casasFirmadas,
+      energizados,
+      enConstruccion: ejecucionFila('En Construcción'),
+      instalados: ejecucionFila('Instalados'),
+      firmadosSinInstalar: ejecucionFila('Firmados sin Instalar'),
+      ocCapexEjecutado,
+      ganttRows,
+      charts: { porMes, marcaPie, constructorPie, gantt, scurve: scurveImg },
+    };
+  };
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      generateDashPDF(report, buildDashExtras());
+      generateDashPDF(report, await buildDashExtras());
     } finally {
       setTimeout(() => setDownloading(false), 400);
     }
@@ -280,7 +311,7 @@ export default function DashPage() {
   const handleDownloadPptx = async () => {
     setDownloadingPptx(true);
     try {
-      generateDashPPTX(report, buildDashExtras());
+      generateDashPPTX(report, await buildDashExtras());
     } finally {
       setTimeout(() => setDownloadingPptx(false), 400);
     }
@@ -435,7 +466,7 @@ export default function DashPage() {
             <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
               CASAS POR MES, POR SOLUCIÓN
             </div>
-            <div style={{ height: 260 }}>
+            <div ref={porMesChartRef} style={{ height: 260 }}>
               <ResponsiveContainer>
                 <BarChart
                   data={report.global.porMes.map((m) => ({
@@ -521,6 +552,8 @@ export default function DashPage() {
         marcas={report.detalleGlobal?.marcas ?? report.detalle.marcas}
         zonas={report.detalleGlobal?.zonas ?? report.detalle.zonas}
         constructores={report.detalleGlobal?.constructores ?? report.detalle.constructores}
+        marcaPieRef={marcaPieChartRef}
+        constructorPieRef={constructorPieChartRef}
       />
       )}
 
@@ -630,7 +663,7 @@ export default function DashPage() {
             {Array.from(new Set(ganttRows.map((r) => r.conjunto))).sort().map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-        <GanttChart rows={ganttRows} loading={ganttLoading} zona={ganttZona} constructor={ganttConstructor} conjunto={ganttConjunto} />
+        <GanttChart rows={ganttRows} loading={ganttLoading} zona={ganttZona} constructor={ganttConstructor} conjunto={ganttConjunto} chartRef={ganttChartRef} />
       </section>
       )}
 
@@ -660,7 +693,7 @@ export default function DashPage() {
           </select>
           {scurve && <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{scurve.total} casas con fin de cronograma en el rango</span>}
         </div>
-        <SCurveChart scurve={scurve} loading={scurveLoading} />
+        <SCurveChart scurve={scurve} loading={scurveLoading} chartRef={scurveChartRef} />
       </section>
       )}
 
@@ -921,12 +954,14 @@ function ConstructorPieTooltip({ active, payload }: { active?: boolean; payload?
 }
 
 function DetalleMarcaZonaConstructor({
-  eyebrow, title, marcas, zonas, constructores,
+  eyebrow, title, marcas, zonas, constructores, marcaPieRef, constructorPieRef,
 }: {
   eyebrow: string; title: string;
   marcas: DashReport['detalle']['marcas'];
   zonas: DashReport['detalle']['zonas'];
   constructores: DashReport['detalle']['constructores'];
+  marcaPieRef?: RefObject<HTMLDivElement | null>;
+  constructorPieRef?: RefObject<HTMLDivElement | null>;
 }) {
   const total = marcas.reduce((s, m) => s + m.casas, 0);
   const pieMarcas = marcas.map((m) => ({
@@ -963,7 +998,7 @@ function DetalleMarcaZonaConstructor({
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
             CASAS INSTALADAS POR MARCA
           </div>
-          <div style={{ height: 300 }}>
+          <div ref={marcaPieRef} style={{ height: 300 }}>
             <ResponsiveContainer>
               <PieChart margin={{ top: 24, right: 8, bottom: 0, left: 8 }}>
                 <Pie
@@ -999,7 +1034,7 @@ function DetalleMarcaZonaConstructor({
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 8 }}>
             CASAS ASIGNADAS POR CONSTRUCTOR
           </div>
-          <div style={{ height: 300 }}>
+          <div ref={constructorPieRef} style={{ height: 300 }}>
             <ResponsiveContainer>
               <PieChart margin={{ top: 24, right: 8, bottom: 0, left: 8 }}>
                 <Pie
@@ -1112,8 +1147,9 @@ function ganttColors(row: GanttRow): { done: string; remaining: string } {
   return { done: '#94a3b8', remaining: '#e2e8f0' }; // dimensionado/alistamiento — obra sin arrancar
 }
 
-function GanttChart({ rows, loading, zona, constructor, conjunto }: {
+function GanttChart({ rows, loading, zona, constructor, conjunto, chartRef }: {
   rows: GanttRow[]; loading: boolean; zona: string; constructor: string; conjunto: string;
+  chartRef?: RefObject<HTMLDivElement | null>;
 }) {
   const filtered = rows.filter((r) =>
     (!zona || r.zona === zona) && (!constructor || r.constructor === constructor) && (!conjunto || r.conjunto === conjunto),
@@ -1148,7 +1184,7 @@ function GanttChart({ rows, loading, zona, constructor, conjunto }: {
           Mostrando las primeras {GANTT_MAX_ROWS} de {filtered.length} — usa los filtros para acotar.
         </div>
       )}
-      <div style={{ height: Math.max(220, data.length * 34) }}>
+      <div ref={chartRef} style={{ height: Math.max(220, data.length * 34) }}>
         <ResponsiveContainer>
           <BarChart data={data} layout="vertical" margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
             <XAxis type="number" domain={[0, maxDay]} tickFormatter={(v) => addDaysLabel(minDate, Number(v))} tick={{ fontSize: 10 }} />
@@ -1179,12 +1215,14 @@ function GanttChart({ rows, loading, zona, constructor, conjunto }: {
   );
 }
 
-function SCurveChart({ scurve, loading }: { scurve: ScurveResp | null; loading: boolean }) {
+function SCurveChart({ scurve, loading, chartRef }: {
+  scurve: ScurveResp | null; loading: boolean; chartRef?: RefObject<HTMLDivElement | null>;
+}) {
   if (loading) return <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-muted)' }}>Cargando…</div>;
   if (!scurve || scurve.total === 0) return <div className="alert-warning" style={{ fontSize: '0.85rem' }}>No hay proyectos con cronograma en este rango de fechas.</div>;
 
   return (
-    <div style={{ height: 300 }}>
+    <div ref={chartRef} style={{ height: 300 }}>
       <ResponsiveContainer>
         <LineChart data={scurve.points} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" opacity={0.3} />

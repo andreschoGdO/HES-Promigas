@@ -111,6 +111,16 @@ function drawStatRow(
   return y + cardH + 6;
 }
 
+/** Dibuja una gráfica capturada (PNG) manteniendo su aspect ratio dentro de maxW×maxH. Retorna el borde inferior (y + h). */
+function drawImageFit(doc: jsPDF, img: DashExtras['charts']['porMes'], x: number, y: number, maxW: number, maxH: number): number {
+  if (!img || img.width <= 0 || img.height <= 0) return y;
+  const scale = Math.min(maxW / img.width, maxH / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  doc.addImage(img.dataUrl, 'PNG', x, y, w, h);
+  return y + h;
+}
+
 function tableHeaderStyles() {
   return {
     fillColor: DARK,
@@ -240,6 +250,9 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
     { label: 'CAPEX ejecutado (acum.)', value: fmtCOP(r.global.capexAcumM), hint: 'desde inicio de operación — equipos (Facturación)' },
     { label: 'CAPEX Órdenes de Compra', value: `$${fmtInt(extra.ocCapexEjecutado / 1_000_000)}M COP`, hint: 'ejecutado — adicional al de arriba' },
   ]);
+  if (extra.charts.porMes) {
+    y = drawImageFit(doc, extra.charts.porMes, 20, y, pageW - 40, 68) + 6;
+  }
   autoTable(doc, {
     startY: y,
     head: [['Mes', 'Casas', 'kWp', 'kWh', 'CAPEX']],
@@ -282,6 +295,16 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
     dg.marcas, dg.zonas, dg.constructores);
   drawFooter(doc, '* Detalle acumulado: incluye todas las casas ya instaladas desde inicio de operación.');
 
+  // ─── SLIDE 3b: DETALLE GRÁFICO — MARCA Y CONSTRUCTOR (donuts) ───
+  if (extra.charts.marcaPie || extra.charts.constructorPie) {
+    doc.addPage();
+    drawHeader(doc, 'Avance global', 'Detalle gráfico — marca y constructor');
+    const halfW = (pageW - 20 * 2 - 12) / 2;
+    if (extra.charts.marcaPie) drawImageFit(doc, extra.charts.marcaPie, 20, 44, halfW, 150);
+    if (extra.charts.constructorPie) drawImageFit(doc, extra.charts.constructorPie, 20 + halfW + 12, 44, halfW, 150);
+    drawFooter(doc, '* Casas instaladas por marca (izq.) y casas asignadas por constructor (der.).');
+  }
+
   // ─── SLIDE 4: WEEKLY CONSTRUCCIÓN — casas en Alistamiento/Instalación AHORA ───
   doc.addPage();
   drawHeader(doc, 'Weekly', 'Construcción');
@@ -321,6 +344,22 @@ export function generateDashPDF(r: DashReport, extra: DashExtras): void {
   drawDetalleSlide(doc, 'Weekly', 'Detalle por kit y zona',
     r.detalle.marcas, r.detalle.zonas);
   drawFooter(doc, '* Detalle de la ventana seleccionada. Si no hay instalaciones, esta sección queda vacía.');
+
+  // ─── SLIDE 5b: GANTT DE OBRA ───
+  if (extra.charts.gantt) {
+    doc.addPage();
+    drawHeader(doc, 'Cronograma', 'Gantt de obra');
+    drawImageFit(doc, extra.charts.gantt, 20, 44, pageW - 40, pageH - 70);
+    drawFooter(doc, '* Casas activas con cronograma cargado — relleno de la barra = avance físico real en Instalación.');
+  }
+
+  // ─── SLIDE 5c: CURVA S — PLANEADO VS REAL ───
+  if (extra.charts.scurve) {
+    doc.addPage();
+    drawHeader(doc, 'Cronograma', 'Curva S — planeado vs real');
+    drawImageFit(doc, extra.charts.scurve, 20, 44, pageW - 40, pageH - 70);
+    drawFooter(doc, '* % acumulado de casas con fin de cronograma planeado vs. cuándo quedaron operativas.');
+  }
 
   // ─── SLIDE 7: LEGALIZACIONES ───
   doc.addPage();

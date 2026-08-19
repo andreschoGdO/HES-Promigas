@@ -234,10 +234,14 @@ export default function DashPage() {
     })();
   }, []);
   const ejecucionFila = (label: string) => ejecucionBanda?.filas.find((f) => f.label === label)?.value ?? 0;
-  // "Avance vs. meta anual" se mide contra Energizados (funnel comercial),
-  // no contra casasAcum del CRM — son dos fuentes distintas y esta tarjeta
-  // vive junto a "Energizados" en la misma sección.
-  const energizados = ejecucionFila('Energizados');
+  // "Energizados" toma el mayor entre las 2 fuentes: TopLeads/ActiveCampaign
+  // (deals marcados "Ganado") y el CRM de construcción (casas en
+  // operativo+). Cuando el CRM se actualiza más rápido que AC (alguien
+  // cierra la casa acá pero todavía no marca el deal como Ganado en AC),
+  // AC queda desactualizado por debajo de la realidad — se usa el número
+  // más alto/reciente en vez de fijarse solo en AC.
+  const energizadosAC = ejecucionFila('Energizados');
+  const energizados = Math.max(energizadosAC, report.global.casasAcum);
   const avancePctEnergizados = report.global.metaCasas > 0 ? Math.round((energizados / report.global.metaCasas) * 100) : 0;
 
   // ─── Secciones visibles — preferencia local del usuario, no compartida. ───

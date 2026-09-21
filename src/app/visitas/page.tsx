@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink } from 'lucide-react';
+import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink, PackageCheck, Eraser } from 'lucide-react';
 import { VISIT_SCHEMAS, findSchema, type VisitType, type VisitTypeSchema, type VisitField } from '@/lib/visit-schemas';
 import { generateVisitPDF, type VisitPDFData, type VisitPhoto } from '@/lib/visit-pdf';
 
@@ -11,6 +11,7 @@ const VISIT_ICONS: Record<VisitType, typeof FileText> = {
   instalacion: Wrench,
   emergencia: AlertOctagon,
   normalizacion: Settings2,
+  abastecimiento: PackageCheck,
 };
 
 type Tab = VisitType | 'historial';
@@ -1063,6 +1064,98 @@ function FieldWrapper({ label, required, unit, fullWidth, help, children }: {
   );
 }
 
+/* ───────────── Firma dibujada en pantalla ─────────────
+ * Canvas de tamaño lógico fijo (600×200) escalado por CSS al ancho de la
+ * columna; funciona con mouse, dedo y lápiz (Pointer Events). El resultado
+ * se guarda como data-URL PNG en form_data[key] (pocos KB) y el PDF lo
+ * inserta con doc.addImage. */
+const SIG_W = 600;
+const SIG_H = 200;
+
+function SignaturePad({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  // Último valor que ya está pintado en el canvas: evita re-dibujar (y borrar
+  // el trazo en curso) cuando el value que vuelve del padre es el que acabamos de emitir.
+  const painted = useRef('');
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    const ctx = c?.getContext('2d');
+    if (!c || !ctx || value === painted.current) return;
+    ctx.clearRect(0, 0, SIG_W, SIG_H);
+    if (value) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, SIG_W, SIG_H);
+      img.src = value;
+    }
+    painted.current = value;
+  }, [value]);
+
+  const pos = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const c = canvasRef.current!;
+    const r = c.getBoundingClientRect();
+    return { x: ((e.clientX - r.left) * SIG_W) / r.width, y: ((e.clientY - r.top) * SIG_H) / r.height };
+  };
+
+  const start = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    drawing.current = true;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    const { x, y } = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 0.01, y); // un toque suelto deja un punto
+    ctx.stroke();
+  };
+  const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!drawing.current) return;
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    const { x, y } = pos(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const url = canvasRef.current!.toDataURL('image/png');
+    painted.current = url;
+    onChange(url);
+  };
+  const clear = () => {
+    canvasRef.current?.getContext('2d')?.clearRect(0, 0, SIG_W, SIG_H);
+    painted.current = '';
+    onChange('');
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <canvas
+        ref={canvasRef}
+        width={SIG_W}
+        height={SIG_H}
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+        style={{ width: '100%', aspectRatio: `${SIG_W} / ${SIG_H}`, touchAction: 'none', cursor: 'crosshair', background: '#fff', border: '1px dashed var(--border-strong)', borderRadius: 8 }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+        <span>{value ? 'Firma capturada' : 'Firma aquí con el dedo o el mouse'}</span>
+        <button type="button" onClick={clear} disabled={!value} className="secondary-btn" style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <Eraser size={12} /> Borrar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ───────────── Render del input según tipo ───────────── */
 function FieldInput({ field, value, onChange, formData }: {
   field: VisitField;
@@ -1071,6 +1164,10 @@ function FieldInput({ field, value, onChange, formData }: {
   formData?: Record<string, unknown>;
 }) {
   const v = value ?? (field.type === 'checkbox' ? false : field.type === 'serial_list' ? [] : '');
+
+  if (field.type === 'signature') {
+    return <SignaturePad value={typeof v === 'string' ? v : ''} onChange={onChange} />;
+  }
 
   // ─── serial_list: N inputs según qtyKey del form_data ───
   if (field.type === 'serial_list') {

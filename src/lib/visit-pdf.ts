@@ -111,18 +111,21 @@ const drawHeader = (doc: jsPDF, schema: VisitTypeSchema, visit: VisitPDFData) =>
   doc.rect(boxX, boxY + 8, boxW, 6);
   doc.text(schema.formCode, boxX + 2, boxY + 12);
 
-  doc.rect(boxX, boxY + 14, boxW / 2, 6);
-  doc.rect(boxX + boxW / 2, boxY + 14, boxW / 2, 6);
-  doc.setFontSize(7);
-  const aprobado = String(visit.form_data?.aprobado ?? '').toLowerCase();
-  doc.text('Aprobado', boxX + 2, boxY + 18);
-  doc.text('No Aprobado', boxX + boxW / 2 + 2, boxY + 18);
-  // Marcar con check si aplica
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  if (aprobado === 'aprobado') doc.text('X', boxX + boxW / 2 - 5, boxY + 18.5);
-  else if (aprobado === 'no aprobado') doc.text('X', boxX + boxW - 5, boxY + 18.5);
-  doc.setFont('helvetica', 'normal');
+  // El checklist de abastecimiento no tiene resultado Aprobado/No aprobado.
+  if (visit.visit_type !== 'abastecimiento') {
+    doc.rect(boxX, boxY + 14, boxW / 2, 6);
+    doc.rect(boxX + boxW / 2, boxY + 14, boxW / 2, 6);
+    doc.setFontSize(7);
+    const aprobado = String(visit.form_data?.aprobado ?? '').toLowerCase();
+    doc.text('Aprobado', boxX + 2, boxY + 18);
+    doc.text('No Aprobado', boxX + boxW / 2 + 2, boxY + 18);
+    // Marcar con check si aplica
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    if (aprobado === 'aprobado') doc.text('X', boxX + boxW / 2 - 5, boxY + 18.5);
+    else if (aprobado === 'no aprobado') doc.text('X', boxX + boxW - 5, boxY + 18.5);
+    doc.setFont('helvetica', 'normal');
+  }
 
   return 36; // y position after header
 };
@@ -295,7 +298,8 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
   // Cada sección del schema → título + tabla
   schema.sections.forEach((sec, idx) => {
     // Saltar la sección de "Registro fotográfico" (las fotos van aparte)
-    if (sec.title.toLowerCase().includes('registro fotográfico') || sec.title.toLowerCase().includes('observaciones') || sec.title.toLowerCase().includes('aprobación')) return;
+    // "Firmas" (checklist de abastecimiento) se dibuja aparte, como recuadros de firma.
+    if (sec.title.toLowerCase().includes('registro fotográfico') || sec.title.toLowerCase().includes('observaciones') || sec.title.toLowerCase().includes('aprobación') || sec.title.toLowerCase() === 'firmas') return;
 
     // Si no cabe el título + 1 fila → nueva página
     if (y > pageHeight - 40) {
@@ -317,7 +321,8 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
     // Los campos serial_list (listas de seriales) van en su propio bloque de
     // ancho completo (ver drawSerialListBlock) en vez de compartir una celda
     // angosta de la tabla label|valor — se ven amontonados ahí.
-    const gridFields = fields.filter((f) => f.type !== 'serial_list');
+    // (las firmas son data-URL PNG: nunca se imprimen como texto en una celda)
+    const gridFields = fields.filter((f) => f.type !== 'serial_list' && f.type !== 'signature');
     const serialFields = fields.filter((f) => f.type === 'serial_list');
 
     if (gridFields.length > 0) {
@@ -358,37 +363,76 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
     y += boxHeight + 3;
   }
 
-  // Quien realiza la visita + contratista (footer firma) — 2 columnas lado a lado
-  const tecnico = String(visit.form_data?.quien_realiza_visita ?? visit.technician_name ?? '');
-  const contratistaStr = visit.contratista ?? '';
-  if (y > pageHeight - 24) { doc.addPage(); y = drawHeader(doc, schema, visit); }
-  const pageWidthFooter = doc.internal.pageSize.getWidth();
-  const sigColWidth = (pageWidthFooter - margin * 2) / 2;
-  const sigLeftX = margin;
-  const sigRightX = margin + sigColWidth;
-  doc.setFontSize(8);
-  doc.setTextColor(MUTED);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Quien realiza la visita:', sigLeftX, y + 5);
-  doc.setTextColor(TEXT);
-  doc.setFont('helvetica', 'bold');
-  doc.text(tecnico || '—', sigLeftX, y + 10);
-  if (contratistaStr) {
-    doc.setFont('helvetica', 'normal');
+  const firmasSection = schema.sections.find((s) => s.title.toLowerCase() === 'firmas');
+  if (firmasSection) {
+    // Checklist de abastecimiento: 2 recuadros de firma (nombre + firma dibujada).
+    const boxH = 38;
+    if (y > pageHeight - (boxH + 14)) { doc.addPage(); y = drawHeader(doc, schema, visit); }
+    y = drawSectionTitle(doc, y, firmasSection.title);
+    const pageWFirmas = doc.internal.pageSize.getWidth();
+    const gap = 6;
+    const boxW = (pageWFirmas - margin * 2 - gap) / 2;
+    const firmantes = [
+      { titulo: 'Elaboró / Realizó verificación', nombre: visit.form_data?.firma_elaboro_nombre, firma: visit.form_data?.firma_elaboro },
+      { titulo: 'Responsable Contratista', nombre: visit.form_data?.firma_contratista_nombre, firma: visit.form_data?.firma_contratista },
+    ];
+    firmantes.forEach((f, i) => {
+      const x = margin + i * (boxW + gap);
+      doc.setDrawColor(BORDER);
+      doc.setLineWidth(0.3);
+      doc.rect(x, y + 2, boxW, boxH);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(TEXT);
+      doc.text(f.titulo, x + 2, y + 6.5);
+      // Firma dibujada (proporción 3:1 del canvas) sobre la línea de firma
+      if (typeof f.firma === 'string' && f.firma.startsWith('data:image')) {
+        const sigH = 18;
+        const sigW = sigH * 3;
+        doc.addImage(f.firma, detectImageFormat(f.firma), x + (boxW - sigW) / 2, y + 9, sigW, sigH);
+      }
+      doc.setDrawColor(MUTED);
+      doc.line(x + 4, y + 29, x + boxW - 4, y + 29);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(MUTED);
+      doc.text('Firma', x + boxW / 2, y + 32, { align: 'center' });
+      doc.setTextColor(TEXT);
+      doc.text(`Nombre: ${formatCell(f.nombre) || '—'}`, x + 2, y + 37);
+    });
+    y += boxH + 5;
+  } else {
+    // Quien realiza la visita + contratista (footer firma) — 2 columnas lado a lado
+    const tecnico = String(visit.form_data?.quien_realiza_visita ?? visit.technician_name ?? '');
+    const contratistaStr = visit.contratista ?? '';
+    if (y > pageHeight - 24) { doc.addPage(); y = drawHeader(doc, schema, visit); }
+    const pageWidthFooter = doc.internal.pageSize.getWidth();
+    const sigColWidth = (pageWidthFooter - margin * 2) / 2;
+    const sigLeftX = margin;
+    const sigRightX = margin + sigColWidth;
+    doc.setFontSize(8);
     doc.setTextColor(MUTED);
-    doc.text('Contratista:', sigRightX, y + 5);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Quien realiza la visita:', sigLeftX, y + 5);
     doc.setTextColor(TEXT);
     doc.setFont('helvetica', 'bold');
-    doc.text(contratistaStr, sigRightX, y + 10);
+    doc.text(tecnico || '—', sigLeftX, y + 10);
+    if (contratistaStr) {
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(MUTED);
+      doc.text('Contratista:', sigRightX, y + 5);
+      doc.setTextColor(TEXT);
+      doc.setFont('helvetica', 'bold');
+      doc.text(contratistaStr, sigRightX, y + 10);
+    }
+    doc.setFont('helvetica', 'normal');
+    y += 15;
   }
-  doc.setFont('helvetica', 'normal');
-  y += 15;
 
   // ───── Página(s) de fotos ─────
   if (photos.length > 0) {
     doc.addPage();
     let py = drawHeader(doc, schema, visit);
-    py = drawSectionTitle(doc, py, 'V. Registro fotográfico');
+    py = drawSectionTitle(doc, py, visit.visit_type === 'abastecimiento' ? 'Registro fotográfico' : 'V. Registro fotográfico');
 
     const pageW = doc.internal.pageSize.getWidth();
     const cellW = (pageW - margin * 2 - 6) / 3;       // 3 columnas

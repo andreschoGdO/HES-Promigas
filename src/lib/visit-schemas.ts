@@ -7,8 +7,9 @@
  * "Acta de Visita Previa y Prefactibilidad" — FO:Prefactibilidad
  */
 
-export type VisitType = 'previa' | 'instalacion' | 'emergencia' | 'normalizacion';
-export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'date' | 'time' | 'checkbox' | 'radio' | 'tel' | 'email' | 'serial_list';
+export type VisitType = 'previa' | 'instalacion' | 'emergencia' | 'normalizacion' | 'abastecimiento';
+/** `signature`: firma dibujada en pantalla; se guarda como data-URL PNG en form_data[key]. */
+export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'date' | 'time' | 'checkbox' | 'radio' | 'tel' | 'email' | 'serial_list' | 'signature';
 
 export interface VisitField {
   key: string;
@@ -49,6 +50,9 @@ export interface VisitTypeSchema {
   photoCategories: string[];  // categorías sugeridas para clasificar cada foto
   sections: VisitSection[];
 }
+
+/** Punto de verificación SI / NO — usado por el checklist de abastecimiento. */
+const siNo = (key: string, label: string): VisitField => ({ key, label, type: 'radio', options: ['SI', 'NO'] });
 
 export const VISIT_SCHEMAS: VisitTypeSchema[] = [
   // ───────── VISITA PREVIA Y PREFACTIBILIDAD ─────────
@@ -350,6 +354,99 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'capacitacion_cliente', label: 'Capacitación al cliente realizada', type: 'checkbox' },
           { key: 'pendientes', label: 'Pendientes', type: 'textarea' },
           { key: 'quien_realiza_visita', label: 'Quien realiza la visita', type: 'text', required: true },
+        ],
+      },
+    ],
+  },
+
+  // ───────── CHECKLIST DE ABASTECIMIENTO Y HERRAMIENTAS ─────────
+  // Digitalización del formato "Chek List_Abastecimiento y herramientas.xlsx".
+  // Los ítems se declaran de a pares (izquierda | derecha) en el mismo orden
+  // que el papel — FieldsGrid y la tabla del PDF los pintan en 2 columnas.
+  {
+    type: 'abastecimiento',
+    label: 'Checklist de Abastecimiento y Herramientas',
+    shortLabel: 'Abastecimiento',
+    description: 'Verificación de materiales, equipos y herramientas en sitio antes de arrancar la obra.',
+    color: '#8b5cf6',
+    formCode: 'FO:Abastecimiento',
+    casaIsFreeText: true,
+    photoCategories: ['Materiales y equipos entregados', 'Inversor', 'Baterías y BMS', 'Estructura y accesorios', 'Tablero SSFV', 'Herramientas y equipo de altura', 'Sitio / cubierta', 'Otro'],
+    sections: [
+      {
+        title: 'I. Información general del proyecto',
+        fields: [
+          { key: 'nombre_proyecto', label: 'Nombre del proyecto / conjunto', type: 'text' },
+          { key: 'fecha_inspeccion', label: 'Fecha de inspección', type: 'date' },
+          { key: 'nombre_cliente', label: 'Nombre cliente / usuario', type: 'text' },
+          { key: 'operador_red', label: 'Operador de Red (OR)', type: 'select', options: ['EMCALI', 'CELSIA', 'ENEL Codensa', 'AIR-E', 'Afinia', 'Electricaribe', 'EPM', 'Otro'] },
+          { key: 'ciudad', label: 'Ciudad', type: 'text' },
+          { key: 'cantidad_bms', label: 'Cantidad de BMS', type: 'number', inputMode: 'numeric' },
+          { key: 'direccion', label: 'Dirección', type: 'text' },
+          { key: 'cantidad_baterias', label: 'Cantidad de baterías', type: 'number', inputMode: 'numeric' },
+          { key: 'inversor_marca_modelo', label: 'Marca y modelo del inversor', type: 'text' },
+          { key: 'tipo_estructura', label: 'Tipo de estructura a instalar', type: 'text' },
+          { key: 'cantidad_paneles', label: 'Cantidad de paneles a instalar', type: 'number', inputMode: 'numeric' },
+          { key: 'altura_cubierta', label: 'Altura de cubierta', type: 'text', placeholder: 'Ej: 6 m / 2 pisos' },
+        ],
+      },
+      {
+        title: 'II. Comisionamiento · 1. Equipos y materiales',
+        fields: [
+          siNo('chk_1_01', '1.1 Inversor entregado'),
+          siNo('chk_1_02', '1.2 Paneles entregados'),
+          siNo('chk_1_03', '1.3 Baterías y BMS entregados'),
+          siNo('chk_1_04', '1.4 Tablero SSFV en sitio'),
+          siNo('chk_1_05', '1.5 Cable AC acorde a cantidad de diseño'),
+          siNo('chk_1_06', '1.6 Cable DC acorde a cantidad de diseño'),
+          siNo('chk_1_07', '1.7 Cajas plásticas 4x4'),
+          siNo('chk_1_08', '1.8 Empalmadores o borneras para interconexión acorde a diseño'),
+          siNo('chk_1_09', '1.9 Cable solar y cantidad acorde a diseño'),
+          siNo('chk_1_10', '1.10 Estructura solar completa acorde a diseño'),
+          siNo('chk_1_11', '1.11 Ductos acorde a diseño'),
+          siNo('chk_1_12', '1.12 Accesorios estructura solar (incluye contrapesos)'),
+          siNo('chk_1_13', '1.13 Accesorios para ductos (curvas, conduletas, prensa stop, conductores para coraza, etc.)'),
+          siNo('chk_1_14', '1.14 Material menor (abrazaderas, terminales para cable, amarras plásticas)'),
+          siNo('chk_1_15', '1.15 Cable y accesorios para comunicaciones'),
+          siNo('chk_1_16', '1.16 Conectores MC4'),
+          siNo('chk_1_17', '1.17 Soportes para baterías'),
+          siNo('chk_1_18', '1.18 Medidores y módem de comunicación'),
+        ],
+      },
+      {
+        title: 'II. Comisionamiento · 2. Herramientas y equipos de altura',
+        fields: [
+          siNo('chk_2_01', '2.1 Escalera acorde a la altura de cubierta'),
+          siNo('chk_2_02', '2.2 Equipo de altura completo para 2 personas'),
+          siNo('chk_2_03', '2.3 Línea de vida portátil'),
+          siNo('chk_2_04', '2.4 Kit de rescate para altura'),
+          siNo('chk_2_05', '2.5 Kit herramienta solar'),
+          siNo('chk_2_06', '2.6 Pinza voltiamperimétrica'),
+          siNo('chk_2_07', '2.7 Ratchet'),
+          siNo('chk_2_08', '2.8 Torquímetro'),
+          siNo('chk_2_09', '2.9 Juego de llaves hexagonales'),
+          siNo('chk_2_10', '2.10 Juego de llaves de boca fija'),
+          siNo('chk_2_11', '2.11 Taladro percutor'),
+          siNo('chk_2_12', '2.12 Pulidora'),
+          siNo('chk_2_13', '2.13 Juego de destornilladores'),
+          siNo('chk_2_14', '2.14 Copa sierras'),
+        ],
+      },
+      {
+        // El PDF (visit-pdf.ts) trata este título aparte y lee la clave `observaciones`.
+        title: '3. Observaciones',
+        fields: [
+          { key: 'observaciones', label: 'Observaciones', type: 'textarea' },
+        ],
+      },
+      {
+        // El PDF (visit-pdf.ts) dibuja esta sección como 2 recuadros de firma.
+        title: 'Firmas',
+        fields: [
+          { key: 'firma_elaboro_nombre', label: 'Elaboró / Realizó verificación — Nombre', type: 'text', required: true },
+          { key: 'firma_contratista_nombre', label: 'Responsable Contratista — Nombre', type: 'text' },
+          { key: 'firma_elaboro', label: 'Elaboró / Realizó verificación — Firma', type: 'signature' },
+          { key: 'firma_contratista', label: 'Responsable Contratista — Firma', type: 'signature' },
         ],
       },
     ],

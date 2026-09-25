@@ -525,10 +525,26 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visit?.id, visit?.visit_type]);
 
+  // Evita pedir el nombre del técnico dos veces: "Técnico que realiza la
+  // visita" (arriba, siempre visible) y "Técnico — Nombre" (dentro de la
+  // sección Firmas, para certificar la firma) suelen ser la misma persona.
+  // Este ref recuerda el último valor que SE SINCRONIZÓ automáticamente —
+  // si el usuario edita "Técnico — Nombre" a mano y ya no coincide con lo
+  // sincronizado, se respeta esa edición y se deja de sobreescribir.
+  const lastSyncedTechName = useRef<string>('');
+
   const load = async () => {
     const r = await fetch(`/api/visits/${visitId}`);
     const j = await r.json();
-    setVisit(j.visit);
+    const v = j.visit as VisitFull | null;
+    if (v) {
+      const techName = v.technician_name ?? '';
+      if (techName && !v.form_data.firma_tecnico_nombre) {
+        v.form_data = { ...v.form_data, firma_tecnico_nombre: techName };
+      }
+      lastSyncedTechName.current = String(v.form_data.firma_tecnico_nombre ?? '');
+    }
+    setVisit(v);
     setPhotos(j.photos ?? []);
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [visitId, loadOnMount]);
@@ -717,7 +733,21 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
   const technicianField = (
     <FieldWrapper label="Técnico que realiza la visita" required>
       <input type="text" value={visit.technician_name ?? ''}
-        onChange={(e) => setVisit((v) => v ? { ...v, technician_name: e.target.value } : v)}
+        onChange={(e) => {
+          const val = e.target.value;
+          setVisit((v) => {
+            if (!v) return v;
+            const next = { ...v, technician_name: val };
+            // Si el schema tiene "Técnico — Nombre" (sección Firmas) y no se
+            // editó a mano por separado, se mantiene igual a este campo —
+            // evita pedir el mismo nombre dos veces para poder certificar.
+            if (String(v.form_data.firma_tecnico_nombre ?? '') === lastSyncedTechName.current) {
+              next.form_data = { ...v.form_data, firma_tecnico_nombre: val };
+              lastSyncedTechName.current = val;
+            }
+            return next;
+          });
+        }}
         placeholder="Nombre completo (persona que firma el acta)" />
     </FieldWrapper>
   );
@@ -1044,7 +1074,7 @@ function FieldWrapper({ label, required, unit, fullWidth, help, children }: {
 const SIG_W = 600;
 const SIG_H = 200;
 
-function SignaturePad({ value, onChange, nombre }: { value: unknown; onChange: (v: unknown) => void; nombre?: string }) {
+function SignaturePad({ value, onChange, nombre, nameFieldLabel }: { value: unknown; onChange: (v: unknown) => void; nombre?: string; nameFieldLabel?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   // Último PNG ya pintado en el canvas: evita re-dibujar (y borrar el trazo
@@ -1114,7 +1144,7 @@ function SignaturePad({ value, onChange, nombre }: { value: unknown; onChange: (
     setCertifyError(null);
     if (!hasInk) return;
     if (!nombre || !nombre.trim()) {
-      setCertifyError('Escribe el nombre antes de certificar');
+      setCertifyError(`Escribe el nombre en "${nameFieldLabel ?? 'Nombre'}" antes de certificar`);
       return;
     }
     const pngNow = canvasRef.current!.toDataURL('image/png');
@@ -1231,7 +1261,11 @@ function FieldInput({ field, value, onChange, formData }: {
 
   if (field.type === 'signature') {
     const nombre = field.nameKey && formData ? String(formData[field.nameKey] ?? '') : undefined;
-    return <SignaturePad value={v} onChange={onChange} nombre={nombre} />;
+    // Nombre del field hermano para el mensaje de error ("Técnico — Nombre",
+    // etc.) — se deriva del label de la propia firma por convención
+    // (firmaFields() siempre genera "<rol> — Firma" / "<rol> — Nombre").
+    const nameFieldLabel = field.label.replace(/ — Firma$/, ' — Nombre');
+    return <SignaturePad value={v} onChange={onChange} nombre={nombre} nameFieldLabel={nameFieldLabel} />;
   }
 
   // ─── serial_list: N inputs según qtyKey del form_data ───

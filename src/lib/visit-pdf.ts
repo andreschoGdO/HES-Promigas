@@ -2,7 +2,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { findSchema, type VisitField, type VisitTypeSchema, type VisitType } from './visit-schemas';
+import { findSchema, parseSignatureValue, type VisitField, type VisitTypeSchema, type VisitType } from './visit-schemas';
 
 export interface VisitPDFData {
   id: string;
@@ -248,8 +248,11 @@ const drawFieldsTable = (doc: jsPDF, startY: number, fields: VisitField[], formD
   return doc.lastAutoTable.finalY;
 };
 
-// Genera y descarga el PDF de la visita
-export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]) {
+// Arma el documento jsPDF completo de la visita. Función interna compartida
+// por generateVisitPDF (descarga) y buildVisitPDFBlob (Blob para el ZIP
+// masivo) — antes cada una duplicaba/hackeaba esta lógica por separado; ver
+// nota en buildVisitPDFBlob sobre por qué el monkey-patch anterior no servía.
+async function buildVisitPdfDoc(visit: VisitPDFData, photos: VisitPhoto[]): Promise<{ doc: jsPDF; filename: string }> {
   const schema = findSchema(visit.visit_type);
   if (!schema) throw new Error(`Schema no encontrado para ${visit.visit_type}`);
 
@@ -364,18 +367,26 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
   }
 
   const firmasSection = schema.sections.find((s) => s.title.toLowerCase() === 'firmas');
-  if (firmasSection) {
-    // Checklist de abastecimiento: 2 recuadros de firma (nombre + firma dibujada).
-    const boxH = 38;
+  // Se arma dinámico desde los fields `signature` del schema (cada acta define
+  // sus propios roles/keys vía `firmaFields()` en visit-schemas.ts) — ya no
+  // está hardcodeado a "elaboró/contratista" de abastecimiento.
+  const firmantes = firmasSection
+    ? firmasSection.fields
+        .filter((f) => f.type === 'signature')
+        .map((f) => ({
+          titulo: f.label.replace(/ — Firma$/, ''),
+          nombre: f.nameKey ? visit.form_data?.[f.nameKey] : undefined,
+          firma: visit.form_data?.[f.key],
+        }))
+    : [];
+  if (firmasSection && firmantes.length > 0) {
+    // +8 vs. el recuadro original para la línea de sello (certificación).
+    const boxH = 46;
     if (y > pageHeight - (boxH + 14)) { doc.addPage(); y = drawHeader(doc, schema, visit); }
     y = drawSectionTitle(doc, y, firmasSection.title);
     const pageWFirmas = doc.internal.pageSize.getWidth();
     const gap = 6;
-    const boxW = (pageWFirmas - margin * 2 - gap) / 2;
-    const firmantes = [
-      { titulo: 'Elaboró / Realizó verificación', nombre: visit.form_data?.firma_elaboro_nombre, firma: visit.form_data?.firma_elaboro },
-      { titulo: 'Responsable Contratista', nombre: visit.form_data?.firma_contratista_nombre, firma: visit.form_data?.firma_contratista },
-    ];
+    const boxW = (pageWFirmas - margin * 2 - gap * (firmantes.length - 1)) / firmantes.length;
     firmantes.forEach((f, i) => {
       const x = margin + i * (boxW + gap);
       doc.setDrawColor(BORDER);
@@ -385,11 +396,16 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(TEXT);
       doc.text(f.titulo, x + 2, y + 6.5);
-      // Firma dibujada (proporción 3:1 del canvas) sobre la línea de firma
-      if (typeof f.firma === 'string' && f.firma.startsWith('data:image')) {
+
+      // Firma dibujada (proporción 3:1 del canvas) sobre la línea de firma.
+      // Acepta el formato viejo (string data-URL) y el nuevo (SignatureValue
+      // certificado) — ver parseSignatureValue en visit-schemas.ts.
+      const parsedFirma = parseSignatureValue(f.firma);
+      if (parsedFirma.kind !== 'empty') {
+        const png = parsedFirma.kind === 'certified' ? parsedFirma.value.png : parsedFirma.png;
         const sigH = 18;
         const sigW = sigH * 3;
-        doc.addImage(f.firma, detectImageFormat(f.firma), x + (boxW - sigW) / 2, y + 9, sigW, sigH);
+        doc.addImage(png, detectImageFormat(png), x + (boxW - sigW) / 2, y + 9, sigW, sigH);
       }
       doc.setDrawColor(MUTED);
       doc.line(x + 4, y + 29, x + boxW - 4, y + 29);
@@ -398,6 +414,22 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
       doc.text('Firma', x + boxW / 2, y + 32, { align: 'center' });
       doc.setTextColor(TEXT);
       doc.text(`Nombre: ${formatCell(f.nombre) || '—'}`, x + 2, y + 37);
+
+      // Sello de certificación: solo si es una firma del formato nuevo.
+      if (parsedFirma.kind === 'certified') {
+        const { ts, lat, lng } = parsedFirma.value;
+        const fecha = ts ? new Date(ts).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+        const hora = ts ? new Date(ts).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : '';
+        doc.setFontSize(6.5);
+        doc.setTextColor(MUTED);
+        const selloTexto = `Certificada · ${fecha} ${hora}`;
+        doc.text(selloTexto, x + 2, y + 42);
+        if (lat !== null && lng !== null) {
+          const gpsX = x + 2 + doc.getTextWidth(selloTexto) + 2;
+          doc.setTextColor(30, 100, 200);
+          doc.textWithLink(`GPS ${lat.toFixed(5)}, ${lng.toFixed(5)}`, gpsX, y + 42, { url: `https://www.google.com/maps?q=${lat},${lng}` });
+        }
+      }
     });
     y += boxH + 5;
   } else {
@@ -496,6 +528,12 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
   // Filename: ACTA-{tipo}-{casa}-{fecha}.pdf
   const safeCasa = (visit.casa ?? 'sin-casa').replace(/[^a-zA-Z0-9_-]/g, '_');
   const filename = `Acta-${schema.shortLabel.replace(/\s+/g, '_')}-${safeCasa}-${visit.visit_date}.pdf`;
+  return { doc, filename };
+}
+
+// Genera y descarga el PDF de la visita
+export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]) {
+  const { doc, filename } = await buildVisitPdfDoc(visit, photos);
   doc.save(filename);
 }
 
@@ -504,29 +542,7 @@ export async function generateVisitPDF(visit: VisitPDFData, photos: VisitPhoto[]
  * descarga. Útil para empaquetar múltiples actas en un .zip.
  */
 export async function buildVisitPDFBlob(visit: VisitPDFData, photos: VisitPhoto[]): Promise<{ blob: Blob; filename: string }> {
-  // Reusar la lógica de generateVisitPDF, pero produciendo Blob en vez de doc.save.
-  // jsPDF expone .output('blob') para esto.
-  const schema = findSchema(visit.visit_type);
-  if (!schema) throw new Error(`Schema no encontrado para ${visit.visit_type}`);
-
-  // Hack mínimo: monkey-patch temporal de doc.save para capturar el blob.
-  // (Evita duplicar 170 líneas de drawing). Restauramos al terminar.
-  // jsPDF.prototype.save tiene overloads incompatibles entre sí; el cast a
-  // unknown→Function es la vía menos invasiva sin tocar la API pública.
-  const proto = jsPDF.prototype as unknown as { save: (filename: string) => jsPDF };
-  const originalSave = proto.save;
-  let capturedBlob: Blob | null = null;
-  let capturedName = 'acta.pdf';
-  proto.save = function (this: jsPDF, filename: string) {
-    capturedBlob = this.output('blob') as Blob;
-    capturedName = filename;
-    return this;
-  };
-  try {
-    await generateVisitPDF(visit, photos);
-  } finally {
-    proto.save = originalSave;
-  }
-  if (!capturedBlob) throw new Error('No se generó el PDF');
-  return { blob: capturedBlob, filename: capturedName };
+  const { doc, filename } = await buildVisitPdfDoc(visit, photos);
+  const blob = doc.output('blob') as Blob;
+  return { blob, filename };
 }

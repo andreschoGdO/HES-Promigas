@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink, PackageCheck, Eraser, NotebookPen } from 'lucide-react';
-import { VISIT_SCHEMAS, findSchema, type VisitType, type VisitTypeSchema, type VisitField } from '@/lib/visit-schemas';
+import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink, PackageCheck, Eraser, NotebookPen, ShieldCheck } from 'lucide-react';
+import { VISIT_SCHEMAS, findSchema, parseSignatureValue, type VisitType, type VisitTypeSchema, type VisitField, type SignatureValue } from '@/lib/visit-schemas';
 import { generateVisitPDF, type VisitPDFData, type VisitPhoto } from '@/lib/visit-pdf';
 
 const VISIT_ICONS: Record<VisitType, typeof FileText> = {
@@ -1065,33 +1065,42 @@ function FieldWrapper({ label, required, unit, fullWidth, help, children }: {
   );
 }
 
-/* ───────────── Firma dibujada en pantalla ─────────────
+/* ───────────── Firma certificada ─────────────
  * Canvas de tamaño lógico fijo (600×200) escalado por CSS al ancho de la
- * columna; funciona con mouse, dedo y lápiz (Pointer Events). El resultado
- * se guarda como data-URL PNG en form_data[key] (pocos KB) y el PDF lo
- * inserta con doc.addImage. */
+ * columna; funciona con mouse, dedo y lápiz (Pointer Events). Al certificar
+ * se captura GPS + fecha/hora y el trazo queda guardado como SignatureValue
+ * (ver visit-schemas.ts) — el PDF inserta el PNG con doc.addImage y agrega
+ * el sello (nombre + fecha/hora + GPS) debajo. Formato viejo (string plano)
+ * se sigue mostrando sin sello, ver parseSignatureValue. */
 const SIG_W = 600;
 const SIG_H = 200;
 
-function SignaturePad({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function SignaturePad({ value, onChange, nombre }: { value: unknown; onChange: (v: unknown) => void; nombre?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
-  // Último valor que ya está pintado en el canvas: evita re-dibujar (y borrar
-  // el trazo en curso) cuando el value que vuelve del padre es el que acabamos de emitir.
+  // Último PNG ya pintado en el canvas: evita re-dibujar (y borrar el trazo
+  // en curso) cuando el value que vuelve del padre es el que acabamos de emitir.
   const painted = useRef('');
+  const [hasInk, setHasInk] = useState(false);
+  const [certifyError, setCertifyError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const parsed = parseSignatureValue(value);
+  const locked = parsed.kind !== 'empty';
+  const png = parsed.kind === 'certified' ? parsed.value.png : parsed.kind === 'legacy' ? parsed.png : '';
 
   useEffect(() => {
     const c = canvasRef.current;
     const ctx = c?.getContext('2d');
-    if (!c || !ctx || value === painted.current) return;
+    if (!c || !ctx || png === painted.current) return;
     ctx.clearRect(0, 0, SIG_W, SIG_H);
-    if (value) {
+    if (png) {
       const img = new Image();
       img.onload = () => ctx.drawImage(img, 0, 0, SIG_W, SIG_H);
-      img.src = value;
+      img.src = png;
     }
-    painted.current = value;
-  }, [value]);
+    painted.current = png;
+  }, [png]);
 
   const pos = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const c = canvasRef.current!;
@@ -1100,6 +1109,7 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (v: string
   };
 
   const start = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (locked) return;
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -1113,27 +1123,93 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (v: string
     ctx.moveTo(x, y);
     ctx.lineTo(x + 0.01, y); // un toque suelto deja un punto
     ctx.stroke();
+    setHasInk(true);
   };
   const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawing.current) return;
+    if (!drawing.current || locked) return;
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
     const { x, y } = pos(e);
     ctx.lineTo(x, y);
     ctx.stroke();
   };
-  const end = () => {
-    if (!drawing.current) return;
-    drawing.current = false;
-    const url = canvasRef.current!.toDataURL('image/png');
-    painted.current = url;
-    onChange(url);
-  };
-  const clear = () => {
+  const end = () => { drawing.current = false; };
+
+  const clearCanvas = () => {
     canvasRef.current?.getContext('2d')?.clearRect(0, 0, SIG_W, SIG_H);
     painted.current = '';
+    setHasInk(false);
+  };
+
+  const certificar = () => {
+    setCertifyError(null);
+    if (!hasInk) return;
+    if (!nombre || !nombre.trim()) {
+      setCertifyError('Escribe el nombre antes de certificar');
+      return;
+    }
+    const pngNow = canvasRef.current!.toDataURL('image/png');
+    const finish = (lat: number | null, lng: number | null) => {
+      const sv: SignatureValue = { png: pngNow, ts: new Date().toISOString(), lat, lng };
+      painted.current = pngNow;
+      setBusy(false);
+      onChange(sv);
+    };
+    setBusy(true);
+    if (!navigator.geolocation) { finish(null, null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (p) => finish(p.coords.latitude, p.coords.longitude),
+      () => finish(null, null), // GPS negado/falló: certifica igual, sin ubicación
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const revocar = () => {
+    if (!confirm('¿Revocar esta firma? Se borra el trazo y hay que volver a firmar y certificar.')) return;
+    painted.current = '';
+    setHasInk(false);
+    setCertifyError(null);
     onChange('');
   };
+
+  if (locked) {
+    const cert = parsed.kind === 'certified' ? parsed.value : null;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <img src={png} alt="Firma" style={{ width: '100%', maxWidth: SIG_W, background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 8 }} />
+        {cert ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 8, padding: '8px 10px' }}>
+            <ShieldCheck size={16} style={{ color: '#10b981', flexShrink: 0, marginTop: 1 }} />
+            <div style={{ fontSize: '0.72rem', lineHeight: 1.5 }}>
+              <div style={{ fontWeight: 700 }}>Firma certificada</div>
+              <div>{nombre || '—'}</div>
+              <div>
+                {cert.ts ? new Date(cert.ts).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                {' · '}
+                {cert.ts ? new Date(cert.ts).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) : ''}
+              </div>
+              {cert.lat !== null && cert.lng !== null ? (
+                <div>
+                  <MapPin size={10} style={{ display: 'inline', marginRight: 3, verticalAlign: -1 }} />
+                  {cert.lat.toFixed(5)}, {cert.lng.toFixed(5)} ·{' '}
+                  <a href={`https://www.google.com/maps?q=${cert.lat},${cert.lng}`} target="_blank" rel="noreferrer">Ver en mapa</a>
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-muted)' }}>Ubicación no disponible</div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+            Firma registrada antes de esta función — sin datos de certificación.
+          </div>
+        )}
+        <button type="button" onClick={revocar} className="secondary-btn" style={{ fontSize: '0.75rem', padding: '4px 10px', alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <Eraser size={12} /> Revocar y volver a firmar
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1147,11 +1223,17 @@ function SignaturePad({ value, onChange }: { value: string; onChange: (v: string
         onPointerCancel={end}
         style={{ width: '100%', aspectRatio: `${SIG_W} / ${SIG_H}`, touchAction: 'none', cursor: 'crosshair', background: '#fff', border: '1px dashed var(--border-strong)', borderRadius: 8 }}
       />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-        <span>{value ? 'Firma capturada' : 'Firma aquí con el dedo o el mouse'}</span>
-        <button type="button" onClick={clear} disabled={!value} className="secondary-btn" style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <Eraser size={12} /> Borrar
-        </button>
+      {certifyError && <span style={{ fontSize: '0.72rem', color: '#ef4444' }}>{certifyError}</span>}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: '0.72rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+        <span>{hasInk ? 'Firma lista — presiona Certificar' : 'Firma aquí con el dedo o el mouse'}</span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button type="button" onClick={clearCanvas} disabled={!hasInk} className="secondary-btn" style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <Eraser size={12} /> Borrar
+          </button>
+          <button type="button" onClick={certificar} disabled={!hasInk || busy} className="primary-btn" style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <ShieldCheck size={12} /> {busy ? 'Certificando…' : 'Certificar firma'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1167,7 +1249,8 @@ function FieldInput({ field, value, onChange, formData }: {
   const v = value ?? (field.type === 'checkbox' ? false : field.type === 'serial_list' ? [] : '');
 
   if (field.type === 'signature') {
-    return <SignaturePad value={typeof v === 'string' ? v : ''} onChange={onChange} />;
+    const nombre = field.nameKey && formData ? String(formData[field.nameKey] ?? '') : undefined;
+    return <SignaturePad value={v} onChange={onChange} nombre={nombre} />;
   }
 
   // ─── serial_list: N inputs según qtyKey del form_data ───

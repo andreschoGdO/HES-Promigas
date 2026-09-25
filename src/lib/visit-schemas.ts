@@ -32,6 +32,10 @@ export interface VisitField {
    *  al transicionar a Operativo para mapear seriales al category_id correcto.
    *  Valores: 'inverter' | 'battery' | 'panel'. */
   serialFamily?: 'inverter' | 'battery' | 'panel';
+  /** Solo `signature`: key del field de texto hermano que trae el nombre del
+   *  firmante — el sello de certificación (nombre + fecha/hora + GPS) lo lee
+   *  de ahí. Ej: nameKey='firma_tecnico_nombre' para el field firma_tecnico. */
+  nameKey?: string;
 }
 
 export interface VisitSection {
@@ -53,6 +57,14 @@ export interface VisitTypeSchema {
 
 /** Punto de verificación SI / NO — usado por el checklist de abastecimiento. */
 const siNo = (key: string, label: string): VisitField => ({ key, label, type: 'radio', options: ['SI', 'NO'] });
+
+/** Par nombre+firma certificada para una sección "Firmas" — mismo patrón en
+ *  todas las actas. `roleKey` es el sufijo de key (ej. 'tecnico' → campos
+ *  firma_tecnico_nombre / firma_tecnico), `roleLabel` es lo que se muestra. */
+const firmaFields = (roleKey: string, roleLabel: string, nombreRequired = false): VisitField[] => [
+  { key: `firma_${roleKey}_nombre`, label: `${roleLabel} — Nombre`, type: 'text', required: nombreRequired },
+  { key: `firma_${roleKey}`, label: `${roleLabel} — Firma`, type: 'signature', nameKey: `firma_${roleKey}_nombre` },
+];
 
 export const VISIT_SCHEMAS: VisitTypeSchema[] = [
   // ───────── VISITA PREVIA Y PREFACTIBILIDAD ─────────
@@ -147,6 +159,14 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'quien_realiza_visita', label: 'Quien realiza la visita', type: 'text', required: true, help: 'Nombre del técnico que firma el acta.' },
         ],
       },
+      {
+        // El PDF (visit-pdf.ts) dibuja esta sección como recuadros de firma.
+        title: 'Firmas',
+        fields: [
+          ...firmaFields('tecnico', 'Técnico', true),
+          ...firmaFields('cliente', 'Cliente / Responsable en sitio'),
+        ],
+      },
     ],
   },
 
@@ -237,6 +257,14 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'quien_realiza_visita', label: 'Quien realiza la visita', type: 'text', required: true },
         ],
       },
+      {
+        // El PDF (visit-pdf.ts) dibuja esta sección como recuadros de firma.
+        title: 'Firmas',
+        fields: [
+          ...firmaFields('tecnico', 'Técnico instalador', true),
+          ...firmaFields('cliente', 'Cliente / Responsable'),
+        ],
+      },
     ],
   },
 
@@ -288,6 +316,16 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'lectura_post_intervencion', label: 'Lectura o estado post-intervención', type: 'textarea' },
           { key: 'firma_cliente', label: 'Cliente firmó conformidad', type: 'checkbox' },
           { key: 'quien_realiza_visita', label: 'Quien realiza la visita', type: 'text', required: true },
+        ],
+      },
+      {
+        // El PDF (visit-pdf.ts) dibuja esta sección como recuadros de firma.
+        // Rol 'responsable' (no 'cliente') para no chocar con el checkbox
+        // firma_cliente de la sección "IV. Resultado" de arriba.
+        title: 'Firmas',
+        fields: [
+          ...firmaFields('tecnico', 'Técnico', true),
+          ...firmaFields('responsable', 'Responsable en sitio'),
         ],
       },
     ],
@@ -354,6 +392,14 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'capacitacion_cliente', label: 'Capacitación al cliente realizada', type: 'checkbox' },
           { key: 'pendientes', label: 'Pendientes', type: 'textarea' },
           { key: 'quien_realiza_visita', label: 'Quien realiza la visita', type: 'text', required: true },
+        ],
+      },
+      {
+        // El PDF (visit-pdf.ts) dibuja esta sección como recuadros de firma.
+        title: 'Firmas',
+        fields: [
+          ...firmaFields('tecnico', 'Técnico', true),
+          ...firmaFields('contratista', 'Contratista'),
         ],
       },
     ],
@@ -497,3 +543,41 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
 
 export const findSchema = (type: VisitType): VisitTypeSchema | undefined =>
   VISIT_SCHEMAS.find((s) => s.type === type);
+
+/**
+ * Valor certificado de un field `type: 'signature'` — reemplaza el string
+ * plano (data-URL) que se guardaba antes. Vive dentro de `form_data[key]`,
+ * sin migración de BD (jsonb). El nombre del firmante sigue siendo un field
+ * de texto aparte (ver `nameKey`), no vive dentro de este objeto.
+ */
+export interface SignatureValue {
+  png: string;           // data-URL PNG del trazo
+  ts: string;             // ISO 8601 — momento de la certificación
+  lat: number | null;     // null si el GPS falló o se negó el permiso
+  lng: number | null;
+}
+
+export type ParsedSignature =
+  | { kind: 'empty' }
+  | { kind: 'legacy'; png: string }
+  | { kind: 'certified'; value: SignatureValue };
+
+/** Acepta tanto el formato viejo (string data-URL) como el nuevo (objeto
+ *  SignatureValue) — así las firmas ya guardadas antes de este cambio se
+ *  siguen mostrando (sin sello de certificación) en vez de romperse. */
+export function parseSignatureValue(raw: unknown): ParsedSignature {
+  if (typeof raw === 'string' && raw.startsWith('data:image')) return { kind: 'legacy', png: raw };
+  if (raw && typeof raw === 'object' && 'png' in raw && typeof (raw as { png?: unknown }).png === 'string') {
+    const r = raw as Partial<SignatureValue>;
+    return {
+      kind: 'certified',
+      value: {
+        png: r.png as string,
+        ts: typeof r.ts === 'string' ? r.ts : '',
+        lat: typeof r.lat === 'number' ? r.lat : null,
+        lng: typeof r.lng === 'number' ? r.lng : null,
+      },
+    };
+  }
+  return { kind: 'empty' };
+}

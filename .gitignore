@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# credenciales en texto plano dentro de carpetas de referencia/docs — nunca a git
+docs/metrum-api/CREDENCIALES.local.md
+
 # vercel
 .vercel
 

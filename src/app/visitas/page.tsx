@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink, PackageCheck, Eraser } from 'lucide-react';
+import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink, PackageCheck, Eraser, NotebookPen } from 'lucide-react';
 import { VISIT_SCHEMAS, findSchema, type VisitType, type VisitTypeSchema, type VisitField } from '@/lib/visit-schemas';
 import { generateVisitPDF, type VisitPDFData, type VisitPhoto } from '@/lib/visit-pdf';
 
@@ -12,6 +12,7 @@ const VISIT_ICONS: Record<VisitType, typeof FileText> = {
   emergencia: AlertOctagon,
   normalizacion: Settings2,
   abastecimiento: PackageCheck,
+  bitacora: NotebookPen,
 };
 
 type Tab = VisitType | 'historial';

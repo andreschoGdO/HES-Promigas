@@ -186,7 +186,7 @@ function ModulesSection({ isModuleVisible }: { isModuleVisible: (id: keyof Sideb
   const allModules: Array<{ id: keyof SidebarVisibility; path: string; name: string; desc: string }> = [
     { id: 'dashboard',     path: '/dashboard',     name: 'Head End System',         desc: 'Operación diaria de la flota: vista granular multi-device, CREG mensual, alertas por casa, control manual de inversor.' },
     { id: 'operaciones',   path: '/operaciones',   name: 'Construcción',            desc: 'Dimensionado, alistamiento de inventario (reserva auto), instalación con contratista, operativo. Import masivo vía CSV.' },
-    { id: 'visitas',       path: '/visitas',       name: 'Visitas en Campo',        desc: '5 tipos de acta (previa, instalación, emergencia, normalización, checklist de abastecimiento) con fotos, GPS, firma digital, PDF y handoff bidireccional con inventario.' },
+    { id: 'visitas',       path: '/visitas',       name: 'Visitas en Campo',        desc: '6 tipos de acta (previa, instalación, emergencia, normalización, checklist de abastecimiento, bitácora de construcción) con fotos, GPS, firma digital, PDF y handoff bidireccional con inventario.' },
     { id: 'inventario',    path: '/inventario',    name: 'Inventario (WMS-lite)',   desc: 'Equipos por serial, consumibles con stock bajo, ubicaciones jerárquicas, reservas por visita, audit log completo.' },
     { id: 'reportes',      path: '/reportes',      name: 'Reportes',                desc: 'Reportes operativos con descarga CSV + vista imprimible.' },
     { id: 'configuracion', path: '/configuracion', name: 'Configuración API',       desc: 'Conexión Metrum, visibilidad del menú, esta documentación.' },

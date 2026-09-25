@@ -7,7 +7,7 @@
  * "Acta de Visita Previa y Prefactibilidad" — FO:Prefactibilidad
  */
 
-export type VisitType = 'previa' | 'instalacion' | 'emergencia' | 'normalizacion' | 'abastecimiento';
+export type VisitType = 'previa' | 'instalacion' | 'emergencia' | 'normalizacion' | 'abastecimiento' | 'bitacora';
 /** `signature`: firma dibujada en pantalla; se guarda como data-URL PNG en form_data[key]. */
 export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'date' | 'time' | 'checkbox' | 'radio' | 'tel' | 'email' | 'serial_list' | 'signature';
 
@@ -447,6 +447,48 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'firma_contratista_nombre', label: 'Responsable Contratista — Nombre', type: 'text' },
           { key: 'firma_elaboro', label: 'Elaboró / Realizó verificación — Firma', type: 'signature' },
           { key: 'firma_contratista', label: 'Responsable Contratista — Firma', type: 'signature' },
+        ],
+      },
+    ],
+  },
+
+  // ───────── BITÁCORA DE CONSTRUCCIÓN ─────────
+  // Registro diario del avance de obra por casa. A diferencia de las demás
+  // actas (un evento puntual = un registro), esta se pensó para crear MUCHOS
+  // registros por casa a lo largo del tiempo — una entrada nueva por cada
+  // día que se quiere dejar constancia del avance. No hace falta ninguna
+  // columna nueva para separar "fecha del avance" de "fecha de digitación":
+  // ya existen como `visit_date` (el día que describe la entrada) y
+  // `created_at` (el momento real en que se escribió, aunque sea tarde).
+  // Sin sección "Firmas" a propósito: es un registro operativo de uso
+  // diario, no un acta que requiera firma de conformidad.
+  {
+    type: 'bitacora',
+    label: 'Bitácora de Construcción',
+    shortLabel: 'Bitácora',
+    description: 'Registro diario del avance de obra en la casa — una entrada por día para dejar constancia de cómo va la construcción.',
+    color: '#3b82f6',
+    formCode: 'FO:BitacoraObra',
+    casaIsFreeText: true,
+    photoCategories: ['Avance general', 'Estructura', 'Paneles', 'Cableado', 'Tablero / Inversor', 'Incidencia', 'Otro'],
+    sections: [
+      {
+        title: 'I. Registro del día',
+        fields: [
+          { key: 'etapa', label: 'Etapa del día', type: 'select', required: true, options: [
+            'Alistamiento de sitio', 'Cimentación / anclajes', 'Estructura de montaje', 'Instalación de paneles',
+            'Cableado DC', 'Cableado AC', 'Tablero SSFV / inversor', 'Puesta en marcha', 'Ajustes / retrabajo',
+            'Retraso — clima', 'Retraso — material', 'Retraso — otro', 'Otro',
+          ] },
+          { key: 'clima', label: 'Clima', type: 'select', options: ['Soleado', 'Parcialmente nublado', 'Nublado', 'Lluvia', 'Lluvia fuerte / tormenta'] },
+          { key: 'descripcion_avance', label: 'Descripción del avance del día', type: 'textarea', required: true, help: 'Qué se hizo hoy en la obra, en tus palabras.' },
+        ],
+      },
+      {
+        // El PDF (visit-pdf.ts) trata este título aparte y lee la clave `observaciones`.
+        title: 'Observaciones',
+        fields: [
+          { key: 'observaciones', label: 'Pendientes / próximos pasos / notas adicionales', type: 'textarea' },
         ],
       },
     ],

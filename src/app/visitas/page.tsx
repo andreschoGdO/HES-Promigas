@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback, memo } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink, PackageCheck, Eraser, NotebookPen, ShieldCheck } from 'lucide-react';
+import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink, PackageCheck, Eraser, NotebookPen, ShieldCheck, FileCheck2 } from 'lucide-react';
 import { VISIT_SCHEMAS, findSchema, parseSignatureValue, type VisitType, type VisitTypeSchema, type VisitField, type SignatureValue } from '@/lib/visit-schemas';
 import { generateVisitPDF, type VisitPDFData, type VisitPhoto } from '@/lib/visit-pdf';
 import ConstructionLog from '@/components/ConstructionLog';
@@ -14,6 +14,7 @@ const VISIT_ICONS: Record<VisitType, typeof FileText> = {
   emergencia: AlertOctagon,
   normalizacion: Settings2,
   abastecimiento: PackageCheck,
+  comisionamiento: FileCheck2,
 };
 
 type Tab = VisitType | 'historial' | 'bitacora';
@@ -589,6 +590,32 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     if (!visit) return;
     setSaving(true); setMsg(null);
     try {
+      // Comisionamiento: el resumen (conformes/no conformes/no aplica/%)
+      // se recalcula solo a partir de los 45 campos item_*_cumple — nadie
+      // tiene que sumarlos a mano, ni se puede desincronizar del detalle.
+      let formDataToSave = visit.form_data;
+      if (visit.visit_type === 'comisionamiento') {
+        // 45 = total de puntos del formato (fijo, ver visit-schemas.ts) —
+        // no "los que ya se contestaron", así el % refleja avance real
+        // aunque el acta todavía esté a medio llenar.
+        const TOTAL_PUNTOS_COMISIONAMIENTO = 45;
+        let conformes = 0, noConformes = 0, noAplica = 0;
+        for (const [key, val] of Object.entries(visit.form_data)) {
+          if (!key.endsWith('_cumple')) continue;
+          if (val === 'Cumple') conformes++;
+          else if (val === 'No cumple') noConformes++;
+          else if (val === 'No aplica') noAplica++;
+        }
+        const pct = ((conformes / TOTAL_PUNTOS_COMISIONAMIENTO) * 100).toFixed(1);
+        formDataToSave = {
+          ...visit.form_data,
+          resumen_total_puntos: String(TOTAL_PUNTOS_COMISIONAMIENTO),
+          resumen_conformes: String(conformes),
+          resumen_no_conformes: String(noConformes),
+          resumen_no_aplica: String(noAplica),
+          resumen_pct_cumplimiento: `${pct}%`,
+        };
+      }
       const r = await fetch(`/api/visits/${visitId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -596,7 +623,7 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           technician_name: visit.technician_name, technician_email: visit.technician_email || userEmail,
           contratista: visit.contratista,
           visit_date: visit.visit_date, visit_time: visit.visit_time,
-          form_data: visit.form_data, notes: visit.notes,
+          form_data: formDataToSave, notes: visit.notes,
           lat: visit.lat, lng: visit.lng,
           status: finalize ? 'completed' : visit.status,
         }),

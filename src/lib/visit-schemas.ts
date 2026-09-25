@@ -7,7 +7,7 @@
  * "Acta de Visita Previa y Prefactibilidad" — FO:Prefactibilidad
  */
 
-export type VisitType = 'previa' | 'instalacion' | 'emergencia' | 'normalizacion' | 'abastecimiento';
+export type VisitType = 'previa' | 'instalacion' | 'emergencia' | 'normalizacion' | 'abastecimiento' | 'comisionamiento';
 /** `signature`: firma dibujada en pantalla; se guarda como data-URL PNG en form_data[key]. */
 export type FieldType = 'text' | 'textarea' | 'number' | 'select' | 'date' | 'time' | 'checkbox' | 'radio' | 'tel' | 'email' | 'serial_list' | 'signature';
 
@@ -64,6 +64,31 @@ const siNo = (key: string, label: string): VisitField => ({ key, label, type: 'r
 const firmaFields = (roleKey: string, roleLabel: string, nombreRequired = false): VisitField[] => [
   { key: `firma_${roleKey}_nombre`, label: `${roleLabel} — Nombre`, type: 'text', required: nombreRequired },
   { key: `firma_${roleKey}`, label: `${roleLabel} — Firma`, type: 'signature', nameKey: `firma_${roleKey}_nombre` },
+];
+
+/**
+ * Un punto de verificación del Formato de Comisionamiento: 5 campos por
+ * ítem (Cumple/No cumple/No aplica, resultado, valor medido, evidencia,
+ * observaciones) — fiel a las 7 columnas del Excel original, salvo
+ * "Responsable" y "Fecha de verificación" que NO se repiten por ítem: se
+ * usa el técnico y la fecha que ya captura toda acta de Visitas arriba
+ * del formulario (decisión explícita, evita pedir el mismo dato 45 veces).
+ * id ej. 'A1' → keys item_A1_cumple / item_A1_resultado / item_A1_valor /
+ * item_A1_evidencia / item_A1_obs.
+ */
+const comisionamientoItem = (id: string, punto: string, criterio: string): VisitField[] => [
+  { key: `item_${id}_cumple`, label: `${id}. ${punto}`, type: 'radio', options: ['Cumple', 'No cumple', 'No aplica'], required: true, help: criterio },
+  { key: `item_${id}_resultado`, label: `${id} — Resultado de la inspección`, type: 'text' },
+  { key: `item_${id}_valor`, label: `${id} — Valor medido`, type: 'text' },
+  { key: `item_${id}_evidencia`, label: `${id} — Evidencia o soporte`, type: 'text' },
+  { key: `item_${id}_obs`, label: `${id} — Observaciones`, type: 'textarea' },
+];
+
+/** Fila de la sección "IV. Evidencias asociadas" del comisionamiento: tipo
+ *  de evidencia + si se adjuntó + referencia/archivo/enlace. */
+const evidenciaItem = (key: string, label: string): VisitField[] => [
+  { key: `evid_${key}_adjunta`, label: `${label} — Adjunta`, type: 'radio', options: ['Sí', 'No'] },
+  { key: `evid_${key}_ref`, label: `${label} — Referencia / archivo / enlace`, type: 'text' },
 ];
 
 export const VISIT_SCHEMAS: VisitTypeSchema[] = [
@@ -493,6 +518,179 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
           { key: 'firma_contratista_nombre', label: 'Responsable Contratista — Nombre', type: 'text' },
           { key: 'firma_elaboro', label: 'Elaboró / Realizó verificación — Firma', type: 'signature', nameKey: 'firma_elaboro_nombre' },
           { key: 'firma_contratista', label: 'Responsable Contratista — Firma', type: 'signature', nameKey: 'firma_contratista_nombre' },
+        ],
+      },
+    ],
+  },
+
+  // ───────── FORMATO DE COMISIONAMIENTO ─────────
+  // Digitalización de "Chek List_Comisionamiento.csv" — verificación
+  // técnica, funcional y de seguridad previa a la puesta en operación.
+  // 45 puntos en 8 secciones (A-H). "Responsable"/"Fecha de verificación"
+  // del Excel NO se repiten por ítem (se usan technicianField/visit_date
+  // de arriba, ver comisionamientoItem()). Los totales de la sección III
+  // (conformes/no conformes/no aplica/% cumplimiento) se recalculan solos
+  // al guardar (ver VisitForm.save() en visitas/page.tsx) a partir de los
+  // 45 campos item_*_cumple — no hay que sumarlos a mano.
+  {
+    type: 'comisionamiento',
+    label: 'Formato de Comisionamiento',
+    shortLabel: 'Comisionamiento',
+    description: 'Verificación técnica, funcional y de seguridad previa a la puesta en operación del sistema.',
+    color: '#0891b2',
+    formCode: 'FO:Comisionamiento',
+    casaIsFreeText: true,
+    photoCategories: [
+      'Fotografías de la instalación', 'Pantallas de configuración del inversor', 'Lecturas de corriente y tensión',
+      'Mediciones de batería (V y SOC)', 'Termografías', 'Pruebas de operación On-Grid / Off-Grid',
+      'Pruebas de Zero Export / No Exportación', 'Pruebas de operación remota', 'Otro',
+    ],
+    sections: [
+      {
+        title: 'I. Información general del proyecto',
+        fields: [
+          { key: 'nombre_proyecto', label: 'Nombre del proyecto / conjunto', type: 'text' },
+          { key: 'fecha_comisionamiento', label: 'Fecha de comisionamiento', type: 'date' },
+          { key: 'cliente_usuario', label: 'Cliente / usuario', type: 'text' },
+          { key: 'operador_red', label: 'Operador de Red (OR)', type: 'select', options: ['EMCALI', 'CELSIA', 'ENEL Codensa', 'AIR-E', 'Afinia', 'Electricaribe', 'EPM', 'Otro'] },
+          { key: 'ciudad', label: 'Ciudad', type: 'text' },
+          { key: 'contrato_or', label: 'N.° de contrato (OR)', type: 'text' },
+          { key: 'direccion', label: 'Dirección', type: 'text' },
+          { key: 'tipo_medidor', label: 'Tipo de medidor', type: 'text' },
+          { key: 'inversor_marca_modelo', label: 'Marca y modelo del inversor', type: 'text' },
+          { key: 'potencia_nominal_inversor_kw', label: 'Potencia nominal del inversor', type: 'number', inputMode: 'decimal', unit: 'kW' },
+          { key: 'capacidad_fv_kwp', label: 'Capacidad instalada FV', type: 'number', inputMode: 'decimal', unit: 'kWp' },
+          { key: 'capacidad_baterias_kwh', label: 'Capacidad banco de baterías', type: 'number', inputMode: 'decimal', unit: 'kWh' },
+        ],
+      },
+      {
+        title: 'A. Medición y configuración frente a la red',
+        fields: [
+          ...comisionamientoItem('A1', 'Identificar el tipo de medidor instalado en la vivienda.', 'Medidor identificado y registrado (bidireccional/unidireccional, marca y modelo).'),
+          ...comisionamientoItem('A2', 'Verificar si el medidor registra energía reactiva.', 'Se determina y documenta si el medidor mide energía reactiva.'),
+          ...comisionamientoItem('A3', 'Validar la configuración para gestión/compensación de energía reactiva según la marca del inversor.', 'Configuración conforme al Manual de Ingeniería y a las instrucciones del fabricante del inversor.'),
+          ...comisionamientoItem('A4', 'Verificar la configuración del modo No Exportación / Zero Export.', 'Modo Zero Export configurado y verificado según marca del inversor y Manual de Ingeniería.'),
+          ...comisionamientoItem('A5', 'Validar la configuración del inversor frente a desbalances entre fases de la carga del cliente.', 'Inversor operando con los desbalances de fase previstos, sin disparos ni alarmas.'),
+          ...comisionamientoItem('A6', 'Validar la configuración del inversor para tolerar las variaciones de tensión permitidas en la red.', 'Rangos de tensión configurados dentro de límites del OR / RETIE / fabricante.'),
+        ],
+      },
+      {
+        title: 'B. Baterías y BMS',
+        fields: [
+          ...comisionamientoItem('B1', 'Verificar configuración y calibración de baterías y BMS según el fabricante.', 'Parámetros del BMS y baterías conformes a las recomendaciones del fabricante.'),
+          ...comisionamientoItem('B2', 'Verificar carga de baterías al 100 % antes de la instalación (cuando aplique).', 'SOC = 100 % previo a la instalación, si el fabricante lo establece.'),
+          ...comisionamientoItem('B3', 'Verificar ausencia de diferencias anormales de tensión entre módulos (transporte/manipulación/almacenamiento).', 'Diferencia de tensión entre módulos dentro de la tolerancia del fabricante.'),
+          ...comisionamientoItem('B4', 'Verificar ausencia de desbalances de tensión o SOC entre baterías de diferentes lotes.', 'Sin desbalances significativos de tensión / SOC entre lotes.'),
+          ...comisionamientoItem('B5', 'Registrar voltaje y SOC de cada módulo o batería (cuando sea técnicamente aplicable).', 'Registro completo de V y SOC por módulo.'),
+        ],
+      },
+      {
+        title: 'C. Operación del sistema',
+        fields: [
+          ...comisionamientoItem('C1', 'Validar la transición a modo Off-Grid / respaldo ante interrupción de la red.', 'Transición automática y correcta a respaldo ante falla de red.'),
+          ...comisionamientoItem('C2', 'Verificar que la transición no genere comportamientos anormales ni interrupciones no deseadas en cargas críticas.', 'Cargas críticas se mantienen sin interrupciones anómalas durante la transición.'),
+          ...comisionamientoItem('C3', 'Validar el retorno correcto a modo On-Grid al restablecerse la red.', 'Retorno a On-Grid automático y estable.'),
+          ...comisionamientoItem('C4', 'Verificar el aislamiento/suspensión remota del sistema (falta de pago o condición operativa definida).', 'El sistema puede aislarse/suspenderse remotamente de forma segura.'),
+        ],
+      },
+      {
+        title: 'D. Carga eléctrica de la vivienda',
+        fields: [
+          ...comisionamientoItem('D1', 'Verificar que el tablero de protecciones sea adecuado para la carga instalada y cumpla límites del OR.', 'Tablero conforme a la carga y a límites del Operador de Red / NTC 2050 / RETIE.'),
+          ...comisionamientoItem('D2', 'Realizar la medición de la carga máxima de la vivienda (total y por fase).', 'Mediciones registradas de carga máxima total y por fase.'),
+          ...comisionamientoItem('D3', 'Utilizar pinza voltiamperimétrica para las mediciones.', 'Mediciones realizadas con pinza voltiamperimétrica.'),
+          ...comisionamientoItem('D4', 'Considerar cargas de uso eventual / alta demanda durante la prueba (aspiradora, plancha, horno, VE, etc.).', 'Prueba ejecutada incluyendo las cargas de alta demanda disponibles.'),
+          ...comisionamientoItem('D5', 'Verificar compatibilidad de la demanda máxima con potencia del inversor, capacidad de batería, tablero y conductores.', 'Demanda máxima ≤ capacidad del inversor, batería, tablero y conductores instalados.'),
+          ...comisionamientoItem('D6', 'Registrar los valores máximos de corriente y potencia por fase.', 'Registro de I y P máximas por fase (L1, L2, L3).'),
+        ],
+      },
+      {
+        title: 'E. Vehículo eléctrico (si la vivienda cuenta con VE o cargador)',
+        fields: [
+          ...comisionamientoItem('E1', 'Verificar la existencia del cargador de vehículo eléctrico.', 'Se confirma la presencia/ausencia de cargador de VE.'),
+          ...comisionamientoItem('E2', 'Identificar la potencia nominal del cargador.', 'Potencia nominal del cargador documentada (kW).'),
+          ...comisionamientoItem('E3', 'Verificar que el calibre y la capacidad de la conexión sean adecuados para la corriente requerida.', 'Calibre y protección del circuito adecuados a la corriente del cargador.'),
+          ...comisionamientoItem('E4', 'Verificar el calibre mínimo requerido para la conexión del VE.', 'Calibre ≥ XX (por definir según ingeniería y normativa aplicable).'),
+          ...comisionamientoItem('E5', 'Verificar que la conexión del VE no genere sobrecarga en el sistema residencial.', 'Con el VE en carga, la demanda total no supera la capacidad del sistema.'),
+        ],
+      },
+      {
+        title: 'F. Puesta a tierra y seguridad eléctrica',
+        fields: [
+          ...comisionamientoItem('F1', 'Verificar la continuidad del sistema de puesta a tierra.', 'Continuidad verificada; resistencia dentro de límites de RETIE / diseño (por definir si no está especificado).'),
+          ...comisionamientoItem('F2', 'Verificar las conexiones de puesta a tierra de los principales equipos.', 'Equipos principales conectados a tierra según el diseño.'),
+          ...comisionamientoItem('F3', 'Validar el cumplimiento de los criterios del diseño y del Manual de Ingeniería.', 'Instalación conforme al diseño eléctrico y al Manual de Ingeniería.'),
+          ...comisionamientoItem('F4', 'Registrar los valores de las mediciones realizadas (cuando corresponda).', 'Valores de medición de puesta a tierra registrados.'),
+        ],
+      },
+      {
+        title: 'G. Inspección termográfica',
+        fields: [
+          // Nota del Excel: registrar temperatura en "Valor medido" y condición en "Observaciones".
+          ...comisionamientoItem('G1', 'Inspección termográfica del tablero eléctrico.', 'Sin puntos calientes anómalos; ΔT dentro de límites (por definir).'),
+          ...comisionamientoItem('G2', 'Inspección termográfica de las protecciones.', 'Sin puntos calientes anómalos en las protecciones.'),
+          ...comisionamientoItem('G3', 'Inspección termográfica de las conexiones AC.', 'Conexiones AC sin sobrecalentamiento.'),
+          ...comisionamientoItem('G4', 'Inspección termográfica de las conexiones DC.', 'Conexiones DC sin sobrecalentamiento.'),
+          ...comisionamientoItem('G5', 'Inspección termográfica del inversor.', 'Inversor sin puntos calientes anómalos.'),
+          ...comisionamientoItem('G6', 'Inspección termográfica de las baterías.', 'Baterías sin puntos calientes anómalos.'),
+          ...comisionamientoItem('G7', 'Inspección termográfica de los puntos de conexión y terminales.', 'Terminales y puntos de conexión sin sobrecalentamiento.'),
+        ],
+      },
+      {
+        title: 'H. Recomendaciones adicionales — verificaciones críticas complementarias',
+        fields: [
+          ...comisionamientoItem('H1', 'Verificar polaridad y secuencia de fases (AC/DC).', 'Polaridad DC y secuencia de fases correctas.'),
+          ...comisionamientoItem('H2', 'Probar los dispositivos de protección (interruptores, DPS/SPD, protección diferencial).', 'Protecciones operan/disparan correctamente según diseño y RETIE.'),
+          ...comisionamientoItem('H3', 'Verificar la parada de emergencia / desconexión rápida (rapid shutdown) del sistema FV.', 'Función de desconexión rápida / parada de emergencia operativa.'),
+          ...comisionamientoItem('H4', 'Verificar el etiquetado, la señalización y los rótulos de seguridad.', 'Rotulado y señalización conforme a RETIE.'),
+          ...comisionamientoItem('H5', 'Verificar la comunicación y el monitoreo remoto (plataforma/portal) y el registro de datos.', 'Monitoreo remoto en línea y registrando datos correctamente.'),
+          ...comisionamientoItem('H6', 'Verificar la versión de firmware del inversor.', 'Firmware actualizado a la versión recomendada por el fabricante.'),
+          ...comisionamientoItem('H7', 'Verificar la generación FV y la producción frente a las condiciones de irradiancia.', 'Producción FV coherente con la irradiancia y la potencia esperada.'),
+          ...comisionamientoItem('H8', 'Verificar el torque de conexiones y la entrega de documentación/capacitación al usuario.', 'Torques según fabricante; usuario capacitado y documentación entregada.'),
+        ],
+      },
+      {
+        title: 'III. Resumen y Resultado del Comisionamiento',
+        fields: [
+          { key: 'resumen_total_puntos', label: 'Total de puntos de verificación', type: 'text', help: 'Se calcula automáticamente al guardar.' },
+          { key: 'resumen_conformes', label: 'Puntos conformes (Cumple)', type: 'text', help: 'Se calcula automáticamente al guardar.' },
+          { key: 'resumen_no_conformes', label: 'Puntos no conformes (No cumple)', type: 'text', help: 'Se calcula automáticamente al guardar.' },
+          { key: 'resumen_no_aplica', label: 'Puntos no aplicables (No aplica)', type: 'text', help: 'Se calcula automáticamente al guardar.' },
+          { key: 'resumen_pct_cumplimiento', label: 'Porcentaje de cumplimiento', type: 'text', help: 'Se calcula automáticamente al guardar.' },
+          { key: 'estado_final_comisionamiento', label: 'Estado final del comisionamiento', type: 'radio', options: ['Aprobado', 'No aprobado', 'Aprobado con observaciones'], required: true },
+          { key: 'observaciones_criticas', label: 'Observaciones críticas', type: 'textarea' },
+          { key: 'acciones_correctivas_pendientes', label: 'Acciones correctivas pendientes', type: 'textarea' },
+          { key: 'responsable_cierre', label: 'Responsable de cierre', type: 'text' },
+          { key: 'fecha_cierre', label: 'Fecha de cierre', type: 'date' },
+        ],
+      },
+      {
+        title: 'IV. Evidencias Asociadas',
+        fields: [
+          ...evidenciaItem('fotografias', 'Fotografías de la instalación'),
+          ...evidenciaItem('pantallas_config', 'Pantallas de configuración del inversor'),
+          ...evidenciaItem('lecturas', 'Lecturas de corriente y tensión'),
+          ...evidenciaItem('mediciones_bateria', 'Mediciones de batería (V y SOC)'),
+          ...evidenciaItem('termografias', 'Termografías'),
+          ...evidenciaItem('pruebas_ongrid_offgrid', 'Pruebas de operación On-Grid / Off-Grid'),
+          ...evidenciaItem('pruebas_zero_export', 'Pruebas de Zero Export / No Exportación'),
+          ...evidenciaItem('pruebas_remota', 'Pruebas de operación remota'),
+        ],
+      },
+      {
+        // El PDF (visit-pdf.ts) trata este título aparte y lee la clave `observaciones`.
+        title: 'V. Observaciones Generales',
+        fields: [
+          { key: 'observaciones', label: 'Observaciones generales', type: 'textarea' },
+        ],
+      },
+      {
+        // El PDF (visit-pdf.ts) dibuja esta sección como recuadros de firma.
+        title: 'Firmas',
+        fields: [
+          ...firmaFields('elaboro', 'Elaboró / Realizó el comisionamiento', true),
+          ...firmaFields('reviso', 'Revisó / Aprobó'),
+          ...firmaFields('recibio', 'Recibió (usuario)'),
         ],
       },
     ],

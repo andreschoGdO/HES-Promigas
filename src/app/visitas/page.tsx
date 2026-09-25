@@ -5,6 +5,8 @@ import { createBrowserClient } from '@supabase/ssr';
 import { ClipboardCheck, Plus, Camera, Save, Trash2, ChevronRight, ChevronDown, FileDown, ArrowLeft, X, MapPin, FileText, History, AlertOctagon, Settings2, Wrench, Pencil, ImagePlus, Check, ExternalLink, PackageCheck, Eraser, NotebookPen, ShieldCheck } from 'lucide-react';
 import { VISIT_SCHEMAS, findSchema, parseSignatureValue, type VisitType, type VisitTypeSchema, type VisitField, type SignatureValue } from '@/lib/visit-schemas';
 import { generateVisitPDF, type VisitPDFData, type VisitPhoto } from '@/lib/visit-pdf';
+import ConstructionLog from '@/components/ConstructionLog';
+import { compressImageIfNeeded } from '@/lib/image-compress';
 
 const VISIT_ICONS: Record<VisitType, typeof FileText> = {
   previa: FileText,
@@ -12,10 +14,9 @@ const VISIT_ICONS: Record<VisitType, typeof FileText> = {
   emergencia: AlertOctagon,
   normalizacion: Settings2,
   abastecimiento: PackageCheck,
-  bitacora: NotebookPen,
 };
 
-type Tab = VisitType | 'historial';
+type Tab = VisitType | 'historial' | 'bitacora';
 
 interface VisitListItem {
   id: string;
@@ -45,46 +46,6 @@ const supa = () => createBrowserClient(
  *
  * Si el archivo NO es imagen, o ya es <500 KB, lo devuelve tal cual.
  */
-async function compressImageIfNeeded(file: File, maxDim = 1920, quality = 0.85): Promise<{ blob: Blob; filename: string }> {
-  if (!file.type.startsWith('image/') || file.size < 500_000) {
-    return { blob: file, filename: file.name };
-  }
-  try {
-    const dataUrl: string = await new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result as string);
-      r.onerror = () => reject(r.error ?? new Error('FileReader fail'));
-      r.readAsDataURL(file);
-    });
-    const img: HTMLImageElement = await new Promise((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error('image decode fail'));
-      i.src = dataUrl;
-    });
-    let { width, height } = img;
-    if (width > maxDim || height > maxDim) {
-      const scale = maxDim / Math.max(width, height);
-      width = Math.round(width * scale);
-      height = Math.round(height * scale);
-    }
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return { blob: file, filename: file.name };
-    ctx.drawImage(img, 0, 0, width, height);
-    const blob: Blob | null = await new Promise((resolve) => {
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
-    });
-    if (!blob || blob.size >= file.size) return { blob: file, filename: file.name };
-    const filename = file.name.replace(/\.[^.]+$/, '') + '.jpg';
-    return { blob, filename };
-  } catch {
-    return { blob: file, filename: file.name };
-  }
-}
-
 // Determina si un campo se renderiza ancho completo (textarea, radios con muchas opciones, etc.)
 const isFullWidthField = (f: VisitField) => {
   if (f.type === 'textarea') return true;
@@ -131,6 +92,12 @@ export default function VisitasPage() {
           );
         })}
         <button
+          onClick={() => { setTab('bitacora'); setActiveVisitId(null); }}
+          className={`chip ${tab === 'bitacora' ? 'active' : ''}`}
+          style={{ fontSize: '0.85rem', padding: '10px 14px', borderLeft: '4px solid #3b82f6', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <NotebookPen size={14} /> Bitácora
+        </button>
+        <button
           onClick={() => { setTab('historial'); setActiveVisitId(null); }}
           className={`chip ${tab === 'historial' ? 'active' : ''}`}
           style={{ fontSize: '0.85rem', padding: '10px 14px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -138,11 +105,13 @@ export default function VisitasPage() {
         </button>
       </div>
 
-      {tab !== 'historial' && (
+      {tab !== 'historial' && tab !== 'bitacora' && (
         activeVisitId
           ? <VisitForm visitId={activeVisitId} schema={findSchema(tab)!} userEmail={userEmail} onBack={() => setActiveVisitId(null)} />
           : <VisitTypeView type={tab} userEmail={userEmail} onOpen={setActiveVisitId} />
       )}
+
+      {tab === 'bitacora' && <ConstructionLog userEmail={userEmail} />}
 
       {tab === 'historial' && (
         activeVisitId

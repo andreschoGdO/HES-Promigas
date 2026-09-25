@@ -3,6 +3,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { findSchema, parseSignatureValue, type VisitField, type VisitTypeSchema, type VisitType } from './visit-schemas';
+import { fetchImageAsBase64, detectImageFormat } from './pdf-image-utils';
 
 export interface VisitPDFData {
   id: string;
@@ -38,32 +39,6 @@ const formatCell = (v: unknown): string => {
   if (v === null || v === undefined || v === '') return '';
   if (typeof v === 'boolean') return v ? 'Sí' : 'No';
   return String(v);
-};
-
-const fetchImageAsBase64 = async (url: string): Promise<string | null> => {
-  try {
-    const r = await fetch(url);
-    if (!r.ok) {
-      console.error(`[PDF] fetch foto fallo (${r.status})`, url);
-      return null;
-    }
-    const blob = await r.blob();
-    return await new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => { console.error('[PDF] FileReader fallo'); resolve(null); };
-      reader.readAsDataURL(blob);
-    });
-  } catch (e) {
-    console.error('[PDF] fetchImageAsBase64 error:', e, url);
-    return null;
-  }
-};
-
-const detectImageFormat = (dataUri: string): 'PNG' | 'JPEG' | 'WEBP' => {
-  if (dataUri.startsWith('data:image/png')) return 'PNG';
-  if (dataUri.startsWith('data:image/webp')) return 'WEBP';
-  return 'JPEG';
 };
 
 // Dibuja el header (logo Sunny + datos visita) en la página actual

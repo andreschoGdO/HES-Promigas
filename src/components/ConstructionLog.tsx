@@ -87,27 +87,44 @@ function LogListView({ onOpen, userEmail }: { onOpen: (id: string) => void; user
   const [casa, setCasa] = useState('');
   const [contratista, setContratista] = useState('');
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
-    const q = filter ? `?status=${filter}` : '';
-    const r = await fetch(`/api/construction-logs${q}`);
-    const j = await r.json();
-    setLogs(j.logs ?? []);
-    setLoading(false);
+    setListError(null);
+    try {
+      const q = filter ? `?status=${filter}` : '';
+      const r = await fetch(`/api/construction-logs${q}`);
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setListError(j.error ?? `Error al cargar (${r.status})`); setLogs([]); return; }
+      setLogs(j.logs ?? []);
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : 'No se pudo conectar con el servidor');
+    } finally {
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, [filter]);
 
   const create = async () => {
     if (!casa.trim()) return;
     setCreating(true);
+    setError(null);
     try {
       const r = await fetch('/api/construction-logs', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ casa: casa.trim(), contratista: contratista.trim() || null, opened_by: userEmail }),
       });
-      const j = await r.json();
-      if (j.log?.id) { setShowNew(false); setCasa(''); setContratista(''); onOpen(j.log.id); }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.log?.id) {
+        setError(j.error ?? `No se pudo crear la bitácora (error ${r.status}). Intenta de nuevo o recarga la página.`);
+        return;
+      }
+      setShowNew(false); setCasa(''); setContratista('');
+      onOpen(j.log.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo conectar con el servidor — revisa tu conexión e intenta de nuevo.');
     } finally { setCreating(false); }
   };
 
@@ -129,6 +146,7 @@ function LogListView({ onOpen, userEmail }: { onOpen: (id: string) => void; user
             <input type="text" placeholder="Casa (ej: Casa 108 - Reserva de Pance)" value={casa} onChange={(e) => setCasa(e.target.value)} style={{ minHeight: 44 }} autoFocus />
             <input type="text" placeholder="Contratista (opcional)" value={contratista} onChange={(e) => setContratista(e.target.value)} />
             <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>Si esa casa ya tiene una bitácora abierta, se reutiliza en vez de crear una nueva.</p>
+            {error && <div className="alert-error" style={{ fontSize: '0.8rem' }}>{error}</div>}
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={create} disabled={creating || !casa.trim()} className="primary-btn" style={{ flex: 1, justifyContent: 'center' }}>
                 {creating ? 'Creando…' : 'Abrir bitácora'}
@@ -147,9 +165,11 @@ function LogListView({ onOpen, userEmail }: { onOpen: (id: string) => void; user
         ))}
       </div>
 
+      {listError && <div className="alert-error" style={{ fontSize: '0.85rem', marginBottom: 12 }}>{listError}</div>}
+
       {loading ? (
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando…</p>
-      ) : logs.length === 0 ? (
+      ) : listError ? null : logs.length === 0 ? (
         <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No hay bitácoras {filter ? `${filter}s` : ''}.</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -326,9 +346,11 @@ function NewEntryForm({ logId, userEmail, onCreated, onCancel }: {
           lat, lng, created_by: userEmail,
         }),
       });
-      const j = await r.json();
-      if (!r.ok) { setError(j.error ?? 'Error al guardar'); return; }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setError(j.error ?? `Error al guardar (${r.status})`); return; }
       onCreated(j.entry);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo conectar con el servidor — revisa tu conexión e intenta de nuevo.');
     } finally { setSaving(false); }
   };
 

@@ -1118,7 +1118,12 @@ function SignaturePad({ value, onChange, nombre }: { value: unknown; onChange: (
       return;
     }
     const pngNow = canvasRef.current!.toDataURL('image/png');
+    // `done` evita certificar dos veces si el callback del navegador y el
+    // timeout de seguridad de abajo disparan los dos (o en cualquier orden).
+    let done = false;
     const finish = (lat: number | null, lng: number | null) => {
+      if (done) return;
+      done = true;
       const sv: SignatureValue = { png: pngNow, ts: new Date().toISOString(), lat, lng };
       painted.current = pngNow;
       setBusy(false);
@@ -1126,10 +1131,17 @@ function SignaturePad({ value, onChange, nombre }: { value: unknown; onChange: (
     };
     setBusy(true);
     if (!navigator.geolocation) { finish(null, null); return; }
+    // Algunos navegadores (sobre todo móviles) NO cuentan el tiempo que el
+    // permiso de ubicación queda esperando respuesta dentro del `timeout` de
+    // getCurrentPosition — si el usuario deja el diálogo sin responder, el
+    // callback de error puede no dispararse nunca y "Certificar" se queda
+    // colgado en "Certificando…" para siempre. Este timeout manual garantiza
+    // que la firma se certifica igual (sin ubicación) a los 8s como máximo.
+    const safetyTimeout = setTimeout(() => finish(null, null), 8000);
     navigator.geolocation.getCurrentPosition(
-      (p) => finish(p.coords.latitude, p.coords.longitude),
-      () => finish(null, null), // GPS negado/falló: certifica igual, sin ubicación
-      { enableHighAccuracy: true, timeout: 10000 }
+      (p) => { clearTimeout(safetyTimeout); finish(p.coords.latitude, p.coords.longitude); },
+      () => { clearTimeout(safetyTimeout); finish(null, null); }, // GPS negado/falló: certifica igual, sin ubicación
+      { enableHighAccuracy: true, timeout: 7000 }
     );
   };
 

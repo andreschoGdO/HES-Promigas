@@ -526,11 +526,14 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
   }, [visit?.id, visit?.visit_type]);
 
   // Evita pedir el nombre del técnico dos veces: "Técnico que realiza la
-  // visita" (arriba, siempre visible) y "Técnico — Nombre" (dentro de la
-  // sección Firmas, para certificar la firma) suelen ser la misma persona.
-  // Este ref recuerda el último valor que SE SINCRONIZÓ automáticamente —
-  // si el usuario edita "Técnico — Nombre" a mano y ya no coincide con lo
-  // sincronizado, se respeta esa edición y se deja de sobreescribir.
+  // visita" (arriba, siempre visible) y el nombre del firmante "técnico" de
+  // la sección Firmas (que según la acta se llama "Técnico — Nombre" o,
+  // en Abastecimiento, "Elaboró / Realizó verificación — Nombre") suelen
+  // ser la misma persona. Este ref recuerda el último valor que SE
+  // SINCRONIZÓ automáticamente — si el usuario edita ese campo a mano y ya
+  // no coincide con lo sincronizado, se respeta esa edición y se deja de
+  // sobreescribir.
+  const TECH_NAME_ALIAS_KEYS = ['firma_tecnico_nombre', 'firma_elaboro_nombre'];
   const lastSyncedTechName = useRef<string>('');
 
   const load = async () => {
@@ -539,10 +542,14 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
     const v = j.visit as VisitFull | null;
     if (v) {
       const techName = v.technician_name ?? '';
-      if (techName && !v.form_data.firma_tecnico_nombre) {
-        v.form_data = { ...v.form_data, firma_tecnico_nombre: techName };
+      let synced = '';
+      for (const key of TECH_NAME_ALIAS_KEYS) {
+        if (key in v.form_data || findSchema(v.visit_type)?.sections.some((s) => s.fields.some((f) => f.key === key))) {
+          if (techName && !v.form_data[key]) v.form_data = { ...v.form_data, [key]: techName };
+          synced = String(v.form_data[key] ?? '');
+        }
       }
-      lastSyncedTechName.current = String(v.form_data.firma_tecnico_nombre ?? '');
+      lastSyncedTechName.current = synced;
     }
     setVisit(v);
     setPhotos(j.photos ?? []);
@@ -738,13 +745,19 @@ function VisitForm({ visitId, schema: schemaProp, userEmail, onBack, loadOnMount
           setVisit((v) => {
             if (!v) return v;
             const next = { ...v, technician_name: val };
-            // Si el schema tiene "Técnico — Nombre" (sección Firmas) y no se
-            // editó a mano por separado, se mantiene igual a este campo —
-            // evita pedir el mismo nombre dos veces para poder certificar.
-            if (String(v.form_data.firma_tecnico_nombre ?? '') === lastSyncedTechName.current) {
-              next.form_data = { ...v.form_data, firma_tecnico_nombre: val };
-              lastSyncedTechName.current = val;
+            // Si el schema tiene un campo "Nombre" del firmante técnico
+            // (sección Firmas — "Técnico — Nombre" o, en Abastecimiento,
+            // "Elaboró / Realizó verificación — Nombre") y no se editó a
+            // mano por separado, se mantiene igual a este campo — evita
+            // pedir el mismo nombre dos veces para poder certificar.
+            let formData = v.form_data;
+            for (const key of TECH_NAME_ALIAS_KEYS) {
+              if (String(v.form_data[key] ?? '') === lastSyncedTechName.current) {
+                formData = { ...formData, [key]: val };
+              }
             }
+            next.form_data = formData;
+            lastSyncedTechName.current = val;
             return next;
           });
         }}

@@ -491,8 +491,8 @@ export const VISIT_SCHEMAS: VisitTypeSchema[] = [
         fields: [
           { key: 'firma_elaboro_nombre', label: 'Elaboró / Realizó verificación — Nombre', type: 'text', required: true },
           { key: 'firma_contratista_nombre', label: 'Responsable Contratista — Nombre', type: 'text' },
-          { key: 'firma_elaboro', label: 'Elaboró / Realizó verificación — Firma', type: 'signature' },
-          { key: 'firma_contratista', label: 'Responsable Contratista — Firma', type: 'signature' },
+          { key: 'firma_elaboro', label: 'Elaboró / Realizó verificación — Firma', type: 'signature', nameKey: 'firma_elaboro_nombre' },
+          { key: 'firma_contratista', label: 'Responsable Contratista — Firma', type: 'signature', nameKey: 'firma_contratista_nombre' },
         ],
       },
     ],

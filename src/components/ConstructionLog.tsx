@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import {
-  NotebookPen, Plus, MapPin, Camera, ImagePlus, X, Lock, Unlock, FileDown, Trash2, Cloud, Layers, ArrowLeft,
+  NotebookPen, Plus, MapPin, Camera, ImagePlus, X, Lock, Unlock, FileDown, Trash2, Cloud, Layers, ArrowLeft, Pencil,
 } from 'lucide-react';
 import { compressImageIfNeeded } from '@/lib/image-compress';
 
@@ -207,6 +207,7 @@ function LogDetailView({ logId, userEmail, onBack }: { logId: string; userEmail:
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
   const load = async () => {
@@ -288,7 +289,7 @@ function LogDetailView({ logId, userEmail, onBack }: { logId: string; userEmail:
 
       {log.status === 'abierta' && (
         showForm
-          ? <NewEntryForm logId={logId} userEmail={userEmail} onCreated={(e) => { setEntries((prev) => [e, ...prev]); setShowForm(false); }} onCancel={() => setShowForm(false)} />
+          ? <EntryForm logId={logId} userEmail={userEmail} onSaved={(e) => { setEntries((prev) => [e, ...prev]); setShowForm(false); }} onCancel={() => setShowForm(false)} />
           : (
             <button onClick={() => setShowForm(true)} className="primary-btn" style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '0.95rem', fontWeight: 600, marginBottom: 16 }}>
               <Plus size={18} /> Agregar entrada de hoy
@@ -296,31 +297,41 @@ function LogDetailView({ logId, userEmail, onBack }: { logId: string; userEmail:
           )
       )}
       {log.status === 'cerrada' && !showForm && (
-        <div className="alert-warning" style={{ fontSize: '0.82rem', marginBottom: 16 }}>Bitácora cerrada — reábrela para agregar entradas nuevas.</div>
+        <div className="alert-warning" style={{ fontSize: '0.82rem', marginBottom: 16 }}>Bitácora cerrada — reábrela para agregar o editar entradas.</div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {entries.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin entradas todavía.</p>}
         {entries.map((entry) => (
-          <EntryCard key={entry.id} entry={entry} logId={logId} onDelete={() => deleteEntry(entry.id)}
-            onPhotosChange={(photos) => setEntries((prev) => prev.map((e) => e.id === entry.id ? { ...e, photos } : e))} />
+          editingEntryId === entry.id ? (
+            <EntryForm key={entry.id} logId={logId} userEmail={userEmail} entry={entry}
+              onSaved={(e) => { setEntries((prev) => prev.map((x) => x.id === entry.id ? { ...e, photos: entry.photos } : x)); setEditingEntryId(null); }}
+              onCancel={() => setEditingEntryId(null)} />
+          ) : (
+            <EntryCard key={entry.id} entry={entry} logId={logId}
+              canEdit={log.status === 'abierta'}
+              onEdit={() => setEditingEntryId(entry.id)}
+              onDelete={() => deleteEntry(entry.id)}
+              onPhotosChange={(photos) => setEntries((prev) => prev.map((e) => e.id === entry.id ? { ...e, photos } : e))} />
+          )
         ))}
       </div>
     </>
   );
 }
 
-/* ───────────────────── Form de nueva entrada ───────────────────── */
-function NewEntryForm({ logId, userEmail, onCreated, onCancel }: {
-  logId: string; userEmail: string; onCreated: (e: Entry) => void; onCancel: () => void;
+/* ───────────────────── Form de entrada (nueva o edición) ───────────────────── */
+function EntryForm({ logId, userEmail, entry, onSaved, onCancel }: {
+  logId: string; userEmail: string; entry?: Entry; onSaved: (e: Entry) => void; onCancel: () => void;
 }) {
-  const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
-  const [etapa, setEtapa] = useState('');
-  const [clima, setClima] = useState('');
-  const [descripcion, setDescripcion] = useState('');
-  const [observaciones, setObservaciones] = useState('');
-  const [lat, setLat] = useState<number | null>(null);
-  const [lng, setLng] = useState<number | null>(null);
+  const isEdit = !!entry;
+  const [entryDate, setEntryDate] = useState(entry?.entry_date ?? new Date().toISOString().slice(0, 10));
+  const [etapa, setEtapa] = useState(entry?.etapa ?? '');
+  const [clima, setClima] = useState(entry?.clima ?? '');
+  const [descripcion, setDescripcion] = useState(entry?.descripcion ?? '');
+  const [observaciones, setObservaciones] = useState(entry?.observaciones ?? '');
+  const [lat, setLat] = useState<number | null>(entry?.lat ?? null);
+  const [lng, setLng] = useState<number | null>(entry?.lng ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -338,17 +349,19 @@ function NewEntryForm({ logId, userEmail, onCreated, onCancel }: {
     setSaving(true);
     setError(null);
     try {
-      const r = await fetch(`/api/construction-logs/${logId}/entries`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entry_date: entryDate, etapa: etapa || null, clima: clima || null,
-          descripcion: descripcion.trim(), observaciones: observaciones.trim() || null,
-          lat, lng, created_by: userEmail,
-        }),
+      const url = isEdit ? `/api/construction-logs/${logId}/entries/${entry!.id}` : `/api/construction-logs/${logId}/entries`;
+      const body: Record<string, unknown> = {
+        entry_date: entryDate, etapa: etapa || null, clima: clima || null,
+        descripcion: descripcion.trim(), observaciones: observaciones.trim() || null, lat, lng,
+      };
+      if (!isEdit) body.created_by = userEmail;
+      const r = await fetch(url, {
+        method: isEdit ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { setError(j.error ?? `Error al guardar (${r.status})`); return; }
-      onCreated(j.entry);
+      onSaved(j.entry);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo conectar con el servidor — revisa tu conexión e intenta de nuevo.');
     } finally { setSaving(false); }
@@ -356,6 +369,7 @@ function NewEntryForm({ logId, userEmail, onCreated, onCancel }: {
 
   return (
     <div className="glass-panel" style={{ padding: 16, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <h3 style={{ margin: 0, fontSize: '0.92rem' }}>{isEdit ? 'Editar entrada' : 'Nueva entrada'}</h3>
       <div>
         <label className="input-label" style={{ fontSize: '0.78rem' }}>Fecha del avance</label>
         <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
@@ -388,7 +402,7 @@ function NewEntryForm({ logId, userEmail, onCreated, onCancel }: {
       {error && <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>{error}</span>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={submit} disabled={saving} className="primary-btn" style={{ flex: 1, justifyContent: 'center' }}>
-          {saving ? 'Guardando…' : 'Guardar entrada'}
+          {saving ? 'Guardando…' : isEdit ? 'Guardar cambios' : 'Guardar entrada'}
         </button>
         <button onClick={onCancel} className="secondary-btn" style={{ flex: 1, justifyContent: 'center' }}>Cancelar</button>
       </div>
@@ -397,8 +411,8 @@ function NewEntryForm({ logId, userEmail, onCreated, onCancel }: {
 }
 
 /* ───────────────────── Tarjeta de una entrada + sus fotos ───────────────────── */
-function EntryCard({ entry, logId, onDelete, onPhotosChange }: {
-  entry: Entry; logId: string; onDelete: () => void; onPhotosChange: (photos: EntryPhoto[]) => void;
+function EntryCard({ entry, logId, canEdit, onEdit, onDelete, onPhotosChange }: {
+  entry: Entry; logId: string; canEdit: boolean; onEdit: () => void; onDelete: () => void; onPhotosChange: (photos: EntryPhoto[]) => void;
 }) {
   const [category, setCategory] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -441,9 +455,16 @@ function EntryCard({ entry, logId, onDelete, onPhotosChange }: {
             Digitado {fmtDateTime(entry.created_at)}{entry.created_by ? ` · ${entry.created_by}` : ''}
           </div>
         </div>
-        <button onClick={onDelete} title="Borrar entrada" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-          <Trash2 size={15} />
-        </button>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {canEdit && (
+            <button onClick={onEdit} title="Editar entrada" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+              <Pencil size={15} />
+            </button>
+          )}
+          <button onClick={onDelete} title="Borrar entrada" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+            <Trash2 size={15} />
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '8px 0' }}>

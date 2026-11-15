@@ -190,7 +190,13 @@ def dibujar(lam: Lamina, plantilla: dict[str, Any], datos: dict[str, Any], raiz:
         yy = y0 + alto - (k + 1) * hc
         lam.rect(x, yy, f["datos"], hc, "CAJETIN")
         lam.texto((x + 1, yy + hc - 2.4), et, 1.3, "NOTA")
-        lam.texto((x + 1, yy + 1.2), str(v)[: int((f["datos"] - 2) / (1.45 * 0.86))], 1.45, "TEXTO")
+        alto_txt = 1.45 if len(str(v)) <= (f["datos"] - 2) / (1.45 * 0.86) else 1.15
+        lam.texto(
+            (x + 1, yy + 1.2),
+            str(v)[: int((f["datos"] - 2) / (alto_txt * 0.86))],
+            alto_txt,
+            "TEXTO",
+        )
     x += f["datos"]
 
     # 5. Bloque del logo: logo, proyecto, contenido, tamaño / código / rev, escala / unidad / hoja

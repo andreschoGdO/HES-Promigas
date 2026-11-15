@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from shapely.geometry import Point, Polygon
 
 from engine import validar
 from engine.modelo3d import geometria, ifc
@@ -33,7 +34,11 @@ def _rel(ruta: Path) -> Path:
     return ruta.relative_to(validar.RAIZ) if ruta.is_relative_to(validar.RAIZ) else ruta
 
 
-def vistas(elems: list[geometria.Elemento], entrada: dict[str, Any] | None) -> list[dict[str, Any]]:
+def vistas(
+    elems: list[geometria.Elemento],
+    entrada: dict[str, Any] | None,
+    proyecto: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Cámaras en metros (X este, Y norte, Z arriba)."""
     modulos = [e for e in elems if e.tipo == "modulo"]
     todo = np.vstack([e.malla.bounds for e in elems]) / 1000
@@ -54,21 +59,38 @@ def vistas(elems: list[geometria.Elemento], entrada: dict[str, Any] | None) -> l
             "lente_mm": 40,
         },
     ]
-    equipos = [e for e in elems if e.tipo in ("inversor", "bateria", "tablero")]
+    equipos = [e for e in elems if e.tipo in ("inversor", "bateria", "tablero")]  # sin el buitrón
     if equipos and entrada:
         b = np.vstack([e.malla.bounds for e in equipos]) / 1000
         obj = (b.min(axis=0) + b.max(axis=0)) / 2
         r = np.radians(entrada["rumbo_muro_equipos_deg"] - 90)  # hacia afuera del muro
         frente = np.array([np.sin(r), np.cos(r), 0])
+        r2 = np.radians(entrada["rumbo_muro_equipos_deg"] + 180)  # hacia la esquina (derecha)
+        derecha = np.array([np.sin(r2), np.cos(r2), 0])
         out.append(
             {
                 "nombre": "equipos",
-                "camara": list(obj + 4.5 * frente + [0, 0, 0.6]),
-                "objetivo": list(obj),
-                "lente_mm": 30,
+                "camara": list(obj + 3.9 * frente - 0.5 * derecha + [0, 0, 0.3]),
+                "objetivo": list(obj + 0.2 * derecha),
+                "lente_mm": 24,
             }
         )
-    return [
+    amb = ambientacion(proyecto) if proyecto else None
+    if amb and equipos:
+        amb["evitar"] = [[float(v) for v in e.malla.centroid[:2] / 1000] for e in equipos]
+    if amb:
+        c = np.array(amb["centro"])
+        ux, uy = np.array([*amb["ux"], 0]), np.array([*amb["uy"], 0])
+        medio = c + uy * amb["fondo_m"] / 2
+        out.append(
+            {
+                "nombre": "terraza",
+                "camara": list(medio + uy * (amb["fondo_m"] / 2 + 5.0) - ux * 1.2 + [0, 0, 1.6]),
+                "objetivo": list(medio + [0, 0, 0.9]),
+                "lente_mm": 24,
+            }
+        )
+    vs = [
         {
             **v,
             "camara": [float(x) for x in v["camara"]],
@@ -76,6 +98,48 @@ def vistas(elems: list[geometria.Elemento], entrada: dict[str, Any] | None) -> l
         }
         for v in out
     ]
+    return {"vistas": vs, "ambientacion": amb}
+
+
+def ambientacion(proyecto: dict[str, Any]) -> dict[str, Any] | None:
+    """Marco de la pérgola para amoblarla en el render (centro del lado del muro, ejes, medidas)."""
+    viv = proyecto["vivienda"]
+    zona = next((z for z in viv.get("zonas_instalacion", []) if z["estructura"] == "pergola"), None)
+    if zona is None:
+        return None
+    cubs = {c["id"]: c for c in viv["cubiertas"]}
+    cota = cubs[zona["cubierta_ref"]]["cota_base_mm"] or 0
+    muros = [Polygon(c["contorno_mm"]) for c in viv["cubiertas"] if (c["cota_base_mm"] or 0) > cota]
+    pts = [np.array(p, float) for p in zona["contorno_mm"]]
+    n = len(pts)
+    lado = next(
+        (
+            i
+            for i in range(n)
+            if any(m.exterior.distance(Point(*(pts[i] + pts[(i + 1) % n]) / 2)) < 50 for m in muros)
+        ),
+        None,
+    )
+    if lado is None:
+        return None
+    a, b = pts[lado], pts[(lado + 1) % n]
+    ux = (b - a) / np.linalg.norm(b - a)
+    centro_lado = (a + b) / 2
+    centroide = np.mean(pts, axis=0)
+    uy = np.array([-ux[1], ux[0]])
+    if np.dot(centroide - centro_lado, uy) < 0:
+        uy = -uy
+    fondo = max(np.dot(p - centro_lado, uy) for p in pts)
+    z_plano = geometria.plano_zona(zona, cota + (zona.get("altura_estructura_mm") or 0))
+    z_min = min(z_plano(*p) for p in pts)
+    return {
+        "centro": [float(v) for v in (*(centro_lado / 1000), cota / 1000)],
+        "ux": [float(v) for v in ux],
+        "uy": [float(v) for v in uy],
+        "largo_m": float(np.linalg.norm(b - a) / 1000),
+        "fondo_m": float(fondo / 1000),
+        "z_luces_m": float((z_min - 450) / 1000),
+    }
 
 
 def generar(args: argparse.Namespace) -> int:
@@ -119,7 +183,7 @@ def generar(args: argparse.Namespace) -> int:
             return 0
         with tempfile.TemporaryDirectory() as tmp:
             ruta_vistas = Path(tmp) / "vistas.json"
-            ruta_vistas.write_text(json.dumps(vistas(elems, entrada)))
+            ruta_vistas.write_text(json.dumps(vistas(elems, entrada, proyecto)))
             script = Path(__file__).with_name("render_blender.py")
             r = subprocess.run(
                 [

@@ -101,8 +101,8 @@ def test_gltf_en_metros_y_y_arriba(elems, tmp_path: Path) -> None:
     geometria.escena(elems).export(ruta)
     sc = trimesh.load(ruta)
     assert "modulo-015" in sc.geometry
-    # Y es la altura en glTF: el punto más alto (módulos de la pérgola) ≈ 2,63 m.
-    assert sc.bounds[1][1] == pytest.approx(2.628, abs=0.01)
+    # Y es la altura en glTF: el borde alto del módulo 001 de la pérgola ≈ 2,63 m.
+    assert sc.geometry["modulo-001"].bounds[1][1] == pytest.approx(2.628, abs=0.01)
 
 
 @pytest.mark.skipif(shutil.which("blender") is None, reason="Blender no está instalado")
@@ -127,5 +127,21 @@ def test_render_rapido(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         )
         == 0
     )
-    assert len(list((destino / "salidas").glob("render_*.png"))) == 3
+    assert len(list((destino / "salidas").glob("render_*.png"))) == 4
     assert "__GLB_BASE64__" not in (destino / "salidas" / "visor_3d.html").read_text()
+
+
+def test_pergola_de_madera_adosada(elems) -> None:
+    # Lado contra la terraza alta: durmiente sin columnas; columnas solo en el lado libre:
+    # 2 esquinas libres + 1 a mitad del lado libre de 6,84 m (> 5 m).
+    madera = [e for e in elems if e.tipo == "madera"]
+    assert len([e for e in madera if "columna" in e.id]) == 3
+    assert len([e for e in madera if "durmiente" in e.id]) == 1
+    assert all(e.propiedades["material"] == "madera" for e in madera)
+
+
+def test_muro_y_buitron_en_el_modelo(elems) -> None:
+    tipos = {e.tipo for e in elems}
+    assert {"muro", "buitron"} <= tipos
+    muro = next(e for e in elems if e.tipo == "muro")
+    assert muro.malla.bounds[1][2] == pytest.approx(3000)

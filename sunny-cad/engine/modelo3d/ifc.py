@@ -22,6 +22,9 @@ CLASES = {
     "volumen": ("IfcBuildingElementProxy", None),
     "modulo": ("IfcSolarDevice", "SOLARPANEL"),
     "estructura": ("IfcMember", "MEMBER"),
+    "madera": ("IfcMember", "MEMBER"),
+    "buitron": ("IfcBuildingElementProxy", None),
+    "muro": ("IfcWall", "STANDARD"),
     "inversor": ("IfcBuildingElementProxy", None),
     "bateria": ("IfcElectricFlowStorageDevice", "BATTERY"),
     "tablero": ("IfcElectricDistributionBoard", "DISTRIBUTIONBOARD"),
@@ -30,6 +33,7 @@ CLASES = {
 NOMBRE_TIPO = {
     "volumen": "Volumen de la terraza alta",
     "inversor": "Inversor híbrido",
+    "buitron": "Buitrón",
 }
 
 

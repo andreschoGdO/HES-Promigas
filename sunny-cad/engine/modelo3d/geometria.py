@@ -16,7 +16,7 @@ from typing import Any
 
 import numpy as np
 import trimesh
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 
 from engine.distribucion.colocacion import direccion, ejes
 
@@ -28,6 +28,9 @@ COLORES = {
     "volumen": (200, 160, 130, 255),
     "modulo": (18, 32, 70, 255),
     "estructura": (150, 155, 160, 255),
+    "madera": (139, 94, 60, 255),
+    "buitron": (196, 160, 135, 255),
+    "muro": (196, 160, 135, 255),
     "inversor": (245, 245, 245, 255),
     "bateria": (235, 235, 235, 255),
     "tablero": (200, 200, 195, 255),
@@ -112,7 +115,8 @@ def elementos(
         base = _cota(cubiertas[zona["cubierta_ref"]]) + (zona.get("altura_estructura_mm") or 0)
         planos[zid] = plano_zona(zona, base)
         if zona["estructura"] == "pergola":
-            out += _pergola(zona, _cota(cubiertas[zona["cubierta_ref"]]), planos[zid])
+            muros = [Polygon(c["contorno_mm"]) for c in viv["cubiertas"] if _cota(c) > cota_min]
+            out += _pergola(zona, _cota(cubiertas[zona["cubierta_ref"]]), planos[zid], muros)
 
     for e in proyecto["equipos"]:
         comp = biblioteca[e["componente_ref"]]
@@ -149,6 +153,12 @@ def elementos(
         elif "ubicacion_mm" in e and entrada_electrica:
             out.append(_equipo(e, comp, entrada_electrica))
 
+    if entrada_electrica and "muro_equipos" in entrada_electrica:
+        out.append(muro(entrada_electrica["muro_equipos"], viv["cubiertas"]))
+    if entrada_electrica and "buitron" in entrada_electrica:
+        out.append(
+            buitron(entrada_electrica["buitron"], entrada_electrica["rumbo_muro_equipos_deg"])
+        )
     if entrada_electrica and "tablero-fv" in entrada_electrica.get("ubicaciones", {}):
         t = entrada_electrica["tablero_fv"]
         ub = entrada_electrica["ubicaciones"]["tablero-fv"]
@@ -193,32 +203,126 @@ def _equipo(e: dict[str, Any], comp: dict[str, Any], entrada: dict[str, Any]) ->
     )
 
 
-def _pergola(zona: dict[str, Any], z_piso: float, z_plano) -> list[Elemento]:
-    """Columnas en las esquinas hasta el plano de los módulos y vigas perimetrales."""
-    s = SECCION_PERFIL_MM
-    pts = zona["contorno_mm"]
-    out = []
-    for i, (x, y) in enumerate(pts):
-        z_top = z_plano(x, y)
-        col = trimesh.creation.box(extents=(s, s, z_top - z_piso)).apply_translation(
-            (x, y, (z_top + z_piso) / 2)
-        )
+def _viga(p0, p1, ancho: float, alto: float) -> trimesh.Trimesh:
+    """Viga de sección ancho × alto entre dos puntos 3D (el alto queda vertical)."""
+    p0, p1 = np.asarray(p0, float), np.asarray(p1, float)
+    largo = float(np.linalg.norm(p1 - p0))
+    eje = (p1 - p0) / largo
+    caja = trimesh.creation.box(extents=(largo, ancho, alto))
+    horizontal = np.array([eje[0], eje[1], 0.0])
+    giro = math.atan2(horizontal[1], horizontal[0])
+    pendiente = math.asin(max(-1.0, min(1.0, eje[2])))
+    caja.apply_transform(trimesh.transformations.rotation_matrix(-pendiente, (0, 1, 0)))
+    caja.apply_transform(trimesh.transformations.rotation_matrix(giro, (0, 0, 1)))
+    return caja.apply_translation((p0 + p1) / 2)
+
+
+def _pergola(zona: dict[str, Any], z_piso: float, z_plano, muros: list[Polygon]) -> list[Elemento]:
+    """Pérgola de madera esquemática.
+
+    - Lados contra un muro (a menos de 50 mm de un volumen elevado): viga durmiente anclada al
+      muro, sin columnas.
+    - Lados libres: columnas de 150 × 150 mm donde se juntan dos lados libres y a mitad de los
+      lados libres de más de 5 m.
+    - Vigas perimetrales de 100 × 250 mm y correas de 75 × 150 mm bajo cada borde de fila de
+      módulos, en la dirección de las filas.
+    """
+    col, viga_a, viga_h, cor_a, cor_h = 150, 100, 250, 75, 150
+    pts = [np.array(p, float) for p in zona["contorno_mm"]]
+    n = len(pts)
+    adosado = []
+    for i in range(n):
+        medio = (pts[i] + pts[(i + 1) % n]) / 2
+        adosado.append(any(m.exterior.distance(Point(*medio)) < 50 for m in muros))
+    props = {"material": "madera", "es_esquematico": True}
+    out: list[Elemento] = []
+
+    # Columnas en los vértices que tocan algún lado libre, y a mitad de los lados libres largos.
+    apoyos = []
+    for i in range(n):
+        if not adosado[i - 1] and not adosado[i]:
+            apoyos.append(pts[i])
+        a, b = pts[i], pts[(i + 1) % n]
+        if not adosado[i] and np.linalg.norm(b - a) > 5000:
+            apoyos.append((a + b) / 2)
+    # Las columnas se meten hacia adentro media sección para no salirse de la zona.
+    centro = np.mean(pts, axis=0)
+    for k, p in enumerate(apoyos):
+        q = p + (centro - p) / np.linalg.norm(centro - p) * col * 0.75
+        z_top = z_plano(*q) - cor_h - viga_h / 2
+        caja = trimesh.creation.box(extents=(col, col, z_top - z_piso))
         out.append(
-            Elemento(f"{zona['id']}-columna-{i + 1}", "estructura", col, {"es_esquematico": True})
+            Elemento(
+                f"{zona['id']}-columna-{k + 1}",
+                "madera",
+                caja.apply_translation((q[0], q[1], (z_top + z_piso) / 2)),
+                props,
+            )
         )
-    for i in range(len(pts)):
-        a, b = np.array(pts[i], float), np.array(pts[(i + 1) % len(pts)], float)
-        za, zb = z_plano(*a) - s / 2, z_plano(*b) - s / 2
-        p0, p1 = np.array([*a, za]), np.array([*b, zb])
-        largo = float(np.linalg.norm(p1 - p0))
-        viga = trimesh.creation.box(extents=(largo, s, s))
-        eje = (p1 - p0) / largo
-        rot = trimesh.geometry.align_vectors((1, 0, 0), eje)
-        viga.apply_transform(rot).apply_translation((p0 + p1) / 2)
+
+    # Vigas perimetrales (durmiente en los lados contra el muro).
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        za = z_plano(*a) - cor_h - viga_h / 2
+        zb = z_plano(*b) - cor_h - viga_h / 2
+        nombre = "durmiente" if adosado[i] else "viga"
         out.append(
-            Elemento(f"{zona['id']}-viga-{i + 1}", "estructura", viga, {"es_esquematico": True})
+            Elemento(
+                f"{zona['id']}-{nombre}-{i + 1}",
+                "madera",
+                _viga((*a, za), (*b, zb), viga_a, viga_h),
+                props,
+            )
         )
+
+    # Correas en la dirección de las filas, en cada borde de fila de módulos.
+    u, v, _ = ejes(zona)
+    us = [p[0] * u[0] + p[1] * u[1] for p in pts]
+    vs = [p[0] * v[0] + p[1] * v[1] for p in pts]
+    paso = 2290  # largo inclinado de una fila de módulos verticales (≈ 2269 + separación)
+    vv = min(vs)
+    k = 0
+    while vv <= max(vs) + 1:
+        a = np.array(u) * min(us) + np.array(v) * vv
+        b = np.array(u) * max(us) + np.array(v) * vv
+        za, zb = z_plano(*a) - cor_h / 2, z_plano(*b) - cor_h / 2
+        k += 1
+        out.append(
+            Elemento(
+                f"{zona['id']}-correa-{k}", "madera", _viga((*a, za), (*b, zb), cor_a, cor_h), props
+            )
+        )
+        vv += paso
     return out
+
+
+def muro(datos: dict[str, Any], cubiertas: list[dict[str, Any]]) -> Elemento:
+    """Muro sobre un borde de la cubierta, con el espesor hacia afuera de ella."""
+    a, b = np.array(datos["de"], float), np.array(datos["a"], float)
+    d = (b - a) / np.linalg.norm(b - a)
+    n = np.array([-d[1], d[0]])
+    medio = (a + b) / 2
+    if any(Polygon(c["contorno_mm"]).contains(Point(*(medio + n * 10))) for c in cubiertas):
+        n = -n  # el espesor va hacia afuera de las cubiertas
+    e = datos["espesor_mm"]
+    contorno = [a, b, b + n * e, a + n * e]
+    return Elemento(
+        "muro-equipos",
+        "muro",
+        _prisma([list(p) for p in contorno], 0, datos["alto_mm"]),
+        {"descripcion": "Muro de los equipos", "es_supuesto": datos.get("es_supuesto", True)},
+    )
+
+
+def buitron(datos: dict[str, Any], rumbo_deg: float) -> Elemento:
+    caja = _caja(datos["ancho_mm"], datos["profundidad_mm"], datos["alto_mm"])
+    malla = _colocar(caja, (*datos["punto"], datos["z_mm"] + datos["alto_mm"] / 2), rumbo_deg)
+    return Elemento(
+        "buitron-01",
+        "buitron",
+        malla,
+        {"descripcion": "Buitrón del cableado al tablero existente", "es_supuesto": True},
+    )
 
 
 def escena(elems: list[Elemento]) -> trimesh.Scene:

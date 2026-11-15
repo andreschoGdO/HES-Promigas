@@ -6,31 +6,48 @@
     "sistemas_en_paralelo": 1
   },
   "medidor": "star-dtsy23s",
-  "ubicacion_texto": "Muro de 2,31 m de la terraza alta, desde la esquina interior, bajo la pérgola",
+  "ubicacion_texto": "Muro del costado izquierdo (2,31 m) visto de frente desde la terraza baja, junto a la pérgola",
   "ubicaciones": {
     "bateria-01": {
-      "punto": [14427, 9498],
+      "punto": [9789, 14912],
       "z_mm": 0,
       "es_supuesto": true
     },
     "inversor-01": {
-      "punto": [13939, 10075],
+      "punto": [9090, 15331],
       "z_mm": 1500,
       "es_supuesto": true
     },
     "tablero-fv": {
-      "punto": [13510, 10628],
+      "punto": [8590, 15663],
       "z_mm": 1400,
       "es_supuesto": true
     }
   },
   "rumbo_edificio_deg": 50.8,
-  "nota": "Muro de 2,31 m (usuario). Distribución según las fotos de obra del usuario, desde la esquina interior: batería BHF en el piso (0,06–0,93 m), inversor (0,95–1,55 m, centro a 1,5 m de altura), tablero FV (1,75–2,15 m). Posiciones exactas SUPUESTAS.",
+  "nota": "Equipos en el muro del costado izquierdo (usuario), medido 2,31 m (2,44 m en el trazado de Maps). Distribución según las fotos de obra, desde la esquina con la terraza alta: batería en el piso (0,10–0,97 m), inversor (1,05–1,65 m, centro a 1,5 m de altura), tablero FV (1,75–2,15 m). El cableado al tablero existente baja por el buitrón. Posiciones exactas SUPUESTAS.",
   "tablero_fv": {
     "ancho_mm": 400,
     "alto_mm": 800,
     "profundidad_mm": 200,
     "nota": "Medidas SUPUESTAS (tablero FV de 80 × 40 × 20 cm del unifilar de referencia). Contiene el contactor (ATS) y el medidor."
   },
-  "rumbo_muro_equipos_deg": 320.8
+  "rumbo_muro_equipos_deg": 301.9,
+  "buitron": {
+    "punto": [8272, 15540],
+    "z_mm": 0,
+    "es_supuesto": true,
+    "ancho_mm": 600,
+    "profundidad_mm": 600,
+    "alto_mm": 2400,
+    "nota": "Buitrón por donde baja el cableado al tablero existente (fotos del usuario). Posición y medidas SUPUESTAS: 0,6 × 0,6 × 2,4 m en la esquina del extremo izquierdo del muro de equipos."
+  },
+  "muro_equipos": {
+    "de": [10304, 14727],
+    "a": [8233, 16014],
+    "alto_mm": 3000,
+    "espesor_mm": 150,
+    "es_supuesto": true,
+    "nota": "Muro del costado izquierdo donde van los equipos; altura SUPUESTA de 3,0 m (fotos)."
+  }
 }

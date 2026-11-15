@@ -1,0 +1,43 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "huawei-smartguard-63a-s0",
+  "tipo": "conmutacion",
+  "es_ejemplo": false,
+  "fabricante": "Huawei",
+  "modelo": "SmartGuard-63A-S0",
+  "fuente": {
+    "documento": "SmartGuard-63A-S0 — Technical Specifications (Preliminary)",
+    "revision": "Version No.: 04-202311",
+    "fecha_consulta": "2026-11-15",
+    "archivo": "library/fichas/huawei/huawei-smartguard-63a-s0.pdf",
+    "paginas": "2"
+  },
+  "dimensiones": {
+    "ancho_mm": 485,
+    "alto_mm": 150,
+    "profundidad_mm": 355,
+    "peso_kg": 14,
+    "nota": "La ficha da el peso como ≤14 kg"
+  },
+  "ambiente": {
+    "grado_proteccion": "IP55",
+    "temperatura_operacion_min_c": -25,
+    "temperatura_operacion_max_c": 50,
+    "altitud_max_m": 4000,
+    "altitud_sin_reduccion_m": 2000
+  },
+  "electrico": {
+    "tipo_conmutacion": "smartguard",
+    "tensiones_nominales_ac_v": [220, 230, 240],
+    "conexion_red": "L/N+PE",
+    "corriente_max_red_a": 63,
+    "corriente_max_inversor_a": 60,
+    "corriente_max_carga_respaldo_a": 63,
+    "corriente_max_carga_sin_respaldo_a": 63,
+    "tiempo_conmutacion_ms": 20,
+    "modo_bypass": "manual",
+    "autoconsumo_w": 10,
+    "inversores_compatibles": ["SUN2000-2-6KTL-L1", "SUN2000-8-10K-LC0"]
+  },
+  "notas": "FICHA PRELIMINAR (marca de agua 'Preliminary'): confirmar con Huawei la versión definitiva. Conmutación ≤20 ms en modo Seamless. La suma de corrientes de las salidas con y sin respaldo no puede pasar de 63 A. Reducción de corriente por temperatura (en red: de 63 A a 50 A entre 30 y 40 °C y de 50 A a 40 A entre 40 y 50 °C). EMMA integrado; medición de energía ±1 %."
+}

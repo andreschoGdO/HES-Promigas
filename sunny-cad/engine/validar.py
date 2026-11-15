@@ -9,6 +9,9 @@ esquemas JSON y aplica comprobaciones que JSON Schema no puede expresar:
 - los contornos son polígonos válidos y los obstáculos quedan dentro de su cubierta;
 - un proyecto real (``es_ejemplo: false``) no usa componentes de ejemplo;
 - cada batería indica una configuración (número de módulos) que existe en su ficha;
+- la tipología (T1/T2) corresponde a las fases del inversor;
+- cada batería es compatible con el inversor según las fichas;
+- los datos de cada componente son coherentes (``engine.biblioteca``);
 - si existe ``projects/<vivienda>/privado/datos_privados.json``, cumple su esquema.
 
 Uso::
@@ -27,6 +30,12 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 from shapely.geometry import Polygon
+
+from engine.biblioteca import (
+    FASES_POR_TIPOLOGIA,
+    coherencia_componente,
+    compatibilidad_inversor_bateria,
+)
 
 RAIZ = Path(__file__).resolve().parent.parent
 DIR_ESQUEMAS = RAIZ / "engine" / "esquemas"
@@ -62,6 +71,9 @@ def cargar_biblioteca(dir_biblioteca: Path = DIR_BIBLIOTECA) -> dict[str, dict[s
 
 def validar_componente(datos: Any, ruta: Path | None = None) -> list[str]:
     errores = errores_esquema(datos, "componente")
+    if errores:
+        return errores
+    errores += coherencia_componente(datos, RAIZ)
     if ruta is not None and isinstance(datos, dict) and datos.get("id") != ruta.stem:
         errores.append(f"id: '{datos.get('id')}' no coincide con el archivo '{ruta.name}'")
     return errores
@@ -129,6 +141,32 @@ def validar_proyecto(
                 f"de ejemplo '{componente['id']}'"
             )
         errores += _errores_configuracion(equipo, componente, donde)
+    if not errores:
+        errores += _errores_sistema(datos, biblioteca)
+    return errores
+
+
+def _errores_sistema(datos: dict[str, Any], biblioteca: dict[str, dict[str, Any]]) -> list[str]:
+    """Reglas entre equipos: tipología vs fases del inversor y compatibilidad inversor-batería."""
+    errores: list[str] = []
+    tipologia = datos["sistema"]["tipologia"]
+    inversores = [
+        (e, biblioteca[e["componente_ref"]]) for e in datos["equipos"] if e["tipo"] == "inversor"
+    ]
+    baterias = [
+        (e, biblioteca[e["componente_ref"]]) for e in datos["equipos"] if e["tipo"] == "bateria"
+    ]
+    for equipo, inversor in inversores:
+        fases = inversor["electrico"]["fases"]
+        if fases not in FASES_POR_TIPOLOGIA[tipologia]:
+            errores.append(
+                f"{equipo['id']}: un inversor {fases} no corresponde a la tipología {tipologia}"
+            )
+        for equipo_bat, bateria in baterias:
+            for problema in compatibilidad_inversor_bateria(
+                inversor, bateria, equipo_bat["configuracion"]
+            ):
+                errores.append(f"{equipo['id']} + {equipo_bat['id']}: {problema}")
     return errores
 
 

@@ -1,0 +1,58 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "huawei-luna2000-s1",
+  "tipo": "bateria",
+  "es_ejemplo": false,
+  "fabricante": "Huawei",
+  "modelo": "LUNA2000-7/14/21-S1",
+  "fuente": {
+    "documento": "Smart String Energy Storage System LUNA2000-7/14/21-S1 — Technical Specification",
+    "revision": "Version No.: 01-202401",
+    "fecha_consulta": "2026-11-15",
+    "archivo": "library/fichas/huawei/huawei-luna2000-s1.pdf",
+    "paginas": "2"
+  },
+  "ambiente": {
+    "grado_proteccion": "IP66",
+    "temperatura_operacion_min_c": -20,
+    "temperatura_operacion_max_c": 55,
+    "altitud_max_m": 4000,
+    "altitud_sin_reduccion_m": 2000,
+    "instalacion": "interior_exterior"
+  },
+  "electrico": {
+    "tecnologia": "lfp",
+    "nivel_tension": "alta",
+    "tiene_bms": true,
+    "profundidad_descarga_pct": 100,
+    "rangos_tension": [
+      { "aplicacion": "sistema_monofasico", "min_v": 350, "max_v": 560 },
+      { "aplicacion": "sistema_trifasico", "min_v": 600, "max_v": 980 }
+    ],
+    "modulo_bateria": {
+      "modelo": "LUNA2000-7-E1",
+      "energia_kwh": 6.9,
+      "dimensiones": { "ancho_mm": 590, "alto_mm": 360, "profundidad_mm": 255, "peso_kg": 68 }
+    },
+    "partes": [
+      {
+        "modelo": "LUNA2000-10KW-C1",
+        "funcion": "modulo_potencia",
+        "cantidad_por_sistema": 1,
+        "dimensiones": { "ancho_mm": 590, "alto_mm": 150, "profundidad_mm": 255, "peso_kg": 10 }
+      }
+    ],
+    "configuraciones": [
+      { "id": "m1", "modelo_comercial": "LUNA2000-7-S1", "modulos_bateria": 1, "energia_util_kwh": 6.9,
+        "potencia_max_carga_w": 3500, "potencia_max_descarga_w": 3500,
+        "dimensiones": { "ancho_mm": 590, "alto_mm": 510, "profundidad_mm": 255, "peso_kg": 80 } },
+      { "id": "m2", "modelo_comercial": "LUNA2000-14-S1", "modulos_bateria": 2, "energia_util_kwh": 13.8,
+        "potencia_max_carga_w": 7000, "potencia_max_descarga_w": 7000,
+        "dimensiones": { "ancho_mm": 590, "alto_mm": 870, "profundidad_mm": 255, "peso_kg": 148 } },
+      { "id": "m3", "modelo_comercial": "LUNA2000-21-S1", "modulos_bateria": 3, "energia_util_kwh": 20.7,
+        "potencia_max_carga_w": 10500, "potencia_max_descarga_w": 10500,
+        "dimensiones": { "ancho_mm": 590, "alto_mm": 1230, "profundidad_mm": 255, "peso_kg": 216 } }
+    ]
+  },
+  "notas": "Energía útil al 100 % de profundidad de descarga (0,2C, 25 °C, inicio de vida). Pesos de configuración con kit de piso incluido; peso del módulo de batería con tolerancia ±3 %. Instalación: piso (estándar) o muro (opcional); se recomienda exterior. Máximo 4 sistemas en paralelo solo con SUN2000-12/15/17/20/25K-MB0. Nota 9 de la ficha: la fecha de compatibilidad con SUN2000-8/10K-LC0 debe confirmarse con Huawei. Comunicación RS485/FE/CAN."
+}

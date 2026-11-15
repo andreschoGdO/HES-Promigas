@@ -28,10 +28,10 @@ renders y planos PDF con el cajetín corporativo.
 
 ## Contexto técnico del proyecto Sunny
 - Sistemas fotovoltaicos con almacenamiento (BESS) en viviendas en Colombia.
-- Tipologías estándar: T1 bifásica (inversor híbrido bifásico con batería de baja tensión) y T2 trifásica (inversor híbrido trifásico con batería de alta tensión).
+- Tipologías estándar: T1 bifásica (inversor híbrido bifásico, o monofásico conectado entre dos fases como el Huawei SUN2000-LC0) y T2 trifásica (inversor híbrido trifásico). El nivel de tensión de la batería lo define el inversor: los equipos del piloto (LUNA2000, DEYE GB-L) son de alta tensión.
 - Arquitecturas: inversor en serie (toda la carga pasa por el inversor) e inversor en paralelo (la carga se alimenta de la red y el inversor entra en respaldo). En serie con punto único de falla exige BYPASS o ATS; en paralelo el ATS (o SmartGuard en Huawei) es indispensable.
 - Bloques mínimos de toda instalación: generación FV, inversor híbrido, BESS con BMS, punto de conexión común (PCC) accesible, CT o medidor bidireccional en el PCC, tablero de cargas críticas (EPS) o respaldo total, monitoreo.
-- Equipos de referencia del piloto: baterías Huawei LUNA2000, SmartLogger, plataforma FusionSolar. Completar la lista de módulos con las fichas que entregue el usuario.
+- Equipos de referencia del piloto: inversores Huawei SUN2000-10K-LC0 y DEYE SUN-15K-SG01HP3-US-AM2, baterías Huawei LUNA2000-7/14/21-S1 y DEYE GB-L, Huawei SmartGuard-63A-S0, módulo JA Solar JAM72D40-595/MB, plataforma FusionSolar. No se usa SmartLogger: el monitoreo en el PCC es un medidor de riel DIN dentro del tablero (ficha pendiente).
 - Normativa de referencia: RETIE y NTC 2050. No inventar requisitos normativos: si falta un dato, preguntar.
 
 ## Reglas de trabajo para Claude
@@ -53,3 +53,12 @@ renders y planos PDF con el cajetín corporativo.
 8. Edición por lenguaje natural con aprobación
 9. Interfaz web
 10. Piloto y validación
+
+## Decisiones confirmadas por el usuario
+- El proyecto vive en la carpeta `sunny-cad/` del repositorio HES-Promigas.
+- Esquemas en `engine/esquemas/`; unidades en el nombre del campo (`_mm`, `_w`, `_deg`…).
+- Dimensiones de equipos como en las fichas: ancho × alto × profundidad.
+- Azimut desde el norte en sentido horario (180 = sur), indica hacia dónde cae el agua.
+- El tipo de cubierta (plana / inclinada) lo indica el usuario en cada vivienda.
+- Datos personales (cliente, ingeniero) solo en `projects/<vivienda>/privado/`, fuera de git.
+- En `library/fichas/` se guardan solo fichas técnicas, no manuales.

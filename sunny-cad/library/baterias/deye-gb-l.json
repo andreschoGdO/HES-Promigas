@@ -1,0 +1,64 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "deye-gb-l",
+  "tipo": "bateria",
+  "es_ejemplo": false,
+  "fabricante": "Ningbo Deye ESS Technology Co., Ltd.",
+  "modelo": "GB-L",
+  "fuente": {
+    "documento": "GB-L — Technical Data / System Components",
+    "revision": "sin revision",
+    "fecha_consulta": "2026-11-15",
+    "archivo": "library/fichas/deye/deye-gb-l.pdf",
+    "paginas": "2-3"
+  },
+  "ambiente": {
+    "grado_proteccion": "IP65",
+    "temperatura_operacion_min_c": -20,
+    "temperatura_operacion_max_c": 60,
+    "altitud_max_m": 2000
+  },
+  "electrico": {
+    "tecnologia": "lfp",
+    "nivel_tension": "alta",
+    "tiene_bms": true,
+    "profundidad_descarga_pct": 90,
+    "corriente_nominal_a": 40,
+    "corriente_pico_descarga_a": 50,
+    "rangos_tension": [{ "aplicacion": "general", "min_v": 166.4, "max_v": 700 }],
+    "modulo_bateria": {
+      "modelo": "GB-LM4.0",
+      "energia_kwh": 4.09,
+      "tension_nominal_v": 102.4,
+      "capacidad_ah": 40,
+      "dimensiones": { "ancho_mm": 540, "alto_mm": 220, "profundidad_mm": 385, "peso_kg": 39 }
+    },
+    "partes": [
+      {
+        "modelo": "GB-LBS",
+        "funcion": "control_bms",
+        "cantidad_por_sistema": 1,
+        "dimensiones": { "ancho_mm": 540, "alto_mm": 110, "profundidad_mm": 385, "peso_kg": 12 }
+      },
+      {
+        "modelo": "GB-LBase",
+        "funcion": "base",
+        "cantidad_por_sistema": 1,
+        "dimensiones": { "ancho_mm": 540, "alto_mm": 100, "profundidad_mm": 385, "peso_kg": 7 }
+      }
+    ],
+    "configuraciones": [
+      { "id": "m2", "modulos_bateria": 2, "tension_nominal_v": 204.8, "energia_nominal_kwh": 8.18, "energia_util_kwh": 7.36,
+        "dimensiones": { "ancho_mm": 540, "alto_mm": 650, "profundidad_mm": 385, "peso_kg": 97 } },
+      { "id": "m3", "modulos_bateria": 3, "tension_nominal_v": 307.2, "energia_nominal_kwh": 12.27, "energia_util_kwh": 11.04,
+        "dimensiones": { "ancho_mm": 540, "alto_mm": 870, "profundidad_mm": 385, "peso_kg": 136 } },
+      { "id": "m4", "modulos_bateria": 4, "tension_nominal_v": 409.6, "energia_nominal_kwh": 16.36, "energia_util_kwh": 14.72,
+        "dimensiones": { "ancho_mm": 540, "alto_mm": 1090, "profundidad_mm": 385, "peso_kg": 175 } },
+      { "id": "m5", "modulos_bateria": 5, "tension_nominal_v": 512, "energia_nominal_kwh": 20.45, "energia_util_kwh": 18.40,
+        "dimensiones": { "ancho_mm": 540, "alto_mm": 1310, "profundidad_mm": 385, "peso_kg": 214 } },
+      { "id": "m6", "modulos_bateria": 6, "tension_nominal_v": 614.4, "energia_nominal_kwh": 24.56, "energia_util_kwh": 22.10,
+        "dimensiones": { "ancho_mm": 540, "alto_mm": 1530, "profundidad_mm": 385, "peso_kg": 253 } }
+    ]
+  },
+  "notas": "La ficha da las dimensiones como W/D/H; aquí se guardan como ancho × alto × profundidad. Temperatura: carga 0–55 °C, descarga −20–60 °C. Corriente recomendada 20 A, nominal 40 A, pico de descarga 50 A (2 min, 25 °C). Energía útil al 90 % de profundidad de descarga. BMS en la caja de control GB-LBS. Ciclos: ≥6000 (25 ± 2 °C, 0,5C/0,5C, EOL 70 %). Instalación en piso. Certificaciones de la ficha: CE, IEC 62619, VDE 2510-50, UL 1973, UL 9540A, UN38.3."
+}

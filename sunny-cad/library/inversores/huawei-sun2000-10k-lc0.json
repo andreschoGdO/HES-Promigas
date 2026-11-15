@@ -1,0 +1,63 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "huawei-sun2000-10k-lc0",
+  "tipo": "inversor",
+  "es_ejemplo": false,
+  "fabricante": "Huawei",
+  "modelo": "SUN2000-10K-LC0",
+  "fuente": {
+    "documento": "Smart Energy Controller SUN2000-8/10K-LC0 — Especificaciones Técnicas",
+    "revision": "Version No.: 01-202402",
+    "fecha_consulta": "2026-11-15",
+    "archivo": "library/fichas/huawei/huawei-sun2000-10k-lc0.pdf",
+    "paginas": "2"
+  },
+  "dimensiones": {
+    "ancho_mm": 425,
+    "alto_mm": 376.5,
+    "profundidad_mm": 150,
+    "peso_kg": 15,
+    "nota": "La ficha dice 'A x A x L' e incluye la placa de montaje"
+  },
+  "ambiente": {
+    "grado_proteccion": "IP66",
+    "temperatura_operacion_min_c": -25,
+    "temperatura_operacion_max_c": 60,
+    "altitud_max_m": 4000,
+    "altitud_sin_reduccion_m": 2000
+  },
+  "electrico": {
+    "tipo_inversor": "hibrido",
+    "fases": "monofasica",
+    "conexion_red": "L/N+PE",
+    "potencia_nominal_ac_w": 10000,
+    "potencia_aparente_max_va": 10000,
+    "tensiones_nominales_ac_v": [220, 230, 240],
+    "frecuencias_hz": [50, 60],
+    "corriente_max_salida_ac_a": 45.5,
+    "potencia_fv_max_conectable_w": 15000,
+    "numero_mppt": 3,
+    "entradas_fv_totales": 3,
+    "tension_max_dc_v": 600,
+    "tension_arranque_v": 50,
+    "tension_nominal_dc_v": 360,
+    "rango_mppt": { "min_v": 40, "max_v": 560 },
+    "corriente_max_entrada_por_mppt_a": 16,
+    "corriente_max_cortocircuito_por_mppt_a": 20,
+    "eficiencia_max_pct": 98.1,
+    "eficiencia_europea_pct": 97.5,
+    "bateria": {
+      "nivel_tension": "alta",
+      "rango_tension": { "min_v": 350, "max_v": 560 },
+      "corriente_max_carga_a": 25,
+      "corriente_max_descarga_a": 25,
+      "potencia_max_carga_w": 10000,
+      "potencia_max_descarga_w": 10000,
+      "baterias_compatibles": ["LUNA2000-5/10/15-S0", "LUNA2000-7/14/21-S1"]
+    },
+    "respaldo": {
+      "equipo_externo_requerido": "SmartGuard-63A-S0"
+    }
+  },
+  "notas": "Inversor monofásico (L/N). En el proyecto Sunny se usa en viviendas bifásicas (T1), conectado entre dos fases a 240 V. Potencia FV conectable = 'Potencia FV máxima recomendada' (15 000 Wp). Corriente de batería = 'corriente de operación máx' (25 A). Compatible con optimizadores SUN2000-450W-P2 y SUN2000-600W-P. Comunicación: WLAN integrada + FusionSolar; RS485; Smart Dongle opcional; EMMA."
+}

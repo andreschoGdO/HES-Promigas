@@ -44,6 +44,10 @@
       }
     },
     {
+      "if": { "properties": { "tipo": { "const": "conmutacion" } } },
+      "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_conmutacion" } } }
+    },
+    {
       "if": { "properties": { "tipo": { "const": "bateria" } } },
       "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_bateria" } } },
       "else": { "required": ["dimensiones"] }
@@ -145,11 +149,11 @@
         "vmp_v": { "$ref": "#/$defs/positivo" },
         "imp_a": { "$ref": "#/$defs/positivo" },
         "eficiencia_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
-        "tolerancia_potencia_w": {
+        "tolerancia_potencia_pct": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["min_w", "max_w"],
-          "properties": { "min_w": { "type": "number" }, "max_w": { "type": "number" } }
+          "required": ["min_pct", "max_pct"],
+          "properties": { "min_pct": { "type": "number" }, "max_pct": { "type": "number" } }
         },
         "coef_temp_voc_pct_c": { "type": "number" },
         "coef_temp_isc_pct_c": { "type": "number" },
@@ -257,6 +261,32 @@
       },
       "if": { "properties": { "tipo_inversor": { "const": "hibrido" } } },
       "then": { "required": ["bateria"] }
+    },
+    "electrico_conmutacion": {
+      "description": "Equipos de conmutación red/respaldo: ATS, bypass, SmartGuard.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tipo_conmutacion", "tensiones_nominales_ac_v", "conexion_red", "corriente_max_red_a"],
+      "properties": {
+        "tipo_conmutacion": { "enum": ["ats", "bypass", "smartguard"] },
+        "tensiones_nominales_ac_v": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/positivo" }
+        },
+        "conexion_red": { "type": "string", "minLength": 1 },
+        "corriente_max_red_a": { "$ref": "#/$defs/positivo" },
+        "corriente_max_inversor_a": { "$ref": "#/$defs/positivo" },
+        "corriente_max_carga_respaldo_a": { "$ref": "#/$defs/positivo" },
+        "corriente_max_carga_sin_respaldo_a": { "$ref": "#/$defs/positivo" },
+        "tiempo_conmutacion_ms": { "$ref": "#/$defs/no_negativo" },
+        "modo_bypass": { "enum": ["manual", "automatico", "no_tiene"] },
+        "autoconsumo_w": { "$ref": "#/$defs/no_negativo" },
+        "inversores_compatibles": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
     },
     "electrico_bateria": {
       "description": "Familia de batería modular. Los datos que dependen del número de módulos van en 'configuraciones', una por columna de la ficha.",

@@ -1,0 +1,58 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "deye-sun-15k-sg01hp3-us-am2",
+  "tipo": "inversor",
+  "es_ejemplo": false,
+  "fabricante": "Ningbo Deye Inverter Technology Co., Ltd.",
+  "modelo": "SUN-15K-SG01HP3-US-AM2",
+  "fuente": {
+    "documento": "Three Phase Hybrid Inverter SUN-8/10/12/15K-SG01HP3-US-AM2 — Technical Data",
+    "revision": "sin revision",
+    "fecha_consulta": "2026-11-15",
+    "archivo": "library/fichas/deye/deye-sun-15k-sg01hp3-us-am2.pdf",
+    "paginas": "2"
+  },
+  "dimensiones": {
+    "ancho_mm": 408,
+    "alto_mm": 678,
+    "profundidad_mm": 247,
+    "peso_kg": 31.5,
+    "nota": "Cabinet Size (W×H×D), sin conectores ni soportes"
+  },
+  "ambiente": {
+    "grado_proteccion": "TYPE3R",
+    "temperatura_operacion_min_c": -40,
+    "temperatura_operacion_max_c": 60,
+    "altitud_max_m": 2000
+  },
+  "electrico": {
+    "tipo_inversor": "hibrido",
+    "fases": "trifasica",
+    "conexion_red": "3L+N+PE",
+    "potencia_nominal_ac_w": 15000,
+    "potencia_aparente_max_va": 15000,
+    "tensiones_nominales_ac_v": [208],
+    "frecuencias_hz": [60],
+    "corriente_max_salida_ac_a": 41.7,
+    "corriente_max_paso_red_a": 80,
+    "potencia_max_entrada_fv_w": 22500,
+    "potencia_fv_max_conectable_w": 30000,
+    "numero_mppt": 2,
+    "entradas_fv_totales": 4,
+    "tension_max_dc_v": 550,
+    "tension_arranque_v": 180,
+    "tension_nominal_dc_v": 380,
+    "rango_mppt": { "min_v": 150, "max_v": 500 },
+    "corriente_max_entrada_por_mppt_a": 26,
+    "corriente_max_cortocircuito_por_mppt_a": 39,
+    "eficiencia_max_pct": 97.6,
+    "eficiencia_europea_pct": 97.0,
+    "bateria": {
+      "nivel_tension": "alta",
+      "rango_tension": { "min_v": 160, "max_v": 500 },
+      "corriente_max_carga_a": 50,
+      "corriente_max_descarga_a": 50
+    }
+  },
+  "notas": "Red 120/208 V (Un = 208 V línea, rango 0,85–1,1 Un); frecuencia 60 Hz (rango 55–65). 2 MPPT con 2 strings cada uno (2/2+2). Pico fuera de red: 1,5 veces la potencia nominal durante 10 s. Temperatura: reducción de potencia por encima de 45 °C. Normas de la ficha: IEEE 1547.1, SRD V2.0, FCC, UL 1741."
+}

@@ -130,7 +130,12 @@ def test_regla_arquitectura_conmutacion(
 
 @pytest.mark.parametrize(
     ("tipologia", "fases", "valido"),
-    [("T1", "bifasica", True), ("T1", "trifasica", False), ("T2", "trifasica", True)],
+    [
+        ("T1", "bifasica", True),
+        ("T1", "trifasica", False),
+        # El inversor de ejemplo es bifásico: no sirve para T2 aunque la red sea trifásica.
+        ("T2", "trifasica", False),
+    ],
 )
 def test_regla_tipologia_fases(
     proyecto: dict[str, Any], biblioteca: dict, tipologia: str, fases: str, valido: bool
@@ -205,7 +210,7 @@ def _bateria_ficticia() -> dict[str, Any]:
         },
         "electrico": {
             "tecnologia": "lfp",
-            "nivel_tension": "alta",
+            "nivel_tension": "baja",
             "tiene_bms": True,
             "modulo_bateria": {"modelo": "MOD-EJEMPLO", "energia_kwh": 5, "dimensiones": dims},
             "partes": [

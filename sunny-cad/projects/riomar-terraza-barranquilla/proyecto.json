@@ -107,11 +107,11 @@
       "tipo": "inversor",
       "componente_ref": "livoltek-hp3-15kl2",
       "ubicacion_mm": {
-        "punto": [9090, 15331],
+        "punto": [8973, 15404],
         "z_mm": 1500,
         "es_supuesto": true
       },
-      "ubicacion_texto": "Muro del costado izquierdo (2,31 m) visto de frente desde la terraza baja, junto a la pérgola"
+      "ubicacion_texto": "Muro del costado izquierdo de la terraza alta (2,31 m), entre la esquina interior y el buitrón"
     },
     {
       "id": "bateria-01",
@@ -120,17 +120,17 @@
       "configuracion": "s15",
       "sistemas_en_paralelo": 1,
       "ubicacion_mm": {
-        "punto": [9789, 14912],
+        "punto": [9689, 14975],
         "z_mm": 0,
         "es_supuesto": true
       },
-      "ubicacion_texto": "Muro del costado izquierdo (2,31 m) visto de frente desde la terraza baja, junto a la pérgola"
+      "ubicacion_texto": "Muro del costado izquierdo de la terraza alta (2,31 m), entre la esquina interior y el buitrón"
     },
     {
       "id": "medidor-01",
       "tipo": "medidor",
       "componente_ref": "star-dtsy23s",
-      "ubicacion_texto": "Muro del costado izquierdo (2,31 m) visto de frente desde la terraza baja, junto a la pérgola"
+      "ubicacion_texto": "Muro del costado izquierdo de la terraza alta (2,31 m), entre la esquina interior y el buitrón"
     },
     {
       "id": "modulo-001",
@@ -378,7 +378,7 @@
     "zona-02/altura_estructura_mm: altura del borde bajo de los módulos sobre la cubierta (mm)",
     "equipos: capacidad del totalizador y demanda de la vivienda (en serie toda la carga pasa por el inversor: máx. 23 kW de entrada AC)",
     "equipos: longitud del recorrido por el buitrón hasta el tablero existente (pisos que baja)",
-    "equipos: confirmar posición y medidas del buitrón"
+    "equipos: ancho del buitrón a lo largo del muro (supuesto 40 cm)"
   ],
   "condiciones_diseno": {
     "temperatura_min_c": 15,

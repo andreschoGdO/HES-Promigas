@@ -114,12 +114,16 @@ def dibujar(
         lam.texto(((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 - 2), modelo, 1.8, "TEXTO", "centro")
         filas.append((s0, s1, z0, z1, e))
 
-    # Cotas horizontales (posición desde la esquina con la terraza alta) y verticales (alturas)
+    # Cotas horizontales (posición desde la esquina interior, a la izquierda) y verticales (alturas)
     for i, (s0, s1, z0, z1, _e) in enumerate(sorted(filas, key=lambda f: f[0])):
         ya = oy - 8 - i * 6
         _cota_h(lam, px(s1, 0)[0], px(s0, 0)[0], ya, f"{(s1 - s0) / 1000:.2f}")
         lam.texto(
-            (px(s1, 0)[0] - 1, ya - 3.5), f"a {s0 / 1000:.2f} m de la esquina", 1.6, "NOTA", "der"
+            (px(s1, 0)[0] - 1, ya - 3.5),
+            f"a {(largo - s1) / 1000:.2f} m de la esquina interior",
+            1.6,
+            "NOTA",
+            "der",
         )
         xv = px(s0, 0)[0] + 3 + (i % 2) * 5
         if z0 > 1:
@@ -134,7 +138,7 @@ def dibujar(
         "1. Cotas en metros. Medidas de los equipos según su ficha técnica (biblioteca).",
         f"2. Muro medido en obra: 2,31 m; en el trazado de Maps: {largo / 1000:.2f} m.",
         "3. Posiciones, altura del muro y buitrón son SUPUESTOS a confirmar en obra.",
-        "4. DC de los strings llega desde la pérgola; AC al tablero existente baja por el buitrón.",
+        "4. DC de los strings llega desde la pérgola; AC al tablero existente baja por el buitrón (h = 1,70 m).",
         "5. Distancias de trabajo y alturas de montaje: verificar según RETIE y el fabricante.",
     ]
     for i, t in enumerate(notas):

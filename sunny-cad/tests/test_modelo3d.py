@@ -148,8 +148,17 @@ def test_muro_y_buitron_en_el_modelo(elems) -> None:
 
 
 def test_sin_choques_3d_entre_equipos(elems) -> None:
-    """Dos elementos chocan si sus huellas en planta se cruzan y sus alturas se solapan."""
-    from shapely.geometry import MultiPoint
+    """Dos elementos chocan si sus huellas se cruzan y, en esa zona, sus alturas se solapan.
+
+    La altura se toma de los vértices cercanos al cruce: así una viga inclinada se evalúa a la
+    altura que tiene sobre el equipo, no con su rango completo.
+    """
+    from shapely.geometry import MultiPoint, Point
+
+    def z_local(e, zona):
+        cerca = zona.buffer(300)
+        zs = [v[2] for v in e.malla.vertices if cerca.contains(Point(v[0], v[1]))]
+        return (min(zs), max(zs)) if zs else (e.malla.bounds[0][2], e.malla.bounds[1][2])
 
     tipos = ("inversor", "bateria", "tablero", "buitron", "madera")
     sel = [e for e in elems if e.tipo in tipos]
@@ -159,7 +168,8 @@ def test_sin_choques_3d_entre_equipos(elems) -> None:
             if a.tipo == b.tipo == "madera":
                 continue  # las piezas de la pérgola se unen entre sí
             hb = MultiPoint(b.malla.vertices[:, :2].tolist()).convex_hull
-            z_solapa = min(a.malla.bounds[1][2], b.malla.bounds[1][2]) > max(
-                a.malla.bounds[0][2], b.malla.bounds[0][2]
-            )
-            assert not (ha.intersection(hb).area > 1 and z_solapa), (a.id, b.id)
+            cruce = ha.intersection(hb)
+            if cruce.area <= 1:
+                continue
+            (a0, a1), (b0, b1) = z_local(a, cruce), z_local(b, cruce)
+            assert min(a1, b1) <= max(a0, b0), (a.id, b.id, (a0, a1), (b0, b1))

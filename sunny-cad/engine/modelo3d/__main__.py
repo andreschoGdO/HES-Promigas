@@ -70,7 +70,7 @@ def vistas(
         out.append(
             {
                 "nombre": "equipos",
-                "camara": list(obj + 3.2 * frente + 0.8 * derecha + [0, 0, 1.3]),
+                "camara": list(obj + 3.4 * frente + 0.3 * derecha + [0, 0, 0.6]),
                 "objetivo": list(obj + 0.2 * derecha),
                 "lente_mm": 24,
             }

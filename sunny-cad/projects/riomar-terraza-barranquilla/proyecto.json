@@ -22,7 +22,7 @@
     "tipologia": "T2",
     "fases_red": "trifasica",
     "arquitectura": "serie",
-    "respaldo": null,
+    "respaldo": "respaldo_total",
     "conmutacion": "ats"
   },
   "vivienda": {
@@ -107,11 +107,11 @@
       "tipo": "inversor",
       "componente_ref": "livoltek-hp3-15kl2",
       "ubicacion_mm": {
-        "punto": [14080, 9867],
+        "punto": [13939, 10075],
         "z_mm": 1500,
         "es_supuesto": true
       },
-      "ubicacion_texto": "Muro de la terraza alta visto desde la terraza baja (fotos del usuario), bajo la pérgola"
+      "ubicacion_texto": "Muro de 2,31 m de la terraza alta, desde la esquina interior, bajo la pérgola"
     },
     {
       "id": "bateria-01",
@@ -120,22 +120,17 @@
       "configuracion": "s15",
       "sistemas_en_paralelo": 1,
       "ubicacion_mm": {
-        "punto": [13321, 10796],
+        "punto": [14427, 9498],
         "z_mm": 0,
         "es_supuesto": true
       },
-      "ubicacion_texto": "Muro de la terraza alta visto desde la terraza baja (fotos del usuario), bajo la pérgola"
+      "ubicacion_texto": "Muro de 2,31 m de la terraza alta, desde la esquina interior, bajo la pérgola"
     },
     {
       "id": "medidor-01",
       "tipo": "medidor",
       "componente_ref": "star-dtsy23s",
-      "ubicacion_mm": {
-        "punto": [12562, 11725],
-        "z_mm": 1500,
-        "es_supuesto": true
-      },
-      "ubicacion_texto": "Muro de la terraza alta visto desde la terraza baja (fotos del usuario), bajo la pérgola"
+      "ubicacion_texto": "Muro de 2,31 m de la terraza alta, desde la esquina interior, bajo la pérgola"
     },
     {
       "id": "modulo-001",
@@ -380,17 +375,15 @@
   ],
   "insumos": [],
   "informacion_faltante": [
-    "sistema/respaldo: alcance del respaldo (cargas críticas o respaldo total)",
     "zona-02/altura_estructura_mm: altura del borde bajo de los módulos sobre la cubierta (mm)",
-    "equipos: ficha técnica del ATS (no está en la biblioteca)",
     "equipos: capacidad del totalizador y demanda de la vivienda (en serie toda la carga pasa por el inversor: máx. 23 kW de entrada AC)",
-    "equipos: ubicación del tablero existente y longitud del circuito AC",
-    "equipos: confirmar la ubicación del inversor, la batería y los tableros en el muro de la terraza alta"
+    "equipos: ubicación del tablero existente y longitud del circuito desde el tablero FV"
   ],
   "condiciones_diseno": {
     "temperatura_min_c": 15,
     "temperatura_max_ambiente_c": 40,
-    "es_supuesto": true,
-    "fuente": "SUPUESTO conservador para Barranquilla (costa Caribe): confirmar con registros del IDEAM."
-  }
+    "es_supuesto": false,
+    "fuente": "Valores de diseño confirmados por el usuario (2026-11-15)."
+  },
+  "notas": "El ATS es un contactor dentro del tablero FV (usuario). Respaldo de toda la vivienda, inversor en serie. Inversor y almacenamiento definidos por el usuario."
 }

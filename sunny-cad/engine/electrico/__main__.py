@@ -197,12 +197,34 @@ def calcular(
         i_ac_req, criterios, amb, criterios["calibre_minimo_awg"]["ac"]
     )
     v_linea = min(inv_e["tensiones_nominales_ac_v"])
+    ub_tab = entrada["ubicaciones"].get("tablero-fv")
+    largo_tab = (
+        circuitos.longitud_ruta_m(
+            tuple(ub_inv["punto"]),
+            ub_inv["z_mm"],
+            tuple(ub_tab["punto"]),
+            ub_tab["z_mm"],
+            rumbo,
+            criterios,
+        )
+        if ub_tab
+        else None
+    )
     for cid, tramo, largo in (
-        ("AC-RED", "inversor (puerto red) → tablero / ATS", entrada.get("longitud_ac_red_m")),
+        (
+            "AC-RED",
+            "inversor (puerto red) → tablero FV (contactor / ATS)",
+            entrada.get("longitud_ac_red_m", largo_tab),
+        ),
         (
             "AC-CARGA",
-            "inversor (puerto respaldo) → tablero de cargas",
-            entrada.get("longitud_ac_carga_m"),
+            "inversor (puerto respaldo) → tablero FV",
+            entrada.get("longitud_ac_carga_m", largo_tab),
+        ),
+        (
+            "AC-EXISTENTE",
+            "tablero FV → tablero existente de la vivienda",
+            entrada.get("longitud_ac_existente_m"),
         ),
     ):
         circuitos_out.append(
@@ -212,7 +234,7 @@ def calcular(
                 "corriente_max_a": i_ac,
                 "corriente_requerida_conductor_a": round(i_ac_req, 2),
                 "calibre_awg": cal_ac,
-                "longitud_estimada_m": largo,
+                "longitud_estimada_m": round(largo, 1) if largo else None,
                 "tension_operacion_v": v_linea,
                 "caida_pct": round(
                     circuitos.caida_ac3f_pct(largo, i_ac, v_linea, cal_ac, criterios), 2

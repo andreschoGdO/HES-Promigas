@@ -11,3 +11,6 @@ projects/*/privado/
 
 # Propuestas de cambio pendientes de aprobación
 projects/*/proyecto.propuesta.json
+
+# Imágenes de verificación (se regeneran con los comandos)
+projects/*/salidas/verificacion_*

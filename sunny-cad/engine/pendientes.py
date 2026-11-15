@@ -35,6 +35,8 @@ def rutas_pendientes(proyecto: dict[str, Any]) -> list[str]:
         rutas.append("vivienda/cubiertas")
     for cubierta in cubiertas:
         for campo, valor in cubierta.items():
+            if campo == "azimut_deg" and cubierta.get("inclinacion_deg") == 0:
+                continue  # en una cubierta horizontal el azimut no aplica
             if valor is None:
                 rutas.append(f"{cubierta['id']}/{campo}")
         for obstaculo in cubierta.get("obstaculos", []):

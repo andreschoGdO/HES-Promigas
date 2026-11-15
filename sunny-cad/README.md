@@ -3,7 +3,7 @@
 Herramienta de diseño 3D y planos para sistemas solares residenciales con almacenamiento
 (proyecto Sunny). Las reglas y el plan por pasos están en [CLAUDE.md](CLAUDE.md).
 
-Estado: **Paso 3** — lectura de la vivienda desde fotos y Google Maps.
+Estado: **Paso 4** — distribución de módulos.
 
 ## Preparar el entorno
 
@@ -76,3 +76,25 @@ y llénalo. La carpeta `privado/` está en `.gitignore` y nunca se sube al repos
 
 Lo que no se ve en la imagen (inclinación, azimut, alturas, tipología…) queda en `null` y en
 `informacion_faltante`; el proyecto no puede salir de `borrador` mientras haya datos pendientes.
+
+### Escala con "Medir distancia" de Google Maps
+
+Lo más práctico: en Maps, clic derecho → *Medir distancia*, marcar el contorno de la terraza y
+capturar la pantalla con el área y la distancia total. En `lectura.json` se usa
+`"metodo": "poligono_medido"` con los vértices en píxeles, `area_m2` y `perimetro_m`. El área da la
+escala y el perímetro la comprueba (si difieren más de 2 %, la propuesta se rechaza).
+
+## Distribución de módulos (Paso 4)
+
+1. Escribir las zonas de instalación en `projects/<id>/insumos/zonas.json`: contorno en mm,
+   estructura (coplanar, pérgola…), inclinación, azimut, orientación del módulo, separación y retiro.
+2. Proponer y revisar `salidas/verificacion_distribucion.png`:
+
+   ```bash
+   python -m engine.distribucion proponer <id> --modulo ja-solar-jam72d40-595-mb
+   ```
+
+3. Aplicar con `--aplicar` cuando el usuario apruebe.
+
+Las filas quedan perpendiculares al azimut. Si el edificio está girado respecto al norte, mirar
+exactamente al sur puede dejar muchos menos módulos: conviene comparar con el azimut alineado.

@@ -147,6 +147,47 @@ def validar_proyecto(
         errores += _errores_configuracion(equipo, componente, donde)
     if not errores:
         errores += _errores_sistema(datos, biblioteca)
+        errores += _errores_distribucion(datos, biblioteca)
+    return errores
+
+
+def _errores_distribucion(
+    datos: dict[str, Any], biblioteca: dict[str, dict[str, Any]]
+) -> list[str]:
+    """Zonas dentro de su cubierta; módulos dentro de su zona y sin traslaparse."""
+    from engine.distribucion.colocacion import huella_poligono
+
+    errores: list[str] = []
+    cubiertas = {c["id"]: Polygon(c["contorno_mm"]) for c in datos["vivienda"]["cubiertas"]}
+    zonas = {z["id"]: z for z in datos["vivienda"].get("zonas_instalacion", [])}
+    for zid, z in zonas.items():
+        cub = cubiertas.get(z["cubierta_ref"])
+        if cub is None:
+            errores.append(f"{zid}/cubierta_ref: '{z['cubierta_ref']}' no existe")
+        elif not cub.buffer(1).covers(Polygon(z["contorno_mm"])):
+            errores.append(f"{zid}: la zona se sale de {z['cubierta_ref']}")
+    huellas = []
+    for e in datos["equipos"]:
+        col = e.get("colocacion")
+        if col is None:
+            continue
+        if e["tipo"] != "modulo":
+            errores.append(f"{e['id']}/colocacion: solo aplica a módulos")
+            continue
+        zona = zonas.get(col["zona_ref"])
+        if zona is None:
+            errores.append(f"{e['id']}/colocacion: la zona '{col['zona_ref']}' no existe")
+            continue
+        huella = Polygon(
+            huella_poligono(tuple(col["centro_mm"]), zona, biblioteca[e["componente_ref"]])
+        )
+        if not Polygon(zona["contorno_mm"]).buffer(2).covers(huella):
+            errores.append(f"{e['id']}: se sale de {zona['id']}")
+        huellas.append((e["id"], huella))
+    for i, (id_a, a) in enumerate(huellas):
+        for id_b, b in huellas[i + 1 :]:
+            if a.intersection(b).area > 100:  # > 1 cm² (redondeo de centros a mm)
+                errores.append(f"{id_a} y {id_b} se traslapan")
     return errores
 
 

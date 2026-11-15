@@ -9,22 +9,108 @@
   },
   "escala": {
     "metodo": "poligono_medido",
-    "contorno_px": [[231.0, 186.5], [255.3, 201.6], [300.0, 161.0], [353.0, 226.0], [308.4, 266.6], [322.4, 313.4], [236.0, 374.4], [134.4, 270.9]],
+    "contorno_px": [
+      [
+        231.0,
+        186.5
+      ],
+      [
+        255.3,
+        201.6
+      ],
+      [
+        300.0,
+        161.0
+      ],
+      [
+        353.0,
+        226.0
+      ],
+      [
+        308.4,
+        266.6
+      ],
+      [
+        322.4,
+        313.4
+      ],
+      [
+        236.0,
+        374.4
+      ],
+      [
+        134.4,
+        270.9
+      ]
+    ],
     "area_m2": 176.15,
     "perimetro_m": 56.39
   },
   "cubiertas": [
     {
       "id": "cubierta-01",
-      "contorno_px": [[231.0, 186.5], [255.3, 201.6], [300.0, 161.0], [353.0, 226.0], [308.4, 266.6], [322.4, 313.4], [236.0, 374.4], [134.4, 270.9]],
+      "contorno_px": [
+        [
+          231.0,
+          186.5
+        ],
+        [
+          255.3,
+          201.6
+        ],
+        [
+          308.4,
+          266.6
+        ],
+        [
+          322.4,
+          313.4
+        ],
+        [
+          236.0,
+          374.4
+        ],
+        [
+          134.4,
+          270.9
+        ]
+      ],
       "tipo": "plana",
-      "material": null,
+      "material": "losa_concreto",
       "cota_base_mm": null,
-      "inclinacion_deg": null,
+      "inclinacion_deg": 0,
       "azimut_deg": null,
       "obstaculos": [],
-      "observaciones": "Terraza indicada por el usuario con 'Medir distancia' de Maps (176,15 m², 56,39 m). Dentro del polígono se ven dos tonos: zona clara al oeste y un rectángulo más oscuro al noreste (posible cambio de nivel, acabado o cubierta liviana: confirmar con fotos). Edificio alto contiguo al noroeste: posible sombra en la tarde. Fuera del polígono, al este, hay tanques circulares y equipos."
+      "observaciones": "Terraza baja, piso 19 (usuario). Losa con impermeabilización asfáltica en parches (fotos). Pretil de ladrillo en el perímetro; muros de la terraza alta y de un cuarto técnico al norte. Sin sombras: edificio de 19 pisos (usuario). Aquí va la pérgola de 34 m²."
+    },
+    {
+      "id": "cubierta-02",
+      "contorno_px": [
+        [
+          255.3,
+          201.6
+        ],
+        [
+          300.0,
+          161.0
+        ],
+        [
+          353.0,
+          226.0
+        ],
+        [
+          308.4,
+          266.6
+        ]
+      ],
+      "tipo": "plana",
+      "material": "losa_concreto",
+      "cota_base_mm": null,
+      "inclinacion_deg": 0,
+      "azimut_deg": null,
+      "obstaculos": [],
+      "observaciones": "Terraza alta (otro nivel, usuario): 13 m² útiles. En las fotos tiene pararrayos y salidas de ventilación en el borde."
     }
   ],
-  "notas": "Vértices ubicados por el borde oscuro de los marcadores de Maps (±0,5 px ≈ ±4 cm). El rótulo '40.00 m' de la captura no corresponde a ningún lado ni acumulado del polígono: no se usa."
+  "notas": "Vértices ubicados por el borde oscuro de los marcadores de Maps (±0,5 px ≈ ±4 cm). El rótulo '40.00 m' de la captura no corresponde a ningún lado ni acumulado del polígono: no se usa. La línea entre los vértices 2 y 5 separa la terraza baja (cubierta-01) de la alta (cubierta-02)."
 }

@@ -1,0 +1,40 @@
+[
+  {
+    "id": "zona-01",
+    "cubierta_ref": "cubierta-01",
+    "contorno_mm": [
+      [14829, 9187],
+      [10304, 14727],
+      [6623, 11720],
+      [11148, 6180]
+    ],
+    "estructura": "pergola",
+    "altura_estructura_mm": null,
+    "inclinacion_deg": 5,
+    "azimut_deg": 140.8,
+    "orientacion_modulo": "vertical",
+    "separacion_mm": 20,
+    "retiro_mm": 0,
+    "es_supuesto": true,
+    "nota": "Pérgola tipo carport de 34 m² (usuario). SUPUESTO: rectángulo de 7,15 × 4,75 m pegado al muro de la terraza alta, para quedar a nivel con ella. Altura de la estructura por definir. Opción propuesta: 5° hacia el sureste (140,8°), alineada con el edificio; el usuario pidió sur."
+  },
+  {
+    "id": "zona-02",
+    "cubierta_ref": "cubierta-02",
+    "contorno_mm": [
+      [11991, 14306],
+      [14257, 16365],
+      [16944, 13068],
+      [14683, 11010]
+    ],
+    "estructura": "inclinada_sobre_losa",
+    "altura_estructura_mm": null,
+    "inclinacion_deg": 5,
+    "azimut_deg": 140.8,
+    "orientacion_modulo": "horizontal",
+    "separacion_mm": 20,
+    "retiro_mm": 0,
+    "es_supuesto": true,
+    "nota": "Terraza alta: 13 m² útiles (usuario). SUPUESTO: área centrada de 3,06 × 4,25 m. Opción propuesta: 5° hacia el sureste (140,8°), alineada con el edificio; el usuario pidió sur."
+  }
+]

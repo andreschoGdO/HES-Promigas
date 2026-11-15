@@ -289,6 +289,12 @@
           "items": {
             "$ref": "#/$defs/cubierta"
           }
+        },
+        "zonas_instalacion": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/zona_instalacion"
+          }
         }
       }
     },
@@ -542,6 +548,52 @@
         "ubicacion_texto": {
           "description": "Ubicación física descrita (por ejemplo 'muro norte del garaje').",
           "type": "string"
+        },
+        "colocacion": {
+          "description": "Solo módulos: posición calculada por el motor de distribución.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "zona_ref",
+            "centro_mm",
+            "rumbo_fila_deg",
+            "orientacion",
+            "inclinacion_deg",
+            "azimut_deg"
+          ],
+          "properties": {
+            "zona_ref": {
+              "type": "string",
+              "pattern": "^zona-\\d{2}$"
+            },
+            "centro_mm": {
+              "$ref": "#/$defs/punto_2d_mm"
+            },
+            "rumbo_fila_deg": {
+              "description": "Rumbo (desde el norte, horario) de la dirección de la fila.",
+              "type": "number"
+            },
+            "orientacion": {
+              "enum": [
+                "vertical",
+                "horizontal"
+              ]
+            },
+            "inclinacion_deg": {
+              "type": "number"
+            },
+            "azimut_deg": {
+              "type": "number"
+            },
+            "fila": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "columna": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       },
       "allOf": [
@@ -690,6 +742,85 @@
           }
         }
       ]
+    },
+    "zona_instalacion": {
+      "description": "Área donde se instalan módulos, con el plano en que quedan (coplanar a la cubierta o sobre estructura).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "cubierta_ref",
+        "contorno_mm",
+        "estructura",
+        "inclinacion_deg",
+        "azimut_deg",
+        "orientacion_modulo",
+        "separacion_mm",
+        "retiro_mm",
+        "es_supuesto"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^zona-\\d{2}$"
+        },
+        "cubierta_ref": {
+          "type": "string",
+          "pattern": "^cubierta-\\d{2}$"
+        },
+        "contorno_mm": {
+          "$ref": "#/$defs/contorno_mm"
+        },
+        "estructura": {
+          "enum": [
+            "coplanar",
+            "pergola",
+            "inclinada_sobre_losa"
+          ]
+        },
+        "altura_estructura_mm": {
+          "description": "Altura del borde bajo de los módulos sobre la cubierta.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "inclinacion_deg": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 60
+        },
+        "azimut_deg": {
+          "description": "Hacia dónde miran los módulos (azimut desde el norte, horario). Las filas quedan perpendiculares.",
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 360
+        },
+        "orientacion_modulo": {
+          "enum": [
+            "vertical",
+            "horizontal"
+          ],
+          "description": "vertical: lado largo en la dirección de la pendiente; horizontal: lado largo a lo largo de la fila."
+        },
+        "separacion_mm": {
+          "type": "number",
+          "minimum": 0
+        },
+        "retiro_mm": {
+          "description": "Distancia libre desde el borde de la zona.",
+          "type": "number",
+          "minimum": 0
+        },
+        "es_supuesto": {
+          "description": "true si la ubicación o el tamaño los propuso la IA y faltan confirmar.",
+          "type": "boolean"
+        },
+        "nota": {
+          "type": "string"
+        }
+      }
     }
   }
 }

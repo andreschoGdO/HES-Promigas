@@ -3,7 +3,7 @@
 Herramienta de diseño 3D y planos para sistemas solares residenciales con almacenamiento
 (proyecto Sunny). Las reglas y el plan por pasos están en [CLAUDE.md](CLAUDE.md).
 
-Estado: **Paso 6** — modelo IFC, visor 3D y renders.
+Estado: **Paso 7** — planos con cajetín y PDF.
 
 ## Preparar el entorno
 
@@ -136,3 +136,18 @@ python -m engine.modelo3d generar <id> --render   # además salidas/render_*.png
 
 Es un modelo de borrador: cubiertas como losas, la terraza alta como volumen macizo, pérgola
 esquemática (columnas y vigas perimetrales) y equipos como cajas con las medidas de su ficha.
+
+## Planos con cajetín (Paso 7)
+
+```bash
+python -m engine.planos generar <id>
+```
+
+Láminas A3 generadas desde el proyecto (nunca se editan a mano): **ARQ-01** planta de cubierta con
+módulos por string, estructura y equipos (escala elegida automáticamente); **ARQ-02** alzado del
+muro de equipos a 1:20; **ELE-01** diagrama unifilar desde el cálculo eléctrico; **REN-01** renders.
+Salida: un PDF con todas las láminas y un DXF por lámina (capas por tipo de elemento, en mm).
+
+El cajetín sale de `templates/cajetin.json` (campos de los planos de referencia; logo pendiente).
+Cliente e ingeniero se leen de `privado/datos_privados.json`: si existen, los planos se guardan en
+`privado/planos/` para que los datos personales no lleguen a git.

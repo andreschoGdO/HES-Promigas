@@ -145,3 +145,21 @@ def test_muro_y_buitron_en_el_modelo(elems) -> None:
     assert {"muro", "buitron"} <= tipos
     muro = next(e for e in elems if e.tipo == "muro")
     assert muro.malla.bounds[1][2] == pytest.approx(3000)
+
+
+def test_sin_choques_3d_entre_equipos(elems) -> None:
+    """Dos elementos chocan si sus huellas en planta se cruzan y sus alturas se solapan."""
+    from shapely.geometry import MultiPoint
+
+    tipos = ("inversor", "bateria", "tablero", "buitron", "madera")
+    sel = [e for e in elems if e.tipo in tipos]
+    for i, a in enumerate(sel):
+        ha = MultiPoint(a.malla.vertices[:, :2].tolist()).convex_hull
+        for b in sel[i + 1 :]:
+            if a.tipo == b.tipo == "madera":
+                continue  # las piezas de la pérgola se unen entre sí
+            hb = MultiPoint(b.malla.vertices[:, :2].tolist()).convex_hull
+            z_solapa = min(a.malla.bounds[1][2], b.malla.bounds[1][2]) > max(
+                a.malla.bounds[0][2], b.malla.bounds[0][2]
+            )
+            assert not (ha.intersection(hb).area > 1 and z_solapa), (a.id, b.id)

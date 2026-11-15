@@ -34,13 +34,13 @@
   },
   "rumbo_muro_equipos_deg": 301.9,
   "buitron": {
-    "punto": [8272, 15540],
+    "punto": [7743, 15055],
     "z_mm": 0,
     "es_supuesto": true,
     "ancho_mm": 600,
     "profundidad_mm": 600,
     "alto_mm": 2400,
-    "nota": "Buitrón por donde baja el cableado al tablero existente (fotos del usuario). Posición y medidas SUPUESTAS: 0,6 × 0,6 × 2,4 m en la esquina del extremo izquierdo del muro de equipos."
+    "nota": "Buitrón por donde baja el cableado al tablero existente (fotos del usuario). Posición y medidas SUPUESTAS: columna exenta de 0,6 × 0,6 × 2,4 m junto al pretil oeste, frente al extremo izquierdo del muro de equipos, sin tapar el tablero FV."
   },
   "muro_equipos": {
     "de": [10304, 14727],

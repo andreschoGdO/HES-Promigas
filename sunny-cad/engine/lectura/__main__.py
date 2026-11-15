@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from engine import validar
-from engine.lectura import fotos, superposicion, trazado
+from engine import jsonfmt, validar
+from engine.lectura import escala, fotos, superposicion, trazado
 from engine.pendientes import rutas_pendientes, texto_faltante
 
 PLANTILLA = validar.RAIZ / "templates" / "proyecto.plantilla.json"
@@ -32,7 +32,7 @@ def _rel(ruta: Path) -> Path:
 
 
 def _escribir(ruta: Path, datos: Any) -> None:
-    ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    ruta.write_text(jsonfmt.dumps(datos), encoding="utf-8")
 
 
 def nuevo(args: argparse.Namespace) -> int:
@@ -87,6 +87,12 @@ def proponer(args: argparse.Namespace) -> int:
             for e in errores:
                 print(f"  - {e}")
             return 1
+        avisos = escala.avisos_escala(lectura["escala"])
+        print(f"Escala: {escala.resumen_escala(lectura['escala'])}")
+        if avisos:
+            for aviso in avisos:
+                print(f"ERROR: {aviso}")
+            return 1
         propuesta = trazado.proponer_proyecto(propuesta, lectura)
 
     registradas = fotos.insumos_de_fotos(carpeta)
@@ -112,8 +118,8 @@ def proponer(args: argparse.Namespace) -> int:
         for c in propuesta["vivienda"]["cubiertas"]:
             print(f"  {c['id']}: {trazado.medidas_de_lados(c['contorno_mm'])}")
 
-    antes = json.dumps(proyecto, ensure_ascii=False, indent=2).splitlines()
-    despues = json.dumps(propuesta, ensure_ascii=False, indent=2).splitlines()
+    antes = jsonfmt.dumps(proyecto).splitlines()
+    despues = jsonfmt.dumps(propuesta).splitlines()
     diferencia = list(
         difflib.unified_diff(antes, despues, "proyecto.json", "propuesta", lineterm="")
     )

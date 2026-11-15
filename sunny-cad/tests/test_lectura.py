@@ -296,3 +296,40 @@ def test_cli_rechaza_propuesta_invalida(
     assert cli(["proponer", "casa-mala", "--aplicar"]) == 1
     assert "NO es válida" in capsys.readouterr().out
     assert (carpeta / "proyecto.json").read_text() == original
+
+
+# --- Escala desde 'Medir distancia' de Google Maps ---------------------------
+
+
+def _poligono_medido(**extra: Any) -> dict[str, Any]:
+    # Cuadrado de 100 × 100 px = 10 000 px²; área medida 400 m² → 0,2 m/px; perímetro 80 m.
+    e = {
+        "metodo": "poligono_medido",
+        "contorno_px": [[0, 0], [100, 0], [100, 100], [0, 100]],
+        "area_m2": 400,
+    }
+    e.update(extra)
+    return e
+
+
+def test_escala_por_poligono_medido() -> None:
+    assert mm_por_pixel(_poligono_medido()) == pytest.approx(200)
+
+
+def test_perimetro_coherente_no_da_aviso() -> None:
+    from engine.lectura.escala import avisos_escala
+
+    assert avisos_escala(_poligono_medido(perimetro_m=80.5)) == []  # +0,6 %
+
+
+def test_perimetro_incoherente_da_aviso() -> None:
+    from engine.lectura.escala import avisos_escala
+
+    (aviso,) = avisos_escala(_poligono_medido(perimetro_m=90))  # 80 vs 90 m: −11 %
+    assert "difiere -11.1%" in aviso
+
+
+def test_poligono_medido_cumple_esquema() -> None:
+    lectura = _lectura()
+    lectura["escala"] = _poligono_medido(perimetro_m=80)
+    assert validar.errores_esquema(lectura, "lectura") == []

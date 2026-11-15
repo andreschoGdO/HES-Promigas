@@ -1,0 +1,41 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "riomar-terraza-barranquilla",
+  "es_ejemplo": false,
+  "nombre": "Terraza Riomar - Barranquilla",
+  "estado": "borrador",
+  "sistema_coordenadas": {
+    "unidad_longitud": "mm",
+    "origen": "esquina_suroeste",
+    "eje_x": "este",
+    "eje_y": "norte",
+    "eje_z": "arriba",
+    "referencia_azimut": "norte_horario"
+  },
+  "ubicacion": {
+    "municipio": "Barranquilla",
+    "departamento": "Atlántico",
+    "latitud_deg": 11.01,
+    "longitud_deg": -74.81
+  },
+  "sistema": {
+    "tipologia": null,
+    "fases_red": null,
+    "arquitectura": null,
+    "respaldo": null,
+    "conmutacion": null
+  },
+  "vivienda": {
+    "cubiertas": []
+  },
+  "equipos": [],
+  "insumos": [],
+  "informacion_faltante": [
+    "sistema/tipologia: tipología del sistema (T1 bifásica o T2 trifásica)",
+    "sistema/fases_red: fases de la red (monofásica, bifásica o trifásica)",
+    "sistema/arquitectura: arquitectura del inversor (serie o paralelo)",
+    "sistema/respaldo: alcance del respaldo (cargas críticas o respaldo total)",
+    "sistema/conmutacion: equipo de conmutación (bypass, ATS o SmartGuard)",
+    "vivienda/cubiertas: trazado de las cubiertas (enviar vista de Maps con escala y fotos)"
+  ]
+}

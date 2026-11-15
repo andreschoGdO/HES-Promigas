@@ -1,6 +1,10 @@
 ezdxf==1.4.5
+ifcopenshell==0.9.0.post1
 jsonschema==4.26.0
+mapbox_earcut==2.1.0
+numpy==2.4.6
 pillow==13.0.0
 pytest==9.2.0
 ruff==0.17.5
 shapely==2.2.0
+trimesh==5.2.1

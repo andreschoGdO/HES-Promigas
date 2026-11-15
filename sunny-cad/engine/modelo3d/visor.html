@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITULO__</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #dfe8f1; font-family: system-ui, sans-serif; }
+  #info { position: absolute; top: 12px; left: 12px; background: rgba(255,255,255,.9); padding: 10px 14px;
+          border-radius: 8px; font-size: 14px; max-width: 360px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  #info h1 { font-size: 15px; margin: 0 0 6px; }
+  #sel { margin-top: 6px; color: #234; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<div id="info">
+  <h1>__TITULO__</h1>
+  <div>Arrastrar: girar · Rueda: zoom · Clic derecho: mover · Clic: identificar elemento</div>
+  <div id="sel"></div>
+</div>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+const escena = new THREE.Scene();
+escena.background = new THREE.Color(0xdfe8f1);
+const camara = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 1000);
+const render = new THREE.WebGLRenderer({ antialias: true });
+render.setSize(innerWidth, innerHeight);
+render.setPixelRatio(devicePixelRatio);
+document.body.appendChild(render.domElement);
+escena.add(new THREE.HemisphereLight(0xffffff, 0x888888, 1.6));
+const sol = new THREE.DirectionalLight(0xffffff, 1.4);
+sol.position.set(10, 30, 20);
+escena.add(sol);
+const controles = new OrbitControls(camara, render.domElement);
+
+const bin = Uint8Array.from(atob("__GLB_BASE64__"), c => c.charCodeAt(0));
+new GLTFLoader().parse(bin.buffer, "", gltf => {
+  escena.add(gltf.scene);
+  const caja = new THREE.Box3().setFromObject(gltf.scene);
+  const centro = caja.getCenter(new THREE.Vector3());
+  const tam = caja.getSize(new THREE.Vector3()).length();
+  controles.target.copy(centro);
+  camara.position.copy(centro).add(new THREE.Vector3(0.3 * tam, 0.7 * tam, 0.8 * tam));
+  controles.update();
+  escena.add(new THREE.GridHelper(Math.ceil(tam * 1.5), Math.ceil(tam * 1.5), 0x99a, 0xbbc));
+});
+
+const ray = new THREE.Raycaster(), puntero = new THREE.Vector2();
+render.domElement.addEventListener("click", ev => {
+  puntero.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(puntero, camara);
+  const hit = ray.intersectObjects(escena.children, true)[0];
+  document.getElementById("sel").textContent = hit ? hit.object.name : "";
+});
+addEventListener("resize", () => {
+  camara.aspect = innerWidth / innerHeight; camara.updateProjectionMatrix();
+  render.setSize(innerWidth, innerHeight);
+});
+(function animar() { requestAnimationFrame(animar); render.render(escena, camara); })();
+</script>
+</body>
+</html>

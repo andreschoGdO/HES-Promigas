@@ -31,5 +31,6 @@
     "alto_mm": 800,
     "profundidad_mm": 200,
     "nota": "Medidas SUPUESTAS (tablero FV de 80 × 40 × 20 cm del unifilar de referencia). Contiene el contactor (ATS) y el medidor."
-  }
+  },
+  "rumbo_muro_equipos_deg": 320.8
 }

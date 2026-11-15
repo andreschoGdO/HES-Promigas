@@ -3,7 +3,7 @@
 Herramienta de diseño 3D y planos para sistemas solares residenciales con almacenamiento
 (proyecto Sunny). Las reglas y el plan por pasos están en [CLAUDE.md](CLAUDE.md).
 
-Estado: **Paso 5** — motor eléctrico.
+Estado: **Paso 6** — modelo IFC, visor 3D y renders.
 
 ## Preparar el entorno
 
@@ -118,3 +118,21 @@ exactamente al sur puede dejar muchos menos módulos: conviene comparar con el a
 límites de caída de tensión están en `templates/criterios_electricos.json`, marcados
 **por confirmar**. No son requisitos normativos validados: el ingeniero responsable debe
 confirmarlos contra NTC 2050 y RETIE.
+
+## Modelo 3D, visor y renders (Paso 6)
+
+```bash
+python -m engine.modelo3d generar <id>            # salidas/modelo.ifc, modelo.glb y visor_3d.html
+python -m engine.modelo3d generar <id> --render   # además salidas/render_*.png (Blender)
+```
+
+- `modelo.ifc` (IFC4, mm): módulos como `IfcSolarDevice`, batería `IfcElectricFlowStorageDevice`,
+  tablero `IfcElectricDistributionBoard`, estructura `IfcMember`; cada elemento con el
+  `Pset_SunnyCad` (componente, modelo, potencia, string, zona…).
+- `visor_3d.html`: se abre en el navegador (necesita internet para cargar three.js). Clic sobre un
+  elemento para ver su identificador.
+- Renders: Blender 4 con Cycles en CPU. En Ubuntu, el Blender del sistema necesita
+  `sudo apt-get install blender python3-numpy`.
+
+Es un modelo de borrador: cubiertas como losas, la terraza alta como volumen macizo, pérgola
+esquemática (columnas y vigas perimetrales) y equipos como cajas con las medidas de su ficha.

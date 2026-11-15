@@ -220,6 +220,12 @@
         "numero_celdas": { "type": "integer", "minimum": 1 },
         "bifacial": { "type": "boolean" },
         "bifacialidad_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "ganancia_bifacial_ref_pct": {
+          "description": "Ganancia trasera de la tabla bifacial de la ficha (por ejemplo 10 %).",
+          "type": "number", "exclusiveMinimum": 0, "maximum": 100
+        },
+        "isc_bifacial_a": { "$ref": "#/$defs/positivo" },
+        "imp_bifacial_a": { "$ref": "#/$defs/positivo" },
         "carga_estatica_frontal_pa": { "$ref": "#/$defs/positivo" },
         "carga_estatica_posterior_pa": { "$ref": "#/$defs/positivo" }
       }

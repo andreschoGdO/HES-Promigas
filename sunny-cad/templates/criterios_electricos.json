@@ -1,0 +1,76 @@
+{
+  "version": "1.0",
+  "estado": "por_confirmar",
+  "nota": "Factores, tablas y límites que usa el motor eléctrico. NO son requisitos normativos validados: el ingeniero responsable debe confirmarlos contra la edición vigente de NTC 2050 y RETIE antes de firmar. Las referencias indican de dónde vienen los valores usados hoy (práctica común basada en el NEC, del que deriva NTC 2050).",
+  "temperatura_celda": {
+    "metodo": "NOCT",
+    "formula": "Tc = Ta + (NOCT - 20) × G / 800",
+    "irradiancia_w_m2": 1000,
+    "referencia": "Modelo NOCT estándar; NOCT del módulo según su ficha."
+  },
+  "corriente_maxima_fv": {
+    "factor": 1.25,
+    "aplica": "Corriente máxima de un circuito FV = Isc × 1,25.",
+    "referencia": "NEC 690.8(A)(1); verificar en NTC 2050 Sección 690."
+  },
+  "corriente_continua": {
+    "factor": 1.25,
+    "aplica": "Protecciones y conductores dimensionados para corriente máxima × 1,25 (servicio continuo).",
+    "referencia": "NEC 690.8(B) y 705.28; verificar en NTC 2050."
+  },
+  "usar_isc_bifacial": {
+    "valor": true,
+    "aplica": "En módulos bifaciales se usa la Isc con la ganancia trasera de la ficha (10 %) para las corrientes de diseño.",
+    "referencia": "Criterio conservador del proyecto."
+  },
+  "fusibles_string": {
+    "max_strings_sin_fusible_por_mppt": 2,
+    "aplica": "Con 1 o 2 strings por MPPT no se requieren fusibles de string si el fusible máximo del módulo supera la corriente de falla.",
+    "referencia": "NEC 690.9(A); verificar en NTC 2050."
+  },
+  "ampacidad_cu_75c_a": {
+    "referencia": "Tabla de ampacidad de conductores de cobre, aislamiento a 75 °C, no más de 3 conductores en canalización, ambiente 30 °C (NEC 310.16 / NTC 2050 Tabla 310-16). Verificar.",
+    "valores": {"14": 20, "12": 25, "10": 35, "8": 50, "6": 65, "4": 85, "3": 100, "2": 115, "1": 130, "1/0": 150, "2/0": 175, "3/0": 200, "4/0": 230}
+  },
+  "seccion_awg_mm2": {
+    "referencia": "Sección nominal de los calibres AWG (dato físico).",
+    "valores": {"14": 2.08, "12": 3.31, "10": 5.26, "8": 8.37, "6": 13.3, "4": 21.2, "3": 26.7, "2": 33.6, "1": 42.4, "1/0": 53.5, "2/0": 67.4, "3/0": 85.0, "4/0": 107.2}
+  },
+  "correccion_temperatura_75c": {
+    "referencia": "Factores de corrección por temperatura ambiente, columna 75 °C (NEC 310.15(B)(2)(a) / NTC 2050). Verificar. No incluye el incremento por canalización expuesta al sol en cubiertas.",
+    "tramos": [
+      {"hasta_c": 25, "factor": 1.05},
+      {"hasta_c": 30, "factor": 1.0},
+      {"hasta_c": 35, "factor": 0.94},
+      {"hasta_c": 40, "factor": 0.88},
+      {"hasta_c": 45, "factor": 0.82},
+      {"hasta_c": 50, "factor": 0.75}
+    ]
+  },
+  "calibre_minimo_awg": {
+    "dc_fv": "12",
+    "ac": "12",
+    "referencia": "Criterio del proyecto (a confirmar)."
+  },
+  "interruptores_estandar_a": [15, 20, 25, 30, 32, 40, 50, 60, 63, 70, 80, 100, 125, 150],
+  "caida_tension_max_pct": {
+    "dc": 2.0,
+    "ac": 3.0,
+    "referencia": "Límites de diseño recomendados (NEC 210.19 y 215.2, notas informativas: 3 % por circuito). Verificar y fijar los del proyecto."
+  },
+  "resistividad_cu_75c_ohm_mm2_m": {
+    "valor": 0.02097,
+    "referencia": "Cobre: 0,01724 Ω·mm²/m a 20 °C × (1 + 0,00393 × 55) a 75 °C (dato físico)."
+  },
+  "longitud_ruta": {
+    "reserva_pct": 15,
+    "reserva_m": 2,
+    "aplica": "Ruta estimada siguiendo los ejes del edificio (distancia en L) más diferencia de altura, con reserva para entradas, curvas y bucles.",
+    "referencia": "Estimación para borrador; reemplazar por la longitud medida en obra."
+  },
+  "strings_preferidos": {
+    "valor": 2,
+    "aplica": "Cantidad de strings preferida cuando hay varias opciones válidas (práctica observada en los diseños de referencia: un string por MPPT, dos MPPT).",
+    "referencia": "Práctica del proyecto Sunny (a confirmar)."
+  }
+}

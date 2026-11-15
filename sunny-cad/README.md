@@ -3,7 +3,7 @@
 Herramienta de diseño 3D y planos para sistemas solares residenciales con almacenamiento
 (proyecto Sunny). Las reglas y el plan por pasos están en [CLAUDE.md](CLAUDE.md).
 
-Estado: **Paso 4** — distribución de módulos.
+Estado: **Paso 5** — motor eléctrico.
 
 ## Preparar el entorno
 
@@ -98,3 +98,23 @@ escala y el perímetro la comprueba (si difieren más de 2 %, la propuesta se re
 
 Las filas quedan perpendiculares al azimut. Si el edificio está girado respecto al norte, mirar
 exactamente al sur puede dejar muchos menos módulos: conviene comparar con el azimut alineado.
+
+## Motor eléctrico (Paso 5)
+
+1. Elegir equipos y ubicaciones en `projects/<id>/insumos/electrico.json` (inversor, batería y
+   configuración, medidor, puntos de instalación, rumbo del edificio, longitudes AC conocidas) y
+   las temperaturas de diseño en `condiciones_diseno` del proyecto.
+2. Proponer: calcula strings (Voc en frío, Vmp en caliente, límites del MPPT), los asigna a los
+   módulos, dimensiona conductores, protecciones y caídas de tensión y escribe
+   `salidas/memoria_electrica.md` y `salidas/calculo_electrico.json`:
+
+   ```bash
+   python -m engine.electrico proponer <id>
+   ```
+
+3. Aplicar con `--aplicar`.
+
+**Criterios:** los factores (1,25), la tabla de ampacidad, la corrección por temperatura y los
+límites de caída de tensión están en `templates/criterios_electricos.json`, marcados
+**por confirmar**. No son requisitos normativos validados: el ingeniero responsable debe
+confirmarlos contra NTC 2050 y RETIE.

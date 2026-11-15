@@ -362,6 +362,37 @@
     },
     "notas": {
       "type": "string"
+    },
+    "condiciones_diseno": {
+      "description": "Temperaturas de diseño del sitio para el cálculo de strings y conductores.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "temperatura_min_c",
+        "temperatura_max_ambiente_c",
+        "fuente",
+        "es_supuesto"
+      ],
+      "properties": {
+        "temperatura_min_c": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "temperatura_max_ambiente_c": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "es_supuesto": {
+          "type": "boolean"
+        }
+      }
     }
   },
   "$defs": {
@@ -592,6 +623,32 @@
             "columna": {
               "type": "integer",
               "minimum": 1
+            }
+          }
+        },
+        "string": {
+          "description": "Solo módulos: string al que pertenece, S<inversor>.<mppt>.<string>.",
+          "type": "string",
+          "pattern": "^S\\d+\\.\\d+\\.\\d+$"
+        },
+        "ubicacion_mm": {
+          "description": "Equipos que no son módulos: punto de instalación en planta y altura.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "punto",
+            "z_mm",
+            "es_supuesto"
+          ],
+          "properties": {
+            "punto": {
+              "$ref": "#/$defs/punto_2d_mm"
+            },
+            "z_mm": {
+              "type": "number"
+            },
+            "es_supuesto": {
+              "type": "boolean"
             }
           }
         }

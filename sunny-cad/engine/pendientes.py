@@ -21,6 +21,8 @@ ETIQUETAS = {
     "azimut_deg": "hacia dónde cae el agua (azimut en grados, 180 = sur)",
     "altura_mm": "altura del obstáculo sobre la cubierta (mm)",
     "altura_estructura_mm": "altura del borde bajo de los módulos sobre la cubierta (mm)",
+    "temperatura_min_c": "temperatura mínima de diseño del sitio (°C)",
+    "temperatura_max_ambiente_c": "temperatura ambiente máxima de diseño del sitio (°C)",
     "cubiertas": "trazado de las cubiertas (enviar vista de Maps con escala y fotos)",
 }
 
@@ -44,6 +46,9 @@ def rutas_pendientes(proyecto: dict[str, Any]) -> list[str]:
             for campo, valor in obstaculo.items():
                 if valor is None:
                     rutas.append(f"{cubierta['id']}/{obstaculo['id']}/{campo}")
+    for campo, valor in proyecto.get("condiciones_diseno", {}).items():
+        if valor is None:
+            rutas.append(f"condiciones_diseno/{campo}")
     for zona in proyecto.get("vivienda", {}).get("zonas_instalacion", []):
         for campo, valor in zona.items():
             if valor is None:

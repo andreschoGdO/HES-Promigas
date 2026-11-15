@@ -46,7 +46,10 @@
     "bifacial": true,
     "bifacialidad_pct": 80,
     "carga_estatica_frontal_pa": 5400,
-    "carga_estatica_posterior_pa": 2400
+    "carga_estatica_posterior_pa": 2400,
+    "ganancia_bifacial_ref_pct": 10,
+    "isc_bifacial_a": 15.11,
+    "imp_bifacial_a": 14.4
   },
   "notas": "Ficha escaneada (solo imagen): datos transcritos a mano de la página 2 y verificados a 220 ppp el 2026-11-15. NOCT 45 ± 2 °C; bifacialidad 80 ± 10 %. Datos eléctricos en STC (1000 W/m², 25 °C, AM1.5G). Vidrio doble 2,0/2,0 mm; conector QC 4.10-351 / MC4-EVO2A; cable 4 mm²."
 }

@@ -1,0 +1,123 @@
+{
+  "temperaturas_c": {
+    "minima": 15,
+    "max_ambiente": 40,
+    "max_celda": 71.25
+  },
+  "limites_string": {
+    "voc_frio_por_modulo_v": 53.95,
+    "vmp_caliente_por_modulo_v": 38.65,
+    "n_min": 4,
+    "n_max": 18,
+    "motivo_n_max": "tensión máxima DC del inversor"
+  },
+  "opciones_strings": [
+    [
+      15
+    ],
+    [8, 7],
+    [
+      5,
+      5,
+      5
+    ]
+  ],
+  "strings": [
+    {
+      "string": "S1.1.1",
+      "mppt": 1,
+      "modulos": 8,
+      "voc_frio_v": 431.6,
+      "vmp_caliente_v": 309.2,
+      "vmp_frio_v": 367.5,
+      "isc_a": 15.11,
+      "imp_a": 14.4
+    },
+    {
+      "string": "S1.2.1",
+      "mppt": 2,
+      "modulos": 7,
+      "voc_frio_v": 377.6,
+      "vmp_caliente_v": 270.6,
+      "vmp_frio_v": 321.5,
+      "isc_a": 15.11,
+      "imp_a": 14.4
+    }
+  ],
+  "potencia_fv_w": 8925,
+  "relacion_dc_ac": 0.595,
+  "bateria": {
+    "configuracion": "s15",
+    "tension_nominal_v": 307.2,
+    "energia_util_kwh": 13.8,
+    "potencia_nominal_w": 7700,
+    "potencia_max_w": 14700
+  },
+  "circuitos": [
+    {
+      "id": "DC-S1.1.1",
+      "tramo": "string S1.1.1 → inversor (MPPT 1)",
+      "corriente_max_a": 18.89,
+      "corriente_requerida_conductor_a": 23.61,
+      "calibre_awg": "10",
+      "longitud_estimada_m": 13.0,
+      "tension_operacion_v": 357.1,
+      "caida_pct": 0.42,
+      "limite_caida_pct": 2.0,
+      "proteccion": "sin fusible de string (≤ 2 strings por MPPT; fusible máximo del módulo 30 A)"
+    },
+    {
+      "id": "DC-S1.2.1",
+      "tramo": "string S1.2.1 → inversor (MPPT 2)",
+      "corriente_max_a": 18.89,
+      "corriente_requerida_conductor_a": 23.61,
+      "calibre_awg": "10",
+      "longitud_estimada_m": 8.9,
+      "tension_operacion_v": 312.5,
+      "caida_pct": 0.33,
+      "limite_caida_pct": 2.0,
+      "proteccion": "sin fusible de string (≤ 2 strings por MPPT; fusible máximo del módulo 30 A)"
+    },
+    {
+      "id": "DC-BAT",
+      "tramo": "batería BHF-S10/S15/S20/S25/S30-G2 (s15) → inversor",
+      "corriente_max_a": 48,
+      "corriente_requerida_conductor_a": 60.0,
+      "calibre_awg": "4",
+      "longitud_estimada_m": 5.1,
+      "tension_operacion_v": 307.2,
+      "caida_pct": 0.16,
+      "limite_caida_pct": 2.0,
+      "proteccion": "interruptor DC 60 A (verificar si el fabricante lo integra)"
+    },
+    {
+      "id": "AC-RED",
+      "tramo": "inversor (puerto red) → tablero / ATS",
+      "corriente_max_a": 39.4,
+      "corriente_requerida_conductor_a": 49.25,
+      "calibre_awg": "6",
+      "longitud_estimada_m": null,
+      "tension_operacion_v": 220,
+      "caida_pct": null,
+      "limite_caida_pct": 3.0,
+      "proteccion": "interruptor 50 A tripolar"
+    },
+    {
+      "id": "AC-CARGA",
+      "tramo": "inversor (puerto respaldo) → tablero de cargas",
+      "corriente_max_a": 39.4,
+      "corriente_requerida_conductor_a": 49.25,
+      "calibre_awg": "6",
+      "longitud_estimada_m": null,
+      "tension_operacion_v": 220,
+      "caida_pct": null,
+      "limite_caida_pct": 3.0,
+      "proteccion": "interruptor 50 A tripolar"
+    }
+  ],
+  "errores": [],
+  "criterios": {
+    "archivo": "templates/criterios_electricos.json",
+    "estado": "por_confirmar"
+  }
+}

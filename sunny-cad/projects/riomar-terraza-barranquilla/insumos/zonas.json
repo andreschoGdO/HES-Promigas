@@ -3,29 +3,29 @@
     "id": "zona-01",
     "cubierta_ref": "cubierta-01",
     "contorno_mm": [
-      [4751, 9291],
-      [9074, 3991],
-      [12925, 7132],
-      [8602, 12432]
+      [14730, 9308],
+      [10403, 14606],
+      [6552, 11465],
+      [10878, 6167]
     ],
     "estructura": "pergola",
-    "altura_estructura_mm": null,
+    "altura_estructura_mm": 2000,
     "inclinacion_deg": 5,
     "azimut_deg": 140.8,
     "orientacion_modulo": "vertical",
     "separacion_mm": 10,
     "retiro_mm": 0,
     "es_supuesto": true,
-    "nota": "Pérgola tipo carport de 34 m², rectangular, sobre la terraza baja, en la posición del rectángulo que el usuario marcó en Maps (110,64 m²), reducida a 34 m² alrededor de su centro. SUPUESTOS: (1) el centro de la pérgola coincide con el del rectángulo marcado; (2) medidas 6,84 × 4,97 m (en vez de 6,74 × 5,04 m con las mismas proporciones) para que entren 3 filas de 4 módulos verticales. Alineada con el edificio (rumbo 140,8°). Separación 10 mm (usuario). Altura: a nivel con la terraza alta (+2 m); falta definir la altura exacta."
+    "nota": "Pérgola tipo carport de 34 m² (6,84 × 4,97 m), pegada al muro de la terraza alta y centrada en él, con los módulos a la altura de la terraza alta (+2000 mm sobre la terraza baja), según el usuario. SUPUESTO: centrada a lo largo del muro de 7,15 m (quedan 15 cm libres a cada lado)."
   },
   {
     "id": "zona-02",
     "cubierta_ref": "cubierta-02",
     "contorno_mm": [
-      [11991, 14306],
-      [14257, 16365],
-      [16944, 13068],
-      [14683, 11010]
+      [13911, 10311],
+      [11222, 13603],
+      [13594, 15537],
+      [16282, 12245]
     ],
     "estructura": "inclinada_sobre_losa",
     "altura_estructura_mm": null,
@@ -34,7 +34,7 @@
     "orientacion_modulo": "horizontal",
     "separacion_mm": 30,
     "retiro_mm": 0,
-    "es_supuesto": false,
-    "nota": "Terraza alta, +2 m sobre la terraza baja: 13 m² útiles centrados (3,06 × 4,25 m), confirmado por el usuario. Estructura inclinada 5° hacia el sureste (140,8°), aceptado por el usuario. Separación 30 mm (usuario)."
+    "es_supuesto": true,
+    "nota": "Terraza alta (+2 m): 13 m² útiles (3,06 × 4,25 m) pegados al borde que da a la pérgola, según el usuario. 5° hacia el sureste (140,8°), separación 30 mm. SUPUESTO: centrados a lo largo del borde."
   }
 ]

@@ -1,0 +1,31 @@
+{
+  "inversor": "livoltek-hp3-15kl2",
+  "bateria": {
+    "componente": "livoltek-bhf",
+    "configuracion": "s15",
+    "sistemas_en_paralelo": 1
+  },
+  "medidor": "star-dtsy23s",
+  "ubicacion_texto": "Muro de la terraza alta visto desde la terraza baja (fotos del usuario), bajo la pérgola",
+  "ubicaciones": {
+    "inversor-01": {
+      "punto": [14080, 9867],
+      "z_mm": 1500,
+      "es_supuesto": true
+    },
+    "bateria-01": {
+      "punto": [13321, 10796],
+      "z_mm": 0,
+      "es_supuesto": true
+    },
+    "medidor-01": {
+      "punto": [12562, 11725],
+      "z_mm": 1500,
+      "es_supuesto": true
+    }
+  },
+  "rumbo_edificio_deg": 50.8,
+  "longitud_ac_red_m": null,
+  "longitud_ac_carga_m": null,
+  "nota": "Ubicaciones SUPUESTAS a lo largo del muro desde la esquina interior (vértice 5): inversor a 1,0 m, batería a 2,2 m (en el piso), tablero con medidor a 3,4 m. Confirmar con el usuario."
+}

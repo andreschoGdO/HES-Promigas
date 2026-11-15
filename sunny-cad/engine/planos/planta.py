@@ -75,7 +75,10 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], elems: list[Elemento], 
         )
         cx, cy = np.mean(pts, axis=0)
         nivel = (c["cota_base_mm"] or 0) / 1000
-        lam.texto((cx, cy - 12), f"{c['id'].upper()}  NPT {nivel:+.2f}", 2.2, "NOTA", "centro")
+        if (
+            Polygon(c["contorno_mm"]).area > 10e6
+        ):  # las cubiertas pequeñas no se rotulan (se lee en las cotas)
+            lam.texto((cx, cy - 12), f"{c['id'].upper()}  NPT {nivel:+.2f}", 2.2, "NOTA", "centro")
         _cotas(lam, vista, c["contorno_mm"])
     for z in viv.get("zonas_instalacion", []):
         lam.polilinea(
@@ -105,6 +108,13 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], elems: list[Elemento], 
         cx, cy = np.mean(pts, axis=0)
         lam.texto((cx, cy + 1.2), e.id[-3:], 1.6, "TEXTO", "centro")
         lam.texto((cx, cy - 1.6), e.propiedades["string"], 1.3, "TEXTO", "centro")
+    # Rutas de cableado (esquemáticas, desde el modelo 3D)
+    for e in elems:
+        if e.tipo.startswith("canalizacion"):
+            capa = "DC" if e.propiedades["circuito"] == "DC" else "AC"
+            lam.polilinea(
+                [vista(p[:2]) for p in e.propiedades["ruta_mm"]], capa, trazo="discontinuo"
+            )
     # Etiquetas de equipos
     for e in elems:
         if e.tipo in ("inversor", "bateria", "tablero", "buitron"):
@@ -112,7 +122,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], elems: list[Elemento], 
             nombre = {"inversor": "INV", "bateria": "BAT", "tablero": "TFV", "buitron": "BUITRÓN"}[
                 e.tipo
             ]
-            lam.texto((cx, cy), nombre, 1.6, "EQUIPO", "centro", negrita=True)
+            lam.texto((cx, cy), nombre, 1.1, "EQUIPO", "centro", negrita=True)
 
     # Norte y escala gráfica
     nx, ny = x0 + 8, y0 + ah - 18
@@ -179,6 +189,8 @@ def _cuadro(lam, x, y, w, h, proyecto, elems, biblioteca, strings) -> None:
     filas += [
         ("INV / BAT / TFV", "inversor / batería / tablero FV"),
         ("- - -", "zona de instalación"),
+        ("DC (naranja)", "ruta de cableado DC"),
+        ("AC (azul)", "ruta de cableado AC"),
         ("Madera", "estructura de la pérgola"),
         ("Cotas", "en metros; NPT = nivel de piso terminado"),
     ]
@@ -206,7 +218,7 @@ def _cuadro(lam, x, y, w, h, proyecto, elems, biblioteca, strings) -> None:
         import textwrap
 
         for n_ in notas:
-            for linea in textwrap.wrap(n_, 62)[:2]:
+            for linea in textwrap.wrap(n_, 74)[:3]:
                 lam.texto((x + 3, yy), linea, 1.7, "NOTA")
                 yy -= 3
             yy -= 1

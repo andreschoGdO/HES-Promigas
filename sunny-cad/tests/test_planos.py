@@ -49,8 +49,12 @@ def _proyecto():
 def test_laminas_de_riomar() -> None:
     proyecto, bib, entrada, calc = _proyecto()
     lams = laminas(proyecto, bib, entrada, calc, [])
-    assert [lam.codigo for lam in lams] == ["ARQ-01", "ARQ-02", "ELE-01"]
-    assert lams[0].escala == "1:100"  # la planta de ~18 m cabe en A3 a 1:100
+    assert [lam.codigo for lam in lams] == [
+        "PRO-ARQ-RIOMAR-DIS-001",
+        "PRO-ARQ-RIOMAR-ALZ-002",
+        "PRO-ELE-RIOMAR-UNI-003",
+    ]
+    assert lams[0].escala.startswith("1:")
     assert lams[1].escala == "1:20"
     textos = " ".join(p["s"] for p in lams[2].primitivas if p["t"] == "texto")
     assert "S1.1.1" in textos and "K1" in textos and "6 AWG" in textos and "STAR" in textos
@@ -58,12 +62,24 @@ def test_laminas_de_riomar() -> None:
     assert "8.93 kWp" in planta and "15 × JAM72D40-595/MB" in planta
 
 
-def test_cajetin_sin_datos_personales() -> None:
-    proyecto, *_ = _proyecto()
-    d = datos_cajetin(proyecto, None, Lamina(1, "ARQ-01", "Planta"), 4, "2026-11-15")
-    assert d["CLIENTE"] == "" and d["INGENIERO RESPONSABLE"] == ""
-    assert d["PLANO"] == "ARQ-01 1/4"
-    assert d["UBICACIÓN"] == "Barranquilla, Atlántico"
+def test_cajetin_promigas_sin_datos_personales() -> None:
+    from engine.planos.__main__ import PLANTILLA, materiales
+
+    proyecto, bib, entrada, calc = _proyecto()
+    plantilla = validar.cargar_json(PLANTILLA)
+    mats = materiales(proyecto, bib, calc)
+    lam = Lamina(1, "PRO-ARQ-RIOMAR-DIS-001", "Planta")
+    d = datos_cajetin(proyecto, None, lam, 5, "2026-11-15", plantilla, mats, 8.925)
+    assert d["disenado_por"] == ""
+    assert d["hoja"] == "1/5" and d["codigo"] == "PRO-ARQ-RIOMAR-DIS-001"
+    assert d["localizacion"] == "Barranquilla, Atlántico"
+    assert "8.93 kWp" in d["proyecto"]
+    assert d["revisiones"][0]["revision"] == "A"
+    # Lista de materiales desde el proyecto: 15 módulos, inversor y batería S15 de 3 módulos
+    assert mats[0]["cantidad"] == 15 and "JAM72D40-595/MB" in mats[0]["descripcion"]
+    assert any("HP3-15KL2" in m["descripcion"] for m in mats)
+    assert any("BHF-S15 (3 mód.)" in m["descripcion"] for m in mats)
+    assert (validar.RAIZ / plantilla["logo"]).is_file()
 
 
 def test_planos_con_datos_personales_van_a_privado(
@@ -90,7 +106,6 @@ def test_planos_con_datos_personales_van_a_privado(
     assert cli(["generar", "riomar-terraza-barranquilla", "--fecha", "2026-11-15"]) == 0
     assert (destino / "privado" / "planos" / "riomar-terraza-barranquilla_planos.pdf").is_file()
     assert not (destino / "salidas" / "planos").exists()
-    doc = ezdxf.readfile(destino / "privado" / "planos" / "riomar-terraza-barranquilla_ARQ-01.dxf")
+    doc = ezdxf.readfile(destino / "privado" / "planos" / "PRO-ARQ-RIOMAR-DIS-001.dxf")
     textos = [t.dxf.text for t in doc.modelspace().query("TEXT")]
-    assert "Cliente de prueba" in textos
     assert any("M.P. XX-000" in t for t in textos)

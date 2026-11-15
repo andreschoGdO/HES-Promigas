@@ -75,6 +75,40 @@ def vistas(
                 "lente_mm": 24,
             }
         )
+    # Vista superior ortográfica (planta fotográfica) e isométrica desde el suroeste
+    extension = float(max(todo.max(axis=0)[:2] - todo.min(axis=0)[:2]))
+    out.append(
+        {
+            "nombre": "superior",
+            "camara": [centro[0], centro[1] + 0.01, centro[2] + 60],
+            "objetivo": list(centro),
+            "ortho_m": extension * 1.12,
+        }
+    )
+    out.append(
+        {
+            "nombre": "isometrica",
+            "camara": list(centro + np.array([-0.42, -0.42, 0.36]) * radio),
+            "objetivo": list(c_mod),
+            "lente_mm": 35,
+        }
+    )
+    rutas = [e for e in elems if e.tipo.startswith("canalizacion")]
+    if rutas and equipos and entrada:
+        b = np.vstack([e.malla.bounds for e in rutas + equipos]) / 1000
+        obj = (b.min(axis=0) + b.max(axis=0)) / 2
+        r = np.radians(entrada["rumbo_muro_equipos_deg"] - 90)
+        frente = np.array([np.sin(r), np.cos(r), 0])
+        r2 = np.radians(entrada["rumbo_muro_equipos_deg"] + 180)
+        derecha = np.array([np.sin(r2), np.cos(r2), 0])
+        out.append(
+            {
+                "nombre": "cableado",
+                "camara": list(obj + 3.0 * frente + 2.2 * derecha + [0, 0, 1.6]),
+                "objetivo": list(obj + 0.6 * derecha),
+                "lente_mm": 24,
+            }
+        )
     amb = ambientacion(proyecto) if proyecto else None
     if amb and equipos:
         amb["evitar"] = [[float(v) for v in e.malla.centroid[:2] / 1000] for e in equipos]
@@ -216,8 +250,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("generar")
     p.add_argument("id")
     p.add_argument("--render", action="store_true")
-    p.add_argument("--resolucion", type=int, nargs=2, default=(1600, 1000))
-    p.add_argument("--muestras", type=int, default=48)
+    p.add_argument("--resolucion", type=int, nargs=2, default=(2400, 1500))
+    p.add_argument("--muestras", type=int, default=32)
     p.set_defaults(funcion=generar)
     args = parser.parse_args(argv)
     return args.funcion(args)

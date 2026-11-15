@@ -25,6 +25,8 @@ CLASES = {
     "madera": ("IfcMember", "MEMBER"),
     "buitron": ("IfcBuildingElementProxy", None),
     "muro": ("IfcWall", "STANDARD"),
+    "canalizacion_dc": ("IfcCableCarrierSegment", "CONDUITSEGMENT"),
+    "canalizacion_ac": ("IfcCableCarrierSegment", "CONDUITSEGMENT"),
     "inversor": ("IfcBuildingElementProxy", None),
     "bateria": ("IfcElectricFlowStorageDevice", "BATTERY"),
     "tablero": ("IfcElectricDistributionBoard", "DISTRIBUTIONBOARD"),
@@ -74,7 +76,11 @@ def exportar(proyecto: dict[str, Any], elems: list[Elemento], salida: Path) -> P
         )
         ifcopenshell.api.geometry.assign_representation(f, product=producto, representation=rep)
         ifcopenshell.api.spatial.assign_container(f, products=[producto], relating_structure=nivel)
-        props = {k: v for k, v in el.propiedades.items() if v is not None}
+        props = {
+            k: v
+            for k, v in el.propiedades.items()
+            if v is not None and not isinstance(v, (list, dict))
+        }
         if props:
             pset = ifcopenshell.api.pset.add_pset(f, product=producto, name="Pset_SunnyCad")
             ifcopenshell.api.pset.edit_pset(f, pset=pset, properties=props)

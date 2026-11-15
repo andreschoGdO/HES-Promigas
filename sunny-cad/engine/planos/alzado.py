@@ -114,6 +114,22 @@ def dibujar(
         lam.texto(((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 - 2), modelo, 1.8, "TEXTO", "centro")
         filas.append((s0, s1, z0, z1, e))
 
+    # Rutas de cableado proyectadas sobre el muro (las que corren cerca de él)
+    normal = np.array([-d[1], d[0]])
+    for e in elems:
+        if not e.tipo.startswith("canalizacion"):
+            continue
+        pts = []
+        for x, y, z in e.propiedades["ruta_mm"]:
+            q = np.array([x, y]) - a
+            if abs(q @ normal) < 1200 and -300 < q @ d < largo + 300:
+                pts.append(px(float(q @ d), z))
+        if len(pts) > 1:
+            lam.polilinea(
+                pts, "DC" if e.propiedades["circuito"] == "DC" else "AC", trazo="discontinuo"
+            )
+    lam.texto((ox, oy + H + 18), "Rutas: DC (naranja) · AC (azul) — esquemáticas", 1.8, "NOTA")
+
     # Cotas horizontales (posición desde la esquina interior, a la izquierda) y verticales (alturas)
     for i, (s0, s1, z0, z1, _e) in enumerate(sorted(filas, key=lambda f: f[0])):
         ya = oy - 8 - i * 6

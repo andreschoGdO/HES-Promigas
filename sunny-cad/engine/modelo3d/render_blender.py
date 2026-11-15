@@ -206,6 +206,12 @@ for v in datos_vistas:
     camara.location = Vector(v["camara"])
     direccion = Vector(v["objetivo"]) - camara.location
     camara.rotation_euler = direccion.to_track_quat("-Z", "Y").to_euler()
-    camara.data.lens = v.get("lente_mm", 35)
+    if v.get("ortho_m"):
+        camara.data.type = "ORTHO"
+        camara.data.ortho_scale = v["ortho_m"]
+    else:
+        camara.data.type = "PERSP"
+        camara.data.lens = v.get("lente_mm", 35)
+    camara.data.clip_end = 500
     escena.render.filepath = f"{salida}/render_{v['nombre']}.png"
     bpy.ops.render.render(write_still=True)

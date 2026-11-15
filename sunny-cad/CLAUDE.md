@@ -84,4 +84,6 @@ Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y f
 - DC en coraza americana de 1" (cable FV 2×4 mm² + tierra); AC en tubo IMC; cajas de paso de
   10×10 cm IP66 y canaleta metálica con doble división hacia el tablero existente.
 - Señalización de peligro y de doble fuente en el inversor y los tableros.
+- Planos con el cajetín y el logo de Promigas (plano de referencia PRO-ELE-SPEC-DIS-001); códigos `PRO-<disciplina>-<proyecto>-<tipo>-<nnn>`.
+- En Riomar los equipos van en la cara noroeste (costado izquierdo) de la terraza alta; el buitrón (80 cm de saliente, 1,7 m de alto) baja dos pisos hasta el tablero existente.
 

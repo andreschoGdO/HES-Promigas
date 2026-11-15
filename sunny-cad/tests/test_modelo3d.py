@@ -127,7 +127,7 @@ def test_render_rapido(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         )
         == 0
     )
-    assert len(list((destino / "salidas").glob("render_*.png"))) == 4
+    assert len(list((destino / "salidas").glob("render_*.png"))) == 7
     assert "__GLB_BASE64__" not in (destino / "salidas" / "visor_3d.html").read_text()
 
 
@@ -140,11 +140,23 @@ def test_pergola_de_madera_adosada(elems) -> None:
     assert all(e.propiedades["material"] == "madera" for e in madera)
 
 
-def test_muro_y_buitron_en_el_modelo(elems) -> None:
-    tipos = {e.tipo for e in elems}
-    assert {"muro", "buitron"} <= tipos
-    muro = next(e for e in elems if e.tipo == "muro")
-    assert muro.malla.bounds[1][2] == pytest.approx(3000)
+def test_buitron_y_canalizaciones_en_el_modelo(elems) -> None:
+    tipos = [e.tipo for e in elems]
+    assert (
+        "muro" not in tipos
+    )  # los equipos van sobre la cara de la terraza alta, no sobre un muro nuevo
+    buitron = next(e for e in elems if e.tipo == "buitron")
+    assert buitron.malla.bounds[1][2] == pytest.approx(1700)  # 1,7 m (usuario)
+    rutas = {e.id: e for e in elems if e.tipo.startswith("canalizacion")}
+    assert {
+        "ruta-dc-zona-01",
+        "ruta-dc-zona-02",
+        "ruta-dc-bateria",
+        "ruta-ac-inversor",
+        "ruta-ac-buitron",
+    } <= set(rutas)
+    # La ruta AC al buitrón termina sobre el buitrón (a su altura), por encima de los equipos.
+    assert rutas["ruta-ac-buitron"].propiedades["ruta_mm"][-1][2] == pytest.approx(1700)
 
 
 def test_sin_choques_3d_entre_equipos(elems) -> None:

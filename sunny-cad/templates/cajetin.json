@@ -1,98 +1,14 @@
 {
-  "version": "1.0",
-  "nota": "Plantilla del cajetín. Campos tomados de los planos de ejemplo (Casa de la Gerente y Reserva Pance Casa 2). El logo corporativo está pendiente: mientras 'logo' sea null se dibuja un recuadro 'LOGO'. Los datos personales (cliente, ingeniero, matrícula) se leen de projects/<id>/privado/datos_privados.json; si no existen, quedan en blanco para llenar.",
-  "logo": null,
-  "empresa": "Proyecto Sunny",
-  "alto_mm": 42,
+  "version": "2.0",
+  "formato": "promigas",
+  "nota": "Cajetín según el plano de referencia de Promigas PRO-ELE-SPEC-DIS-001 (formato A2), escalado a la lámina. Datos personales (diseñador, cliente) desde projects/<id>/privado/datos_privados.json.",
+  "logo": "templates/logos/promigas.png",
+  "empresa": "PROMIGAS",
+  "codificacion": "PRO-{disciplina}-{proyecto}-{tipo}-{numero:03d}",
+  "dibujado_por": "sunny-cad",
   "leyenda_borrador": "BORRADOR TÉCNICO — NO VÁLIDO PARA CONSTRUCCIÓN SIN REVISIÓN Y FIRMA DEL INGENIERO RESPONSABLE",
-  "software": "sunny-cad",
-  "columnas": [
-    {
-      "ancho": 45,
-      "campos": [
-        [
-          "logo",
-          1.0
-        ]
-      ]
-    },
-    {
-      "ancho": 95,
-      "campos": [
-        [
-          "PROYECTO",
-          0.6
-        ],
-        [
-          "UBICACIÓN",
-          0.4
-        ]
-      ]
-    },
-    {
-      "ancho": 65,
-      "campos": [
-        [
-          "CONTIENE",
-          0.6
-        ],
-        [
-          "DISEÑÓ",
-          0.4
-        ]
-      ]
-    },
-    {
-      "ancho": 50,
-      "campos": [
-        [
-          "CLIENTE",
-          0.6
-        ],
-        [
-          "REVISÓ",
-          0.4
-        ]
-      ]
-    },
-    {
-      "ancho": 55,
-      "campos": [
-        [
-          "INGENIERO RESPONSABLE",
-          0.6
-        ],
-        [
-          "APROBÓ",
-          0.4
-        ]
-      ]
-    },
-    {
-      "ancho": 60,
-      "campos": [
-        [
-          "NOMBRE DEL ARCHIVO",
-          0.35
-        ],
-        [
-          "SOFTWARE / FECHA",
-          0.35
-        ],
-        [
-          "FORMATO / ESCALA",
-          0.3
-        ]
-      ]
-    },
-    {
-      "ancho": 30,
-      "campos": [
-        [
-          "PLANO",
-          1.0
-        ]
-      ]
-    }
-  ]
+  "confidencialidad": "Este plano es propiedad de Promigas. El uso de la información contenida debe ser tratada como confidencial y se retornará a Promigas en caso de que le sea solicitada. El contenido no podrá ser reproducido, copiado o desechado a menos que sea exclusivamente necesario para el propósito original y previa autorización por escrito.",
+  "zonas": {"columnas": 8, "filas": ["F", "E", "D", "C", "B", "A"]},
+  "franja_mm": {"alto": 40, "materiales": 106, "confidencialidad": 104, "notas": 76, "datos": 40, "logo": 74},
+  "revisiones_mm": {"ancho": 160, "fila": 4.2}
 }

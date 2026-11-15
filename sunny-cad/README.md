@@ -137,17 +137,27 @@ python -m engine.modelo3d generar <id> --render   # además salidas/render_*.png
 Es un modelo de borrador: cubiertas como losas, la terraza alta como volumen macizo, pérgola
 esquemática (columnas y vigas perimetrales) y equipos como cajas con las medidas de su ficha.
 
-## Planos con cajetín (Paso 7)
+## Planos con cajetín Promigas (Paso 7)
 
 ```bash
 python -m engine.planos generar <id>
 ```
 
-Láminas A3 generadas desde el proyecto (nunca se editan a mano): **ARQ-01** planta de cubierta con
-módulos por string, estructura y equipos (escala elegida automáticamente); **ARQ-02** alzado del
-muro de equipos a 1:20; **ELE-01** diagrama unifilar desde el cálculo eléctrico; **REN-01** renders.
-Salida: un PDF con todas las láminas y un DXF por lámina (capas por tipo de elemento, en mm).
+Láminas A3 generadas desde el proyecto (nunca se editan a mano), con el cajetín del plano de
+referencia de Promigas (PRO-ELE-SPEC-DIS-001): marco con zonas 8…1 / F…A, tabla de revisiones,
+lista de materiales calculada desde el proyecto, nota de confidencialidad, notas, datos de dibujo
+y bloque con logo, proyecto, contenido, tamaño, código, revisión, escala, unidad y hoja.
 
-El cajetín sale de `templates/cajetin.json` (campos de los planos de referencia; logo pendiente).
-Cliente e ingeniero se leen de `privado/datos_privados.json`: si existen, los planos se guardan en
-`privado/planos/` para que los datos personales no lleguen a git.
+Codificación: `PRO-<disciplina>-<proyecto>-<tipo>-<nnn>`:
+
+| Código | Contenido |
+|---|---|
+| `PRO-ARQ-<P>-DIS-001` | Planta: distribución de módulos por string, pérgola, equipos y rutas de cableado |
+| `PRO-ARQ-<P>-ALZ-002` | Alzado del muro de equipos a 1:20 con rutas de cableado |
+| `PRO-ELE-<P>-UNI-003` | Diagrama unifilar desde el cálculo eléctrico |
+| `PRO-ARQ-<P>-REN-004` | Renders: terraza, isométrica, aéreas |
+| `PRO-ARQ-<P>-REN-005` | Renders: vista superior, rutas de cableado y muro de equipos |
+
+Salida: un PDF con todas las láminas y un DXF por lámina. El cajetín sale de
+`templates/cajetin.json` y el logo de `templates/logos/promigas.png`. Si existen datos personales en
+`privado/datos_privados.json`, los planos se guardan en `privado/planos/` (fuera de git).

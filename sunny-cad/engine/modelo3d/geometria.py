@@ -31,6 +31,8 @@ COLORES = {
     "madera": (139, 94, 60, 255),
     "buitron": (196, 160, 135, 255),
     "muro": (196, 160, 135, 255),
+    "canalizacion_dc": (226, 110, 30, 255),
+    "canalizacion_ac": (60, 90, 170, 255),
     "inversor": (245, 245, 245, 255),
     "bateria": (235, 235, 235, 255),
     "tablero": (200, 200, 195, 255),
@@ -153,12 +155,18 @@ def elementos(
         elif "ubicacion_mm" in e and entrada_electrica:
             out.append(_equipo(e, comp, entrada_electrica))
 
-    if entrada_electrica and "muro_equipos" in entrada_electrica:
+    if (
+        entrada_electrica
+        and entrada_electrica.get("muro_equipos", {}).get("modelar", True) is not False
+        and "muro_equipos" in entrada_electrica
+    ):
         out.append(muro(entrada_electrica["muro_equipos"], viv["cubiertas"]))
     if entrada_electrica and "buitron" in entrada_electrica:
         out.append(
             buitron(entrada_electrica["buitron"], entrada_electrica["rumbo_muro_equipos_deg"])
         )
+    if entrada_electrica and "muro_equipos" in entrada_electrica:
+        out += canalizaciones(proyecto, entrada_electrica, out)
     if entrada_electrica and "tablero-fv" in entrada_electrica.get("ubicaciones", {}):
         t = entrada_electrica["tablero_fv"]
         ub = entrada_electrica["ubicaciones"]["tablero-fv"]
@@ -312,6 +320,160 @@ def muro(datos: dict[str, Any], cubiertas: list[dict[str, Any]]) -> Elemento:
         _prisma([list(p) for p in contorno], 0, datos["alto_mm"]),
         {"descripcion": "Muro de los equipos", "es_supuesto": datos.get("es_supuesto", True)},
     )
+
+
+def _tubo(ruta: list[list[float]], radio: float) -> trimesh.Trimesh:
+    piezas = []
+    for p0, p1 in zip(ruta[:-1], ruta[1:], strict=True):
+        if np.linalg.norm(np.subtract(p1, p0)) > 1:
+            piezas.append(trimesh.creation.cylinder(radius=radio, segment=[p0, p1], sections=12))
+    return trimesh.util.concatenate(piezas)
+
+
+def canalizaciones(
+    proyecto: dict[str, Any], entrada: dict[str, Any], elems: list[Elemento]
+) -> list[Elemento]:
+    """Rutas de cableado esquemáticas (borrador): módulos, inversor, batería, tablero, buitrón.
+
+    Todas parten de la esquina de la terraza alta donde está el muro de equipos ("de" del muro).
+    DC: de cada zona de módulos al inversor rodeando la esquina; batería: bajo el inversor;
+    AC: inversor → tablero FV, y tablero FV → buitrón por encima de los equipos (baja N pisos).
+    """
+    muro = entrada["muro_equipos"]
+    esquina = np.array(muro["de"], float)
+    w = np.subtract(muro["a"], muro["de"])
+    w = w / np.linalg.norm(w)
+    r = math.radians(entrada["rumbo_muro_equipos_deg"] - 90)
+    n = np.array([math.sin(r), math.cos(r)])  # hacia afuera del muro
+    ub = entrada["ubicaciones"]
+
+    def s_de(p):  # posición a lo largo del muro
+        return float(np.dot(np.subtract(p, esquina), w))
+
+    def en_muro(s_mm, z, salida=100):
+        q = esquina + w * s_mm + n * salida
+        return [float(q[0]), float(q[1]), float(z)]
+
+    por_id = {e.id: e for e in elems}
+    inv = por_id.get("inversor-01")
+    bat = por_id.get("bateria-01")
+    if inv is None:
+        return []
+    s_inv = s_de(ub["inversor-01"]["punto"])
+    z_inv_top, z_inv_bot = float(inv.malla.bounds[1][2]), float(inv.malla.bounds[0][2])
+    out = []
+    viv = proyecto["vivienda"]
+    cubs = {c["id"]: c for c in viv["cubiertas"]}
+    for z in viv.get("zonas_instalacion", []):
+        cota = cubs[z["cubierta_ref"]]["cota_base_mm"] or 0
+        plano = plano_zona(z, cota + (z.get("altura_estructura_mm") or 0))
+        v = min(z["contorno_mm"], key=lambda p: np.linalg.norm(np.subtract(p, esquina)))
+        if z["estructura"] == "pergola":
+            zr = plano(*v) - 450  # bajo las vigas
+            hacia = np.subtract(v, esquina)
+            hacia = hacia / (np.linalg.norm(hacia) or 1)
+            codo = esquina + n * 120 + hacia * 120
+            ruta = [
+                [v[0], v[1], zr],
+                [float(codo[0]), float(codo[1]), zr],
+                en_muro(s_inv, zr),
+                en_muro(s_inv, z_inv_top),
+            ]
+        else:
+            zr = cota + 60
+            borde_in = esquina + w * 250 - n * 150
+            ruta = [
+                [v[0], v[1], zr],
+                [float(borde_in[0]), float(borde_in[1]), zr],
+                en_muro(250, zr),
+                en_muro(250, z_inv_top + 100),
+                en_muro(s_inv - 150, z_inv_top + 100),
+                en_muro(s_inv - 150, z_inv_top),
+            ]
+        out.append(
+            Elemento(
+                f"ruta-dc-{z['id']}",
+                "canalizacion_dc",
+                _tubo(ruta, 20),
+                {
+                    "circuito": "DC",
+                    "descripcion": f"Canalización DC desde {z['id']} al inversor",
+                    "ruta_mm": ruta,
+                    "es_esquematico": True,
+                },
+            )
+        )
+    if bat is not None:
+        s_bat = s_de(ub["bateria-01"]["punto"])
+        z_bat = float(bat.malla.bounds[1][2])
+        ruta = [
+            en_muro(s_inv - 200, z_inv_bot),
+            en_muro(s_inv - 200, z_bat + 60),
+            en_muro(s_bat, z_bat + 60),
+            en_muro(s_bat, z_bat),
+        ]
+        out.append(
+            Elemento(
+                "ruta-dc-bateria",
+                "canalizacion_dc",
+                _tubo(ruta, 25),
+                {
+                    "circuito": "DC",
+                    "descripcion": "Cable de batería al inversor",
+                    "ruta_mm": ruta,
+                    "es_esquematico": True,
+                },
+            )
+        )
+    tab = ub.get("tablero-fv")
+    if tab:
+        s_tab = s_de(tab["punto"])
+        z_ac = z_inv_top - 120
+        ruta = [en_muro(s_inv + 250, z_ac), en_muro(s_tab - 150, z_ac)]
+        out.append(
+            Elemento(
+                "ruta-ac-inversor",
+                "canalizacion_ac",
+                _tubo(ruta, 25),
+                {
+                    "circuito": "AC",
+                    "descripcion": "AC inversor ↔ tablero FV (red y respaldo)",
+                    "ruta_mm": ruta,
+                    "es_esquematico": True,
+                },
+            )
+        )
+        b = entrada.get("buitron")
+        if b:
+            s_b = s_de(b["punto"])
+            sal_b = float(np.dot(np.subtract(b["punto"], esquina), n))
+            z_alto = z_inv_top + 180
+            z_tab_top = tab["z_mm"] + entrada.get("tablero_fv", {}).get("alto_mm", 800) / 2
+            ruta = [
+                en_muro(s_tab, z_tab_top),
+                en_muro(s_tab, z_alto),
+                en_muro(s_b, z_alto),
+                en_muro(s_b, z_alto, sal_b),
+                en_muro(s_b, b["alto_mm"], sal_b),
+            ]
+            out.append(
+                Elemento(
+                    "ruta-ac-buitron",
+                    "canalizacion_ac",
+                    _tubo(ruta, 25),
+                    {
+                        "circuito": "AC",
+                        "descripcion": (
+                            "AC tablero FV → buitrón; baja "
+                            f"{entrada.get('pisos_hasta_tablero_existente', '?')} "
+                            "pisos al tablero existente"
+                        ),
+                        "ruta_mm": ruta,
+                        "es_esquematico": True,
+                    },
+                )
+            )
+    return out
 
 
 def buitron(datos: dict[str, Any], rumbo_deg: float) -> Elemento:

@@ -38,6 +38,10 @@ class Lamina:
     titulo: str
     formato: str = "A3"
     escala: str = "INDICADA"
+    disciplina: str = "ARQ"
+    tipo: str = "DIS"
+    unidad: str = "m"
+    notas: list[str] = field(default_factory=list)
     primitivas: list[dict[str, Any]] = field(default_factory=list)
 
     @property

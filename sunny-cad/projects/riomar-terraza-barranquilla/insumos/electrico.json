@@ -6,48 +6,53 @@
     "sistemas_en_paralelo": 1
   },
   "medidor": "star-dtsy23s",
-  "ubicacion_texto": "Muro del costado izquierdo de la terraza alta (2,31 m), entre la esquina interior y el buitrón",
+  "ubicacion_texto": "Cara noroeste (costado izquierdo) de la terraza alta, entre el buitrón y la esquina interior",
   "ubicaciones": {
-    "tablero-fv": {
-      "punto": [8430, 15762],
-      "z_mm": 1400,
+    "bateria-01": {
+      "punto": [10912, 15434],
+      "z_mm": 0,
       "es_supuesto": true
     },
     "inversor-01": {
-      "punto": [8973, 15404],
+      "punto": [11521, 16005],
       "z_mm": 1500,
       "es_supuesto": true
     },
-    "bateria-01": {
-      "punto": [9689, 14975],
-      "z_mm": 0,
+    "tablero-fv": {
+      "punto": [12014, 16429],
+      "z_mm": 1400,
       "es_supuesto": true
     }
   },
   "rumbo_edificio_deg": 50.8,
-  "nota": "Equipos en el muro del costado izquierdo de la terraza alta (foto anotada del usuario), medido 2,31 m entre la esquina interior (izquierda) y el buitrón (derecha). Orden según las fotos de obra de referencia: tablero FV (0,10–0,50 m desde la esquina interior), inversor (0,65–1,25 m, centro a 1,5 m de altura), batería en el piso (1,35–2,22 m). Posiciones exactas SUPUESTAS.",
+  "nota": "Equipos en la cara noroeste de la terraza alta (flecha del usuario sobre el render), desde la esquina con la pérgola (derecha): buitrón 0–0,40 m, batería 0,49–1,36 m, inversor 1,46–2,06 m (centro a 1,5 m), tablero FV 2,21–2,61 m; esquina interior a 2,71 m. Posiciones exactas SUPUESTAS.",
   "tablero_fv": {
     "ancho_mm": 400,
     "alto_mm": 800,
     "profundidad_mm": 200,
     "nota": "Medidas SUPUESTAS (tablero FV de 80 × 40 × 20 cm del unifilar de referencia). Contiene el contactor (ATS) y el medidor."
   },
-  "rumbo_muro_equipos_deg": 301.9,
+  "rumbo_muro_equipos_deg": 47.7,
   "buitron": {
-    "punto": [10154, 14349],
+    "punto": [10183, 15158],
     "z_mm": 0,
     "es_supuesto": true,
     "ancho_mm": 400,
     "profundidad_mm": 800,
     "alto_mm": 1700,
-    "nota": "Buitrón por donde baja el cableado al tablero existente: volumen saliente en el extremo derecho del muro de equipos, 80 cm de saliente y 1,7 m de alto (usuario). Ancho a lo largo del muro (40 cm) SUPUESTO."
+    "nota": "Buitrón: volumen saliente de 80 cm y 1,7 m de alto (usuario), en el extremo derecho de la cara noroeste, junto a la esquina con la pérgola. Baja dos pisos hasta el tablero existente (usuario). Ancho de 40 cm SUPUESTO."
   },
   "muro_equipos": {
     "de": [10304, 14727],
-    "a": [8233, 16014],
+    "a": [12310, 16549],
     "alto_mm": 3000,
     "espesor_mm": 150,
+    "modelar": false,
     "es_supuesto": true,
-    "nota": "Muro del costado izquierdo donde van los equipos; altura SUPUESTA de 3,0 m (fotos)."
-  }
+    "nota": "Tramo de la cara noroeste de la terraza alta donde van los equipos (2,31 m entre buitrón y esquina interior). Solo para el alzado: el muro ya es el volumen de la terraza alta."
+  },
+  "pisos_hasta_tablero_existente": 2,
+  "altura_piso_mm": 3000,
+  "recorrido_horizontal_tablero_existente_m": 3,
+  "nota_recorrido_existente": "Baja 2 pisos por el buitrón (usuario) hasta el tablero existente de las fotos. SUPUESTOS: altura de piso 3,0 m y 3 m de recorrido horizontal hasta el tablero."
 }

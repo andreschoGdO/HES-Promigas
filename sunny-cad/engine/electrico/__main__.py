@@ -29,6 +29,23 @@ def _rel(ruta: Path) -> Path:
     return ruta.relative_to(validar.RAIZ) if ruta.is_relative_to(validar.RAIZ) else ruta
 
 
+def longitud_existente(entrada, ub_tab, rumbo, criterios) -> float | None:
+    """Tablero FV → buitrón → baja N pisos → recorrido horizontal hasta el tablero existente."""
+    if entrada.get("longitud_ac_existente_m"):
+        return entrada["longitud_ac_existente_m"]
+    b = entrada.get("buitron")
+    pisos = entrada.get("pisos_hasta_tablero_existente")
+    if not (b and pisos and ub_tab):
+        return None
+    hasta_buitron = circuitos.longitud_ruta_m(
+        tuple(ub_tab["punto"]), ub_tab["z_mm"], tuple(b["punto"]), b["z_mm"], rumbo, criterios
+    )
+    bajada = pisos * entrada.get("altura_piso_mm", 3000) / 1000
+    horizontal = entrada.get("recorrido_horizontal_tablero_existente_m", 0)
+    r = criterios["longitud_ruta"]
+    return hasta_buitron + (bajada + horizontal) * (1 + r["reserva_pct"] / 100)
+
+
 def _equipos_base(entrada: dict[str, Any]) -> list[dict[str, Any]]:
     ub = entrada["ubicaciones"]
     eq = [
@@ -224,7 +241,7 @@ def calcular(
         (
             "AC-EXISTENTE",
             "tablero FV → tablero existente de la vivienda",
-            entrada.get("longitud_ac_existente_m"),
+            longitud_existente(entrada, ub_tab, rumbo, criterios),
         ),
     ):
         circuitos_out.append(

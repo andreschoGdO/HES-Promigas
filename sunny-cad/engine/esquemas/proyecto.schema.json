@@ -19,7 +19,7 @@
     "informacion_faltante"
   ],
   "properties": {
-    "version_esquema": { "const": "1.0.0" },
+    "version_esquema": { "const": "1.1.0" },
     "id": {
       "description": "Igual al nombre de la carpeta en projects/.",
       "type": "string",
@@ -182,7 +182,10 @@
       ],
       "properties": {
         "id": { "type": "string", "pattern": "^cubierta-\\d{2}$" },
-        "tipo": { "enum": ["plana", "inclinada"] },
+        "tipo": {
+          "description": "Lo indica el usuario para cada vivienda; no se deduce de la inclinación.",
+          "enum": ["plana", "inclinada"]
+        },
         "material": {
           "enum": ["losa_concreto", "teja_barro", "teja_fibrocemento", "lamina_metalica", "otro"]
         },
@@ -217,9 +220,7 @@
             }
           }
         }
-      },
-      "if": { "properties": { "tipo": { "const": "plana" } } },
-      "then": { "properties": { "inclinacion_deg": { "maximum": 5 } } }
+      }
     },
     "equipo": {
       "type": "object",
@@ -245,6 +246,11 @@
         },
         "componente_ref": {
           "description": "id de un componente existente en library/.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+        },
+        "configuracion": {
+          "description": "Solo baterías: id de la configuración del componente (número de módulos).",
           "type": "string",
           "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
         },

@@ -2,39 +2,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sunny-cad.local/esquemas/componente.schema.json",
   "title": "Componente de biblioteca",
-  "description": "Un equipo de la biblioteca (library/). Todo dato técnico debe venir de la ficha técnica citada en 'fuente'. Unidades en el nombre del campo: _mm, _kg, _w, _kwh, _v, _a, _hz, _pct, _deg.",
+  "description": "Un equipo de la biblioteca (library/). Todo dato técnico debe venir de la ficha técnica citada en 'fuente'. Unidades en el nombre del campo: _mm, _kg, _w, _kwh, _v, _a, _ah, _hz, _pct, _c, _m, _ms, _pa.",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "version_esquema",
-    "id",
-    "tipo",
-    "es_ejemplo",
-    "fabricante",
-    "modelo",
-    "fuente",
-    "dimensiones",
-    "electrico"
-  ],
+  "required": ["version_esquema", "id", "tipo", "es_ejemplo", "fabricante", "modelo", "fuente", "electrico"],
   "properties": {
-    "version_esquema": { "const": "1.0.0" },
+    "version_esquema": { "const": "1.1.0" },
     "id": {
-      "description": "Identificador del equipo en la biblioteca: minúsculas, sin tildes ni espacios, separado por guiones.",
+      "description": "Identificador del equipo en la biblioteca: minúsculas, sin tildes ni espacios, separado por guiones. Igual al nombre del archivo.",
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
     },
     "tipo": {
-      "enum": [
-        "modulo",
-        "inversor",
-        "bateria",
-        "tablero",
-        "proteccion",
-        "estructura",
-        "medidor",
-        "monitoreo",
-        "conmutacion"
-      ]
+      "enum": ["modulo", "inversor", "bateria", "tablero", "proteccion", "estructura", "medidor", "monitoreo", "conmutacion"]
     },
     "es_ejemplo": {
       "description": "true si el componente es ficticio (solo para pruebas). Nunca usar un componente de ejemplo en un diseño real.",
@@ -44,21 +24,29 @@
     "modelo": { "type": "string", "minLength": 1 },
     "fuente": { "$ref": "#/$defs/fuente" },
     "dimensiones": { "$ref": "#/$defs/dimensiones" },
+    "ambiente": { "$ref": "#/$defs/ambiente" },
     "electrico": { "type": "object" },
     "notas": { "type": "string" }
   },
   "allOf": [
     {
       "if": { "properties": { "tipo": { "const": "modulo" } } },
-      "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_modulo" } } }
+      "then": {
+        "required": ["dimensiones"],
+        "properties": { "electrico": { "$ref": "#/$defs/electrico_modulo" } }
+      }
     },
     {
       "if": { "properties": { "tipo": { "const": "inversor" } } },
-      "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_inversor" } } }
+      "then": {
+        "required": ["dimensiones"],
+        "properties": { "electrico": { "$ref": "#/$defs/electrico_inversor" } }
+      }
     },
     {
       "if": { "properties": { "tipo": { "const": "bateria" } } },
-      "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_bateria" } } }
+      "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_bateria" } } },
+      "else": { "required": ["dimensiones"] }
     }
   ],
   "$defs": {
@@ -74,7 +62,7 @@
           "minLength": 1
         },
         "revision": {
-          "description": "Versión o revisión de la ficha (por ejemplo 'V1.2'). Si la ficha no la indica, escribir 'sin revision'.",
+          "description": "Versión o revisión de la ficha (por ejemplo 'Version No.: 01-202402'). Si la ficha no la indica, escribir 'sin revision'.",
           "type": "string",
           "minLength": 1
         },
@@ -103,15 +91,38 @@
       }
     },
     "dimensiones": {
-      "description": "Dimensiones exteriores en milímetros y peso en kg.",
+      "description": "Dimensiones exteriores en mm como las da la ficha: ancho (W) × alto (H) × profundidad (D). En módulos FV: alto = lado largo, ancho = lado corto, profundidad = espesor del marco.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["largo_mm", "ancho_mm", "alto_mm", "peso_kg"],
+      "required": ["ancho_mm", "alto_mm", "profundidad_mm", "peso_kg"],
       "properties": {
-        "largo_mm": { "$ref": "#/$defs/positivo" },
         "ancho_mm": { "$ref": "#/$defs/positivo" },
         "alto_mm": { "$ref": "#/$defs/positivo" },
-        "peso_kg": { "$ref": "#/$defs/positivo" }
+        "profundidad_mm": { "$ref": "#/$defs/positivo" },
+        "peso_kg": { "$ref": "#/$defs/positivo" },
+        "nota": {
+          "description": "Aclaración de la ficha, por ejemplo 'sin conectores ni soportes' o 'incluye placa de montaje'.",
+          "type": "string"
+        }
+      }
+    },
+    "ambiente": {
+      "description": "Condiciones de operación según la ficha.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "grado_proteccion": {
+          "description": "Tal como lo da la ficha: 'IP66', 'IP65', 'TYPE3R'…",
+          "type": "string"
+        },
+        "temperatura_operacion_min_c": { "type": "number" },
+        "temperatura_operacion_max_c": { "type": "number" },
+        "altitud_max_m": { "$ref": "#/$defs/positivo" },
+        "altitud_sin_reduccion_m": {
+          "description": "Altitud hasta la cual no hay reducción de potencia (derating).",
+          "$ref": "#/$defs/positivo"
+        },
+        "instalacion": { "enum": ["interior", "exterior", "interior_exterior"] }
       }
     },
     "electrico_modulo": {
@@ -133,12 +144,24 @@
         "isc_a": { "$ref": "#/$defs/positivo" },
         "vmp_v": { "$ref": "#/$defs/positivo" },
         "imp_a": { "$ref": "#/$defs/positivo" },
+        "eficiencia_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "tolerancia_potencia_w": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min_w", "max_w"],
+          "properties": { "min_w": { "type": "number" }, "max_w": { "type": "number" } }
+        },
         "coef_temp_voc_pct_c": { "type": "number" },
         "coef_temp_isc_pct_c": { "type": "number" },
         "coef_temp_pmax_pct_c": { "type": "number" },
+        "noct_c": { "type": "number" },
         "tension_max_sistema_v": { "$ref": "#/$defs/positivo" },
         "fusible_max_serie_a": { "$ref": "#/$defs/positivo" },
-        "bifacial": { "type": "boolean" }
+        "numero_celdas": { "type": "integer", "minimum": 1 },
+        "bifacial": { "type": "boolean" },
+        "bifacialidad_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "carga_estatica_frontal_pa": { "$ref": "#/$defs/positivo" },
+        "carga_estatica_posterior_pa": { "$ref": "#/$defs/positivo" }
       }
     },
     "electrico_inversor": {
@@ -147,11 +170,12 @@
       "required": [
         "tipo_inversor",
         "fases",
+        "conexion_red",
         "potencia_nominal_ac_w",
-        "tension_nominal_ac_v",
-        "frecuencia_hz",
+        "tensiones_nominales_ac_v",
+        "frecuencias_hz",
         "numero_mppt",
-        "entradas_por_mppt",
+        "entradas_fv_totales",
         "tension_max_dc_v",
         "rango_mppt",
         "corriente_max_entrada_por_mppt_a"
@@ -159,17 +183,44 @@
       "properties": {
         "tipo_inversor": { "enum": ["hibrido", "red", "aislado"] },
         "fases": { "enum": ["monofasica", "bifasica", "trifasica"] },
+        "conexion_red": {
+          "description": "Forma de conexión tal como la da la ficha: 'L/N+PE', '3L+N+PE'…",
+          "type": "string",
+          "minLength": 1
+        },
         "potencia_nominal_ac_w": { "$ref": "#/$defs/positivo" },
-        "potencia_max_ac_w": { "$ref": "#/$defs/positivo" },
-        "tension_nominal_ac_v": { "$ref": "#/$defs/positivo" },
-        "frecuencia_hz": { "$ref": "#/$defs/positivo" },
-        "potencia_max_fv_w": { "$ref": "#/$defs/positivo" },
+        "potencia_aparente_max_va": { "$ref": "#/$defs/positivo" },
+        "tensiones_nominales_ac_v": {
+          "description": "Tensiones nominales admitidas. Trifásicos: tensión de línea (208 en un sistema 120/208).",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/positivo" }
+        },
+        "frecuencias_hz": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/positivo" }
+        },
+        "corriente_max_salida_ac_a": { "$ref": "#/$defs/positivo" },
+        "corriente_max_paso_red_a": {
+          "description": "Corriente continua máxima de paso red→carga a través del inversor.",
+          "$ref": "#/$defs/positivo"
+        },
+        "potencia_max_entrada_fv_w": { "$ref": "#/$defs/positivo" },
+        "potencia_fv_max_conectable_w": {
+          "description": "Potencia FV máxima que se puede conectar (DEYE: 'Max. PV Access Power'; Huawei: 'Potencia FV máxima recomendada').",
+          "$ref": "#/$defs/positivo"
+        },
         "numero_mppt": { "type": "integer", "minimum": 1 },
-        "entradas_por_mppt": { "type": "integer", "minimum": 1 },
+        "entradas_fv_totales": { "type": "integer", "minimum": 1 },
         "tension_max_dc_v": { "$ref": "#/$defs/positivo" },
+        "tension_arranque_v": { "$ref": "#/$defs/positivo" },
+        "tension_nominal_dc_v": { "$ref": "#/$defs/positivo" },
         "rango_mppt": { "$ref": "#/$defs/rango_v" },
         "corriente_max_entrada_por_mppt_a": { "$ref": "#/$defs/positivo" },
         "corriente_max_cortocircuito_por_mppt_a": { "$ref": "#/$defs/positivo" },
+        "eficiencia_max_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "eficiencia_europea_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
         "bateria": {
           "description": "Puerto de batería (solo inversores híbridos).",
           "type": "object",
@@ -179,17 +230,28 @@
             "nivel_tension": { "enum": ["baja", "alta"] },
             "rango_tension": { "$ref": "#/$defs/rango_v" },
             "corriente_max_carga_a": { "$ref": "#/$defs/positivo" },
-            "corriente_max_descarga_a": { "$ref": "#/$defs/positivo" }
+            "corriente_max_descarga_a": { "$ref": "#/$defs/positivo" },
+            "potencia_max_carga_w": { "$ref": "#/$defs/positivo" },
+            "potencia_max_descarga_w": { "$ref": "#/$defs/positivo" },
+            "baterias_compatibles": {
+              "description": "Modelos de batería que la ficha declara compatibles.",
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
           }
         },
         "respaldo": {
           "description": "Salida de respaldo (EPS / backup).",
           "type": "object",
           "additionalProperties": false,
-          "required": ["potencia_respaldo_w"],
           "properties": {
             "potencia_respaldo_w": { "$ref": "#/$defs/positivo" },
-            "tiempo_conmutacion_ms": { "$ref": "#/$defs/no_negativo" }
+            "potencia_pico_respaldo_w": { "$ref": "#/$defs/positivo" },
+            "tiempo_conmutacion_ms": { "$ref": "#/$defs/no_negativo" },
+            "equipo_externo_requerido": {
+              "description": "Modelo del equipo externo que exige el respaldo, si aplica (por ejemplo 'SmartGuard-63A-S0').",
+              "type": "string"
+            }
           }
         }
       },
@@ -197,29 +259,82 @@
       "then": { "required": ["bateria"] }
     },
     "electrico_bateria": {
+      "description": "Familia de batería modular. Los datos que dependen del número de módulos van en 'configuraciones', una por columna de la ficha.",
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "tecnologia",
-        "nivel_tension",
-        "tension_nominal_v",
-        "capacidad_util_kwh",
-        "potencia_max_carga_w",
-        "potencia_max_descarga_w",
-        "tiene_bms"
-      ],
+      "required": ["tecnologia", "nivel_tension", "tiene_bms", "modulo_bateria", "configuraciones"],
       "properties": {
         "tecnologia": { "enum": ["lfp", "nmc", "otra"] },
         "nivel_tension": { "enum": ["baja", "alta"] },
-        "tension_nominal_v": { "$ref": "#/$defs/positivo" },
-        "rango_tension": { "$ref": "#/$defs/rango_v" },
-        "capacidad_util_kwh": { "$ref": "#/$defs/positivo" },
-        "capacidad_nominal_kwh": { "$ref": "#/$defs/positivo" },
-        "potencia_max_carga_w": { "$ref": "#/$defs/positivo" },
-        "potencia_max_descarga_w": { "$ref": "#/$defs/positivo" },
-        "profundidad_descarga_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
         "tiene_bms": { "type": "boolean" },
-        "modulos_expandibles": { "type": "integer", "minimum": 1 }
+        "profundidad_descarga_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "corriente_nominal_a": { "$ref": "#/$defs/positivo" },
+        "corriente_pico_descarga_a": { "$ref": "#/$defs/positivo" },
+        "rangos_tension": {
+          "description": "Rangos de tensión de operación. Si la ficha da uno por tipo de sistema, uno por elemento.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["aplicacion", "min_v", "max_v"],
+            "properties": {
+              "aplicacion": { "enum": ["general", "sistema_monofasico", "sistema_trifasico"] },
+              "min_v": { "$ref": "#/$defs/no_negativo" },
+              "max_v": { "$ref": "#/$defs/positivo" }
+            }
+          }
+        },
+        "modulo_bateria": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["modelo", "energia_kwh"],
+          "properties": {
+            "modelo": { "type": "string", "minLength": 1 },
+            "energia_kwh": { "$ref": "#/$defs/positivo" },
+            "tension_nominal_v": { "$ref": "#/$defs/positivo" },
+            "capacidad_ah": { "$ref": "#/$defs/positivo" },
+            "dimensiones": { "$ref": "#/$defs/dimensiones" }
+          }
+        },
+        "partes": {
+          "description": "Otras piezas del sistema (caja de control/BMS, módulo de potencia, base…).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["modelo", "funcion", "cantidad_por_sistema"],
+            "properties": {
+              "modelo": { "type": "string", "minLength": 1 },
+              "funcion": { "enum": ["control_bms", "modulo_potencia", "base", "otra"] },
+              "cantidad_por_sistema": { "type": "integer", "minimum": 1 },
+              "dimensiones": { "$ref": "#/$defs/dimensiones" }
+            }
+          }
+        },
+        "configuraciones": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "modulos_bateria", "energia_util_kwh"],
+            "properties": {
+              "id": {
+                "description": "Identificador de la configuración, por ejemplo 'm3' para tres módulos.",
+                "type": "string",
+                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+              },
+              "modelo_comercial": { "type": "string" },
+              "modulos_bateria": { "type": "integer", "minimum": 1 },
+              "tension_nominal_v": { "$ref": "#/$defs/positivo" },
+              "energia_nominal_kwh": { "$ref": "#/$defs/positivo" },
+              "energia_util_kwh": { "$ref": "#/$defs/positivo" },
+              "potencia_max_carga_w": { "$ref": "#/$defs/positivo" },
+              "potencia_max_descarga_w": { "$ref": "#/$defs/positivo" },
+              "dimensiones": { "$ref": "#/$defs/dimensiones" }
+            }
+          }
+        }
       }
     }
   }

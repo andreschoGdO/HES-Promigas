@@ -1,0 +1,16 @@
+{
+  "version_esquema": "1.1.0",
+  "cliente": {
+    "nombre": "",
+    "documento_identidad": "",
+    "direccion": "",
+    "telefono": "",
+    "correo": "",
+    "numero_cuenta_operador_red": ""
+  },
+  "ingeniero_responsable": {
+    "nombre": "",
+    "matricula_profesional": ""
+  },
+  "notas": "Copiar a projects/<vivienda>/privado/datos_privados.json y llenar. Esa carpeta no se sube a git."
+}

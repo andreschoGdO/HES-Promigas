@@ -1,5 +1,5 @@
 {
-  "version_esquema": "1.0.0",
+  "version_esquema": "1.1.0",
   "id": "ejemplo-inversor-hibrido-bifasico",
   "tipo": "inversor",
   "es_ejemplo": true,
@@ -11,19 +11,24 @@
     "fecha_consulta": "2026-11-15"
   },
   "dimensiones": {
-    "largo_mm": 500,
-    "ancho_mm": 200,
+    "ancho_mm": 500,
     "alto_mm": 400,
+    "profundidad_mm": 200,
     "peso_kg": 25
+  },
+  "ambiente": {
+    "grado_proteccion": "IP65",
+    "altitud_max_m": 3000
   },
   "electrico": {
     "tipo_inversor": "hibrido",
     "fases": "bifasica",
+    "conexion_red": "L1/L2/N+PE",
     "potencia_nominal_ac_w": 5000,
-    "tension_nominal_ac_v": 240,
-    "frecuencia_hz": 60,
+    "tensiones_nominales_ac_v": [240],
+    "frecuencias_hz": [60],
     "numero_mppt": 2,
-    "entradas_por_mppt": 1,
+    "entradas_fv_totales": 2,
     "tension_max_dc_v": 500,
     "rango_mppt": { "min_v": 120, "max_v": 450 },
     "corriente_max_entrada_por_mppt_a": 15,

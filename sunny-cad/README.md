@@ -35,5 +35,13 @@ ruff check . && ruff format --check .
   `fuente` con la ficha técnica de origen.
 - `engine/esquemas/proyecto.schema.json` — `projects/<vivienda>/proyecto.json`, fuente de verdad
   de cada instalación.
+- `engine/esquemas/datos_privados.schema.json` — datos personales para el cajetín (ver abajo).
 
 Los archivos con `"es_ejemplo": true` son ficticios y solo sirven para las pruebas.
+
+## Datos personales (cajetín)
+
+Los datos del cliente y del ingeniero responsable **no** van en `proyecto.json`. Copia
+`templates/datos_privados.plantilla.json` a `projects/<vivienda>/privado/datos_privados.json`
+y llénalo. La carpeta `privado/` está en `.gitignore` y nunca se sube al repositorio;
+`python -m engine.validar` la revisa si existe.

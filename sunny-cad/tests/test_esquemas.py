@@ -79,7 +79,7 @@ def test_inversor_hibrido_sin_puerto_bateria_falla(componente: dict[str, Any]) -
 
 
 def test_dimension_negativa_falla(componente: dict[str, Any]) -> None:
-    componente["dimensiones"]["largo_mm"] = -1
+    componente["dimensiones"]["ancho_mm"] = -1
     assert validar.validar_componente(componente)
 
 
@@ -173,13 +173,144 @@ def test_obstaculo_fuera_de_cubierta_falla(proyecto: dict[str, Any], biblioteca:
     assert any("se sale de la cubierta" in e for e in _errores(proyecto, biblioteca))
 
 
-def test_cubierta_plana_muy_inclinada_falla(proyecto: dict[str, Any], biblioteca: dict) -> None:
-    proyecto["vivienda"]["cubiertas"][0]["tipo"] = "plana"
-    assert _errores(proyecto, biblioteca)  # tiene 15°, el máximo para plana es 5°
-
-
 def test_proyecto_real_con_componente_de_ejemplo_falla(
     proyecto: dict[str, Any], biblioteca: dict
 ) -> None:
     proyecto["es_ejemplo"] = False
     assert any("componente de ejemplo" in e for e in _errores(proyecto, biblioteca))
+
+
+def test_tipo_de_cubierta_lo_decide_el_usuario(proyecto: dict[str, Any], biblioteca: dict) -> None:
+    # Sin regla automática: una cubierta "plana" con 15° es válida si así la declara el usuario.
+    proyecto["vivienda"]["cubiertas"][0]["tipo"] = "plana"
+    assert _errores(proyecto, biblioteca) == []
+
+
+# --- Baterías modulares (datos ficticios, solo para probar la estructura) ----
+
+
+def _bateria_ficticia() -> dict[str, Any]:
+    dims = {"ancho_mm": 500, "alto_mm": 200, "profundidad_mm": 300, "peso_kg": 40}
+    return {
+        "version_esquema": "1.1.0",
+        "id": "ejemplo-bateria-modular",
+        "tipo": "bateria",
+        "es_ejemplo": True,
+        "fabricante": "EJEMPLO, NO REAL",
+        "modelo": "BAT-EJEMPLO",
+        "fuente": {
+            "documento": "Ficha ficticia, no real",
+            "revision": "sin revision",
+            "fecha_consulta": "2026-11-15",
+        },
+        "electrico": {
+            "tecnologia": "lfp",
+            "nivel_tension": "alta",
+            "tiene_bms": True,
+            "modulo_bateria": {"modelo": "MOD-EJEMPLO", "energia_kwh": 5, "dimensiones": dims},
+            "partes": [
+                {"modelo": "BMS-EJEMPLO", "funcion": "control_bms", "cantidad_por_sistema": 1}
+            ],
+            "configuraciones": [
+                {"id": "m2", "modulos_bateria": 2, "energia_util_kwh": 9},
+                {"id": "m3", "modulos_bateria": 3, "energia_util_kwh": 13.5},
+            ],
+        },
+    }
+
+
+def test_bateria_modular_valida_sin_dimensiones_globales() -> None:
+    assert validar.validar_componente(_bateria_ficticia()) == []
+
+
+def test_bateria_sin_configuraciones_falla() -> None:
+    bateria = _bateria_ficticia()
+    bateria["electrico"]["configuraciones"] = []
+    assert validar.validar_componente(bateria)
+
+
+def test_inversor_sin_dimensiones_falla(componente: dict[str, Any]) -> None:
+    del componente["dimensiones"]
+    assert validar.validar_componente(componente)
+
+
+@pytest.mark.parametrize(
+    ("configuracion", "mensaje"),
+    [(None, "falta"), ("m9", "no existe"), ("m3", None)],
+)
+def test_configuracion_de_bateria_en_proyecto(
+    proyecto: dict[str, Any], biblioteca: dict, configuracion: str | None, mensaje: str | None
+) -> None:
+    bateria = _bateria_ficticia()
+    biblioteca[bateria["id"]] = bateria
+    equipo: dict[str, Any] = {
+        "id": "bateria-01",
+        "tipo": "bateria",
+        "componente_ref": bateria["id"],
+    }
+    if configuracion is not None:
+        equipo["configuracion"] = configuracion
+    proyecto["equipos"].append(equipo)
+    errores = _errores(proyecto, biblioteca)
+    if mensaje is None:
+        assert errores == []
+    else:
+        assert any(mensaje in e for e in errores)
+
+
+def test_configuracion_en_equipo_que_no_es_bateria_falla(
+    proyecto: dict[str, Any], biblioteca: dict
+) -> None:
+    proyecto["equipos"][0]["configuracion"] = "m3"
+    assert any("solo aplica a baterías" in e for e in _errores(proyecto, biblioteca))
+
+
+# --- Módulo FV (datos ficticios) ---------------------------------------------
+
+
+def test_modulo_ficticio_valido() -> None:
+    modulo = {
+        "version_esquema": "1.1.0",
+        "id": "ejemplo-modulo",
+        "tipo": "modulo",
+        "es_ejemplo": True,
+        "fabricante": "EJEMPLO, NO REAL",
+        "modelo": "MOD-EJEMPLO",
+        "fuente": {
+            "documento": "Ficha ficticia, no real",
+            "revision": "sin revision",
+            "fecha_consulta": "2026-11-15",
+        },
+        "dimensiones": {"ancho_mm": 1000, "alto_mm": 2000, "profundidad_mm": 30, "peso_kg": 30},
+        "electrico": {
+            "potencia_stc_w": 500,
+            "voc_v": 50,
+            "isc_a": 12,
+            "vmp_v": 42,
+            "imp_a": 11.9,
+            "coef_temp_voc_pct_c": -0.25,
+            "coef_temp_pmax_pct_c": -0.3,
+            "tension_max_sistema_v": 1500,
+            "bifacial": True,
+            "bifacialidad_pct": 80,
+        },
+    }
+    assert validar.validar_componente(modulo) == []
+    del modulo["electrico"]["voc_v"]
+    assert validar.validar_componente(modulo)
+
+
+# --- Datos privados -----------------------------------------------------------
+
+
+def test_plantilla_de_datos_privados_cumple_esquema_al_llenarla() -> None:
+    plantilla = validar.cargar_json(validar.RAIZ / "templates" / "datos_privados.plantilla.json")
+    assert validar.validar_datos_privados(plantilla)  # vacía: falta el nombre
+    plantilla["cliente"]["nombre"] = "Cliente de ejemplo"
+    plantilla["ingeniero_responsable"]["nombre"] = "Ingeniero de ejemplo"
+    assert validar.validar_datos_privados(plantilla) == []
+
+
+def test_carpeta_privado_esta_ignorada_por_git() -> None:
+    ignorados = (validar.RAIZ / ".gitignore").read_text(encoding="utf-8")
+    assert "projects/*/privado/" in ignorados

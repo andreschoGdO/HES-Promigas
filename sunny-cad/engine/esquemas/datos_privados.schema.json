@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sunny-cad.local/esquemas/datos_privados.schema.json",
+  "title": "Datos privados del proyecto",
+  "description": "Datos personales para el cajetín: projects/<vivienda>/privado/datos_privados.json. La carpeta privado/ nunca se sube a git.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version_esquema", "cliente", "ingeniero_responsable"],
+  "properties": {
+    "version_esquema": { "const": "1.1.0" },
+    "cliente": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nombre"],
+      "properties": {
+        "nombre": { "type": "string", "minLength": 1 },
+        "documento_identidad": { "type": "string" },
+        "direccion": { "type": "string" },
+        "telefono": { "type": "string" },
+        "correo": { "type": "string" },
+        "numero_cuenta_operador_red": { "type": "string" }
+      }
+    },
+    "ingeniero_responsable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nombre"],
+      "properties": {
+        "nombre": { "type": "string", "minLength": 1 },
+        "matricula_profesional": { "type": "string" }
+      }
+    },
+    "notas": { "type": "string" }
+  }
+}

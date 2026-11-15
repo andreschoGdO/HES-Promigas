@@ -7,7 +7,9 @@ esquemas JSON y aplica comprobaciones que JSON Schema no puede expresar:
 - cada ``componente_ref`` existe en la biblioteca y su ``tipo`` coincide;
 - los ``id`` de equipos y cubiertas no se repiten;
 - los contornos son polígonos válidos y los obstáculos quedan dentro de su cubierta;
-- un proyecto real (``es_ejemplo: false``) no usa componentes de ejemplo.
+- un proyecto real (``es_ejemplo: false``) no usa componentes de ejemplo;
+- cada batería indica una configuración (número de módulos) que existe en su ficha;
+- si existe ``projects/<vivienda>/privado/datos_privados.json``, cumple su esquema.
 
 Uso::
 
@@ -126,18 +128,49 @@ def validar_proyecto(
                 f"{donde}/componente_ref: un proyecto real no puede usar el componente "
                 f"de ejemplo '{componente['id']}'"
             )
+        errores += _errores_configuracion(equipo, componente, donde)
     return errores
+
+
+def _errores_configuracion(
+    equipo: dict[str, Any], componente: dict[str, Any], donde: str
+) -> list[str]:
+    """Las baterías deben indicar una configuración existente; los demás equipos, ninguna."""
+    config = equipo.get("configuracion")
+    if componente.get("tipo") != "bateria":
+        if config is not None:
+            return [f"{donde}/configuracion: solo aplica a baterías"]
+        return []
+    disponibles = [c["id"] for c in componente.get("electrico", {}).get("configuraciones", [])]
+    if config is None:
+        return [f"{donde}/configuracion: falta; opciones: {', '.join(disponibles)}"]
+    if config not in disponibles:
+        return [
+            f"{donde}/configuracion: '{config}' no existe en '{componente['id']}'; "
+            f"opciones: {', '.join(disponibles)}"
+        ]
+    return []
+
+
+def validar_datos_privados(datos: Any) -> list[str]:
+    return errores_esquema(datos, "datos_privados")
 
 
 def validar_archivo(ruta: Path) -> list[str]:
     datos = cargar_json(ruta)
     if ruta.name == "proyecto.json":
         return validar_proyecto(datos, ruta)
+    if ruta.name == "datos_privados.json":
+        return validar_datos_privados(datos)
     return validar_componente(datos, ruta)
 
 
 def archivos_por_defecto() -> list[Path]:
-    return sorted(DIR_BIBLIOTECA.rglob("*.json")) + sorted(DIR_PROYECTOS.glob("*/proyecto.json"))
+    return (
+        sorted(DIR_BIBLIOTECA.rglob("*.json"))
+        + sorted(DIR_PROYECTOS.glob("*/proyecto.json"))
+        + sorted(DIR_PROYECTOS.glob("*/privado/datos_privados.json"))
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -23,7 +23,7 @@ def area_dibujo(lamina: Lamina, plantilla: dict[str, Any]) -> tuple[float, float
     w, h = lamina.tamano
     f = plantilla["franja_mm"]
     rev = plantilla["revisiones_mm"]
-    y0 = MARGEN + f["alto"] + 7  # 7 mm para la leyenda de borrador
+    y0 = MARGEN + f["alto"] + (7 if plantilla.get("leyenda_borrador") else 0)  # leyenda opcional
     top = h - MARGEN - rev["fila"] * 5 - 2
     return (MARGEN + 2, y0 + 2, w - 2 * MARGEN - 4, top - y0 - 4)
 
@@ -115,15 +115,16 @@ def dibujar(lam: Lamina, plantilla: dict[str, Any], datos: dict[str, Any], raiz:
     alto = f["alto"]
     y0 = MARGEN
     lam.linea((MARGEN, y0 + alto), (w - MARGEN, y0 + alto), "MARCO")
-    lam.texto(
-        (w / 2, y0 + alto + 3.2),
-        plantilla["leyenda_borrador"],
-        2.4,
-        "EQUIPO",
-        "centro",
-        negrita=True,
-    )
-    lam.linea((MARGEN, y0 + alto + 6.5), (w - MARGEN, y0 + alto + 6.5), "CAJETIN")
+    if plantilla.get("leyenda_borrador"):
+        lam.texto(
+            (w / 2, y0 + alto + 3.2),
+            plantilla["leyenda_borrador"],
+            2.4,
+            "EQUIPO",
+            "centro",
+            negrita=True,
+        )
+        lam.linea((MARGEN, y0 + alto + 6.5), (w - MARGEN, y0 + alto + 6.5), "CAJETIN")
 
     # 1. Lista de materiales (como en el plano de referencia: encabezado abajo, filas hacia arriba)
     x = MARGEN

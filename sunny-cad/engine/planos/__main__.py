@@ -32,7 +32,6 @@ from engine.planos import alzado, cajetin, planta, unifilar
 from engine.planos.lamina import Lamina, a_dxf, a_pdf
 
 PLANTILLA = validar.RAIZ / "templates" / "cajetin.json"
-NOTA_BORRADOR = "Borrador de sunny-cad (proyecto.json); lo revisa y firma el ingeniero responsable."
 TITULOS_RENDER = {
     "terraza": "Terraza bajo la pérgola",
     "isometrica": "Isométrica",
@@ -153,13 +152,13 @@ def datos_cajetin(
     if ing.get("matricula_profesional"):
         disenador += f" · M.P. {ing['matricula_profesional']}"
     revisiones = proyecto.get("revisiones") or [
-        {"revision": "A", "fecha": fecha, "descripcion": "EMISIÓN PARA REVISIÓN (BORRADOR)"}
+        {"revision": "A", "fecha": fecha, "descripcion": "EMISIÓN PARA REVISIÓN"}
     ]
     sufijo = f" – {kwp:.2f} kWp" if kwp else ""
     return {
         "revisiones": [{"zona": "", "revisado": "", "aprobado": "", **r} for r in revisiones],
         "materiales": mats,
-        "notas": lam.notas + [NOTA_BORRADOR],
+        "notas": lam.notas,
         "dibujado_por": plantilla["dibujado_por"],
         "disenado_por": disenador,
         "localizacion": "{municipio}, {departamento}".format(**proyecto["ubicacion"]),
@@ -224,7 +223,7 @@ def laminas(proyecto, biblioteca, entrada, calc, renders: dict[str, Path]) -> li
         imgs = [(n, renders[n]) for n in nombres if n in renders]
         if imgs:
             lam = nueva("ARQ", "REN", titulo, escala="N/A", unidad="N/A")
-            lam.notas = ["Renders de borrador; la ambientación de la terraza es ilustrativa."]
+            lam.notas = ["Renders ilustrativos; la ambientación de la terraza es decorativa."]
             _lamina_render(lam, cajetin.area_dibujo(lam, plantilla), imgs)
     return out
 

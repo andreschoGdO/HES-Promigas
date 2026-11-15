@@ -6,9 +6,29 @@
   "empresa": "PROMIGAS",
   "codificacion": "PRO-{disciplina}-{proyecto}-{tipo}-{numero:03d}",
   "dibujado_por": "sunny-cad",
-  "leyenda_borrador": "BORRADOR TÉCNICO — NO VÁLIDO PARA CONSTRUCCIÓN SIN REVISIÓN Y FIRMA DEL INGENIERO RESPONSABLE",
+  "leyenda_borrador": "",
   "confidencialidad": "Este plano es propiedad de Promigas. El uso de la información contenida debe ser tratada como confidencial y se retornará a Promigas en caso de que le sea solicitada. El contenido no podrá ser reproducido, copiado o desechado a menos que sea exclusivamente necesario para el propósito original y previa autorización por escrito.",
-  "zonas": {"columnas": 8, "filas": ["F", "E", "D", "C", "B", "A"]},
-  "franja_mm": {"alto": 40, "materiales": 106, "confidencialidad": 104, "notas": 76, "datos": 40, "logo": 74},
-  "revisiones_mm": {"ancho": 160, "fila": 4.2}
+  "zonas": {
+    "columnas": 8,
+    "filas": [
+      "F",
+      "E",
+      "D",
+      "C",
+      "B",
+      "A"
+    ]
+  },
+  "franja_mm": {
+    "alto": 40,
+    "materiales": 106,
+    "confidencialidad": 104,
+    "notas": 76,
+    "datos": 40,
+    "logo": 74
+  },
+  "revisiones_mm": {
+    "ancho": 160,
+    "fila": 4.2
+  }
 }

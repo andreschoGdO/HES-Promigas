@@ -80,5 +80,5 @@
       "potencia_pico_respaldo_w": 22700
     }
   },
-  "notas": "Variante L2: red trifásica 127/220 V o 133/230 V (tensión de línea 220/230 V). La ficha marca la serie L2 como 'Upcoming' (próximo lanzamiento): confirmar disponibilidad. Potencia FV máxima = 'Max. PV Input Power' 30000 Wp (sobredimensionamiento DC del 200 %). Potencia máxima de entrada AC: 23000 W. Pico EPS durante 10 s. Comunicación con BMS por CAN. Conmutación a respaldo 'seamless' sin tiempo en la ficha. Variantes D2/T2 (380–415 V) y H2 (277/480 V) de la misma ficha no se cargaron."
+  "notas": "Variante L2: red trifásica 127/220 V o 133/230 V (tensión de línea 220/230 V). La ficha marca la serie L2 como 'Upcoming'; el usuario confirma (2026-11-15) que es la variante que se usa. Potencia FV máxima = 'Max. PV Input Power' 30000 Wp (sobredimensionamiento DC del 200 %). Potencia máxima de entrada AC: 23000 W. Pico EPS durante 10 s. Comunicación con BMS por CAN. Conmutación a respaldo 'seamless' sin tiempo en la ficha. Variantes D2/T2 (380–415 V) y H2 (277/480 V) de la misma ficha no se cargaron."
 }

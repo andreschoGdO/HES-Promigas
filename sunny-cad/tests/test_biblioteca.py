@@ -208,7 +208,11 @@ def test_livoltek_hp3_con_bhf(inversor: str, config: str) -> None:
         ("deye-gb-l", "m4", 4, False),
         ("huawei-luna2000-s1", "m3", 1, True),
         ("huawei-luna2000-s1", "m3", 2, False),  # 4 en paralelo solo con SUN2000-MB0
-        ("livoltek-bhf", "s20", 2, False),  # la ficha no da un máximo
+        ("livoltek-bhf", "s15", 2, True),  # 2 torres de 3 módulos ≈ 30 kWh (usuario)
+        ("livoltek-bhf", "s20", 2, False),  # en paralelo, máximo 3 módulos por torre
+        ("livoltek-bhf", "s15", 3, False),
+        ("livoltek-bhf", "s30", 1, True),
+        ("deye-gb-l", "m5", 2, False),  # en paralelo, máximo 4 módulos por torre
     ],
 )
 def test_torres_en_paralelo(bateria: str, config: str, torres: int, valido: bool) -> None:

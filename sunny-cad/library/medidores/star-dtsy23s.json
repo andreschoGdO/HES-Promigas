@@ -49,5 +49,5 @@
       "RS485"
     ]
   },
-  "notas": "Medidor trifásico de baja tensión, medición en 4 cuadrantes, apto para medición fotovoltaica, multitarifa (4), perfiles de carga, demanda máxima, prepago/pospago, corte y reconexión con dispositivo interno. Normas: IEC 62053-21, IEC 62053-23, IEC 62052-11, NTC 4052, NTC 4569, NTC 5226. Certificado CIDET No. 07399. Frecuencia 60 Hz ± 2 %. Conexión directa inferida de In 5 A / Imax 100 A sin transformadores de corriente en la ficha: confirmar."
+  "notas": "Medidor trifásico de baja tensión, medición en 4 cuadrantes, apto para medición fotovoltaica, multitarifa (4), perfiles de carga, demanda máxima, prepago/pospago, corte y reconexión con dispositivo interno. Normas: IEC 62053-21, IEC 62053-23, IEC 62052-11, NTC 4052, NTC 4569, NTC 5226. Certificado CIDET No. 07399. Frecuencia 60 Hz ± 2 %. Medida directa, sin CT (confirmado por el usuario, 2026-11-15). Se usa también en viviendas bifásicas (conexión 2F-3H)."
 }

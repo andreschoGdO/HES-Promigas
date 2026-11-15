@@ -139,7 +139,8 @@
     "marcas_inversor_compatibles": [
       "deye"
     ],
-    "max_sistemas_paralelo": 3
+    "max_sistemas_paralelo": 3,
+    "max_modulos_por_sistema_en_paralelo": 4
   },
   "notas": "La ficha da las dimensiones como W/D/H; aquí se guardan como ancho × alto × profundidad. Temperatura: carga 0–55 °C, descarga −20–60 °C. Corriente recomendada 20 A, nominal 40 A, pico de descarga 50 A (2 min, 25 °C). Energía útil al 90 % de profundidad de descarga. BMS en la caja de control GB-LBS. Ciclos: ≥6000 (25 ± 2 °C, 0,5C/0,5C, EOL 70 %). Instalación en piso. Certificaciones de la ficha: CE, IEC 62619, VDE 2510-50, UL 1973, UL 9540A, UN38.3. COMPATIBILIDAD Y PARALELO (regla del proyecto Sunny, confirmada por el usuario el 2026-11-15): solo con inversores DEYE; máximo 3 torres en paralelo, cada una de hasta 4 módulos con el DEYE SUN-15K. El manual GB-L (sección 5.5) permite hasta 16 clústeres del lado de la batería."
 }

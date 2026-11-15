@@ -192,6 +192,13 @@ def _errores_configuracion(
         )
     if config is None:
         return errores + [f"{donde}/configuracion: falta; opciones: {', '.join(disponibles)}"]
+    max_mod = componente["electrico"].get("max_modulos_por_sistema_en_paralelo")
+    conf = next((c for c in componente["electrico"]["configuraciones"] if c["id"] == config), None)
+    if paralelo > 1 and max_mod is not None and conf and conf["modulos_bateria"] > max_mod:
+        errores.append(
+            f"{donde}/configuracion: con {paralelo} sistemas en paralelo, cada uno admite máximo "
+            f"{max_mod} módulos ('{config}' tiene {conf['modulos_bateria']})"
+        )
     if config not in disponibles:
         errores.append(
             f"{donde}/configuracion: '{config}' no existe en '{componente['id']}'; "

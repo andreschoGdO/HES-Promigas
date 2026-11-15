@@ -65,3 +65,17 @@ renders y planos PDF con el cajetín corporativo.
 - Cada batería solo se usa con inversores de su misma marca.
 - DEYE GB-L con el SUN-15K: hasta 3 torres en paralelo de 4 módulos cada una.
 - Se usa el SmartGuard-63A-S0 definitivo (la ficha disponible es la preliminar 04-202311).
+- Livoltek BHF G2 (módulo 5,12 kWh): hasta 2 torres de 3 módulos en paralelo (≈ 30 kWh). Livoltek HP3 variante L2 (127/220 V).
+- El medidor STAR DTSY23S es de medida directa (sin CT) y se usa tanto en viviendas bifásicas como trifásicas.
+
+## Prácticas observadas en instalaciones reales (guía, no norma)
+Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y fotos de obra.
+- Módulos coplanares con la cubierta (al ras), sobre lámina metálica trapezoidal, entre pretiles.
+- Separación entre módulos de 20 mm; se combinan filas horizontales y verticales según el espacio.
+- Un string por campo de módulos (por ejemplo, S1.1 con 12 módulos y S1.2 con 10).
+- Inversor, batería, tablero fotovoltaico y tablero con contactor van juntos en un muro exterior
+  protegido, cerca del tablero existente. La batería va en el piso, junto al inversor.
+- DC en coraza americana de 1" (cable FV 2×4 mm² + tierra); AC en tubo IMC; cajas de paso de
+  10×10 cm IP66 y canaleta metálica con doble división hacia el tablero existente.
+- Señalización de peligro y de doble fuente en el inversor y los tableros.
+

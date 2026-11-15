@@ -13,7 +13,7 @@ la ficha citada en `fuente`; la copia de la ficha está en `fichas/`.
 | Módulo FV | `ja-solar-jam72d40-595-mb` | JA Solar JAM72D40-595/MB bifacial | Global-EN-20240326A |
 | Inversor | `livoltek-hp3-10kl2` | Livoltek HP3-10KL2 (trifásico 127/220 V) — serie L2 "Upcoming" | sin revisión |
 | Inversor | `livoltek-hp3-15kl2` | Livoltek HP3-15KL2 (trifásico 127/220 V) — serie L2 "Upcoming" | sin revisión |
-| Batería | `livoltek-bhf` | Livoltek BHF-S10…S30 (2–6 módulos de 5,12 kWh) | sin revisión |
+| Batería | `livoltek-bhf` | Livoltek BHF-S10…S30 G2 (2–6 módulos de 5,12 kWh) | sin revisión |
 | Medidor | `star-dtsy23s` | STAR DTSY23S (Inelca), trifásico 3×120/208 V, riel DIN, bidireccional | FT-VS-0625 |
 | Inversor | `ejemplo-inversor-hibrido-bifasico` | EJEMPLO, NO REAL (solo pruebas) | — |
 
@@ -21,6 +21,7 @@ Reglas de compatibilidad (confirmadas por el usuario):
 - Cada batería solo con inversores de su marca (`marcas_inversor_compatibles`).
 - DEYE GB-L: hasta 3 torres en paralelo de 4 módulos con el DEYE SUN-15K.
 - LUNA2000 con SUN2000-LC0: 1 sistema por inversor.
+- Livoltek BHF G2: hasta 2 torres de 3 módulos en paralelo.
 
 Pendientes (sin ficha): protecciones, tableros, estructura de montaje.
 

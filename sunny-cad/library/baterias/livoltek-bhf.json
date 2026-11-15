@@ -5,7 +5,7 @@
   "es_ejemplo": false,
   "marca": "livoltek",
   "fabricante": "Livoltek",
-  "modelo": "BHF-S10/S15/S20/S25/S30 G1/G2",
+  "modelo": "BHF-S10/S15/S20/S25/S30-G2",
   "fuente": {
     "documento": "High-Voltage Residential Battery BHF-S10/S15/S20/S25/S30 G1/G2",
     "revision": "sin revision",
@@ -123,7 +123,9 @@
         "potencia_max_w": 29500,
         "pilas_fisicas": 2
       }
-    ]
+    ],
+    "max_sistemas_paralelo": 2,
+    "max_modulos_por_sistema_en_paralelo": 3
   },
-  "notas": "Módulo de 5,12 kWh según la ficha (102,4 V × 50 Ah). G1 = BMS antiguo, G2 = BMS nuevo; solo G2 admite paralelo (la ficha no dice cuántos). Energía útil al 90 % DoD; ciclos 6000 (0,5C, 25 °C, EOL 70 %). Temperatura: carga 0–55 °C, descarga −20–55 °C. Montaje en muro o piso. Comunicación CAN. ERRATAS DE LA FICHA: (1) el rango de tensión de S20 repite el de S15 (259,2–345,6 V), que no contiene su tensión nominal de 409,6 V: se deja sin rango hasta confirmarlo. (2) S25 y S30 van en 2 pilas (S25: 870×1167×208,7 + 870×778×208,7 mm, 147 + 209 kg; S30: 870×1167×208,7 + 870×1067×208,7 mm, 209 + 209 kg), pero 778 y 1067 mm no coinciden con las pilas sueltas (878,5 y 1167 mm con el mismo peso): no se cargan dimensiones de S25/S30 hasta confirmarlas. Compatibilidad solo con inversores Livoltek: pendiente de confirmar por el usuario (2026-11-15)."
+  "notas": "Módulo de 5,12 kWh según la ficha (102,4 V × 50 Ah). G1 = BMS antiguo, G2 = BMS nuevo; solo G2 admite paralelo (la ficha no dice cuántos). Energía útil al 90 % DoD; ciclos 6000 (0,5C, 25 °C, EOL 70 %). Temperatura: carga 0–55 °C, descarga −20–55 °C. Montaje en muro o piso. Comunicación CAN. ERRATAS DE LA FICHA: (1) el rango de tensión de S20 repite el de S15 (259,2–345,6 V), que no contiene su tensión nominal de 409,6 V: se deja sin rango hasta confirmarlo. (2) S25 y S30 van en 2 pilas (S25: 870×1167×208,7 + 870×778×208,7 mm, 147 + 209 kg; S30: 870×1167×208,7 + 870×1067×208,7 mm, 209 + 209 kg), pero 778 y 1067 mm no coinciden con las pilas sueltas (878,5 y 1167 mm con el mismo peso): no se cargan dimensiones de S25/S30 hasta confirmarlas. CONFIRMADO POR EL USUARIO (2026-11-15): se usa la versión G2; módulo de 5,12 kWh; solo con inversores Livoltek; hasta 2 torres de 3 módulos en paralelo (2 × BHF-S15 ≈ 30 kWh). Las erratas de S20/S25/S30 se dejan como están."
 }

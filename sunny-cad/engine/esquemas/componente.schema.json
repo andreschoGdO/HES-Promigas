@@ -378,6 +378,11 @@
           "type": "integer",
           "minimum": 1
         },
+        "max_modulos_por_sistema_en_paralelo": {
+          "description": "Con más de un sistema en paralelo, máximo de módulos por sistema (torre).",
+          "type": "integer",
+          "minimum": 1
+        },
         "profundidad_descarga_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
         "corriente_nominal_a": { "$ref": "#/$defs/positivo" },
         "corriente_pico_descarga_a": { "$ref": "#/$defs/positivo" },

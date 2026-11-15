@@ -5,6 +5,8 @@ Herramienta de diseño 3D y planos para sistemas solares residenciales con almac
 
 Estado: **Paso 7** — planos con cajetín y PDF.
 
+**Para una vivienda nueva, seguir [PROCESO.md](PROCESO.md).**
+
 ## Preparar el entorno
 
 Linux / macOS:

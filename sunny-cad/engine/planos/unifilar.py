@@ -42,6 +42,22 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], calc: dict[str, Any], b
     bat = biblioteca[eq["bateria"]["componente_ref"]]
     med = biblioteca[eq["medidor"]["componente_ref"]] if "medidor" in eq else None
     circ = {c["id"]: c for c in calc["circuitos"]}
+    # Textos de red, respaldo y conmutación desde el proyecto (no fijos)
+    sis = proyecto["sistema"]
+    v_linea = min(inv["electrico"]["tensiones_nominales_ac_v"])
+    if sis.get("fases_red") == "trifasica":
+        red_txt = f"3F {round(v_linea / 3**0.5)}/{v_linea:g} V"
+    elif sis.get("fases_red") == "bifasica":
+        red_txt = f"2F {v_linea:g} V"
+    else:
+        red_txt = f"1F {v_linea:g} V"
+    resp_txt = {
+        "respaldo_total": "respaldo total",
+        "cargas_criticas_eps": "cargas críticas (EPS)",
+    }.get(sis.get("respaldo"), "respaldo por definir")
+    conm_txt = {"ats": "ATS", "bypass": "bypass", "smartguard": "SmartGuard"}.get(
+        sis.get("conmutacion"), "por definir"
+    )
     mod = next(e for e in proyecto["equipos"] if e["tipo"] == "modulo")
     modulo = biblioteca[mod["componente_ref"]]
 
@@ -130,7 +146,11 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], calc: dict[str, Any], b
     tx, ty, tw, th = ix + iw + 34, iy - 6, 118, ih + 26
     lam.rect(tx, ty, tw, th, "UNIFILAR", trazo="discontinuo")
     lam.texto(
-        (tx + 3, ty + th - 4), "TABLERO FV (contactor ATS + medidor)", 2.3, "TEXTO", negrita=True
+        (tx + 3, ty + th - 4),
+        f"TABLERO FV (conmutación {conm_txt} + medidor)",
+        2.3,
+        "TEXTO",
+        negrita=True,
     )
     red_y = ty + th - 18
     carga_y = ty + 22
@@ -160,9 +180,9 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], calc: dict[str, Any], b
     )
     # Barras
     lam.linea((tx + 10, red_y), (tx + tw - 8, red_y), "AC")
-    lam.texto((tx + 10, red_y + 1.5), "Barra red 3F 127/220 V", 1.7, "AC")
+    lam.texto((tx + 10, red_y + 1.5), f"Barra red {red_txt}", 1.7, "AC")
     lam.linea((tx + 10, carga_y), (tx + tw - 8, carga_y), "AC")
-    lam.texto((tx + 42, carga_y - 4), "Barra cargas (respaldo total)", 1.7, "AC")
+    lam.texto((tx + 42, carga_y - 4), f"Barra cargas ({resp_txt})", 1.7, "AC")
     # Contactor de bypass (ATS) entre barras
     kx = tx + 78
     lam.linea((kx, red_y), (kx, carga_y), "AC")
@@ -170,7 +190,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], calc: dict[str, Any], b
     lam.texto((kx, (red_y + carga_y) / 2), "K1", 2.4, "TEXTO", "centro", negrita=True)
     lam.texto((kx + 8, (red_y + carga_y) / 2 + 2), "Contactor de", 1.7)
     lam.texto((kx + 8, (red_y + carga_y) / 2 - 1.5), "transferencia /", 1.7)
-    lam.texto((kx + 8, (red_y + carga_y) / 2 - 5), "bypass (ATS)", 1.7)
+    lam.texto((kx + 8, (red_y + carga_y) / 2 - 5), f"bypass ({conm_txt})", 1.7)
     # Medidor en la acometida
     my_ = red_y + 9
     lam.linea((tx + tw - 8, red_y), (tx + tw - 8, my_), "AC")
@@ -188,7 +208,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], calc: dict[str, Any], b
     lam.linea((tx + tw - 8, my_ + 8), (tx + tw - 8, y0 + ah - 2), "AC")
     lam.texto(
         (tx + tw - 11, y0 + ah - 4),
-        "RED DEL OPERADOR 3F 127/220 V",
+        f"RED DEL OPERADOR {red_txt}",
         2.0,
         "TEXTO",
         "der",

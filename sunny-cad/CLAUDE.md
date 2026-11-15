@@ -86,4 +86,7 @@ Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y f
 - Señalización de peligro y de doble fuente en el inversor y los tableros.
 - Planos con el cajetín y el logo de Promigas (plano de referencia PRO-ELE-SPEC-DIS-001); códigos `PRO-<disciplina>-<proyecto>-<tipo>-<nnn>`.
 - En Riomar los equipos van en la cara noroeste (costado izquierdo) de la terraza alta; el buitrón (80 cm de saliente, 1,7 m de alto) baja dos pisos hasta el tablero existente.
+- Diseñador en los planos: Santiago Osorio, sin número de tarjeta profesional (guardado en `privado/`).
+- El proceso completo para viviendas nuevas está en `PROCESO.md` (y en el skill `.claude/skills/nueva-vivienda`).
+- Piso de la terraza continuo; ductería siempre adosada a muros, losas o estructura, nunca en el aire.
 

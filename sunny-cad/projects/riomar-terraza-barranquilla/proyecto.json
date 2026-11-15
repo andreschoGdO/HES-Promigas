@@ -111,7 +111,7 @@
       "tipo": "inversor",
       "componente_ref": "livoltek-hp3-15kl2",
       "ubicacion_mm": {
-        "punto": [11521, 16005],
+        "punto": [11602, 16079],
         "z_mm": 1500,
         "es_supuesto": true
       },
@@ -124,7 +124,7 @@
       "configuracion": "s15",
       "sistemas_en_paralelo": 1,
       "ubicacion_mm": {
-        "punto": [10912, 15434],
+        "punto": [10993, 15508],
         "z_mm": 0,
         "es_supuesto": true
       },

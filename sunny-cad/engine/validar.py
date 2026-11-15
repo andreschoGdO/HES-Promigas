@@ -176,18 +176,28 @@ def _errores_configuracion(
     """Las baterías deben indicar una configuración existente; los demás equipos, ninguna."""
     config = equipo.get("configuracion")
     if componente.get("tipo") != "bateria":
-        if config is not None:
-            return [f"{donde}/configuracion: solo aplica a baterías"]
-        return []
-    disponibles = [c["id"] for c in componente.get("electrico", {}).get("configuraciones", [])]
-    if config is None:
-        return [f"{donde}/configuracion: falta; opciones: {', '.join(disponibles)}"]
-    if config not in disponibles:
         return [
+            f"{donde}/{campo}: solo aplica a baterías"
+            for campo in ("configuracion", "sistemas_en_paralelo")
+            if campo in equipo
+        ]
+    disponibles = [c["id"] for c in componente.get("electrico", {}).get("configuraciones", [])]
+    errores: list[str] = []
+    paralelo = equipo.get("sistemas_en_paralelo", 1)
+    maximo = componente["electrico"].get("max_sistemas_paralelo", 1)
+    if paralelo > maximo:
+        errores.append(
+            f"{donde}/sistemas_en_paralelo: {paralelo} supera el máximo de "
+            f"'{componente['id']}' ({maximo})"
+        )
+    if config is None:
+        return errores + [f"{donde}/configuracion: falta; opciones: {', '.join(disponibles)}"]
+    if config not in disponibles:
+        errores.append(
             f"{donde}/configuracion: '{config}' no existe en '{componente['id']}'; "
             f"opciones: {', '.join(disponibles)}"
-        ]
-    return []
+        )
+    return errores
 
 
 def validar_datos_privados(datos: Any) -> list[str]:

@@ -1,0 +1,53 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "star-dtsy23s",
+  "tipo": "medidor",
+  "es_ejemplo": false,
+  "marca": "star",
+  "fabricante": "Shenzhen Star Instrument Co., Ltd. (distribuye Inelca S.A.S.)",
+  "modelo": "DTSY23S - SMART",
+  "fuente": {
+    "documento": "DDSY23S y DTSY23S — Medición inteligente (Inelca)",
+    "revision": "FT-VS-0625",
+    "fecha_consulta": "2026-11-15",
+    "archivo": "library/fichas/star/star-ddsy23s-dtsy23s.pdf",
+    "paginas": "1-2"
+  },
+  "dimensiones": {
+    "ancho_mm": 122,
+    "alto_mm": 138.7,
+    "nota": "La ficha no da profundidad ni peso. Montaje en riel DIN de 35 mm."
+  },
+  "ambiente": {
+    "grado_proteccion": "IP54",
+    "temperatura_operacion_min_c": -25,
+    "temperatura_operacion_max_c": 65
+  },
+  "electrico": {
+    "conexiones": [
+      "2F-3H",
+      "3F-4H"
+    ],
+    "tension_nominal_texto": "3x120/208V",
+    "rango_tension_pct_un": {
+      "min_pct": 80,
+      "max_pct": 115
+    },
+    "frecuencias_hz": [
+      60
+    ],
+    "corriente_nominal_a": 5,
+    "corriente_max_a": 100,
+    "conexion_directa": true,
+    "clase_energia_activa": "CL 1 (IEC 62053-21, NTC 4052)",
+    "clase_energia_reactiva": "CL 2 (IEC 62053-23, NTC 4569)",
+    "bidireccional": true,
+    "montaje": "riel_din",
+    "comunicaciones": [
+      "puerto óptico",
+      "RF",
+      "RS485"
+    ]
+  },
+  "notas": "Medidor trifásico de baja tensión, medición en 4 cuadrantes, apto para medición fotovoltaica, multitarifa (4), perfiles de carga, demanda máxima, prepago/pospago, corte y reconexión con dispositivo interno. Normas: IEC 62053-21, IEC 62053-23, IEC 62052-11, NTC 4052, NTC 4569, NTC 5226. Certificado CIDET No. 07399. Frecuencia 60 Hz ± 2 %. Conexión directa inferida de In 5 A / Imax 100 A sin transformadores de corriente en la ficha: confirmar."
+}

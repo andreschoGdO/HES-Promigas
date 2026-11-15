@@ -201,6 +201,7 @@ def _bateria_ficticia() -> dict[str, Any]:
         "id": "ejemplo-bateria-modular",
         "tipo": "bateria",
         "es_ejemplo": True,
+        "marca": "ejemplo",
         "fabricante": "EJEMPLO, NO REAL",
         "modelo": "BAT-EJEMPLO",
         "fuente": {
@@ -279,6 +280,7 @@ def test_modulo_ficticio_valido() -> None:
         "id": "ejemplo-modulo",
         "tipo": "modulo",
         "es_ejemplo": True,
+        "marca": "ejemplo",
         "fabricante": "EJEMPLO, NO REAL",
         "modelo": "MOD-EJEMPLO",
         "fuente": {

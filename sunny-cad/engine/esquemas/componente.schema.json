@@ -5,7 +5,7 @@
   "description": "Un equipo de la biblioteca (library/). Todo dato técnico debe venir de la ficha técnica citada en 'fuente'. Unidades en el nombre del campo: _mm, _kg, _w, _kwh, _v, _a, _ah, _hz, _pct, _c, _m, _ms, _pa.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version_esquema", "id", "tipo", "es_ejemplo", "fabricante", "modelo", "fuente", "electrico"],
+  "required": ["version_esquema", "id", "tipo", "es_ejemplo", "marca", "fabricante", "modelo", "fuente", "electrico"],
   "properties": {
     "version_esquema": { "const": "1.1.0" },
     "id": {
@@ -20,6 +20,11 @@
       "description": "true si el componente es ficticio (solo para pruebas). Nunca usar un componente de ejemplo en un diseño real.",
       "type": "boolean"
     },
+    "marca": {
+      "description": "Marca comercial normalizada (minúsculas): huawei, deye, livoltek, ja-solar, star… Se usa para las reglas de compatibilidad.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
     "fabricante": { "type": "string", "minLength": 1 },
     "modelo": { "type": "string", "minLength": 1 },
     "fuente": { "$ref": "#/$defs/fuente" },
@@ -33,15 +38,25 @@
       "if": { "properties": { "tipo": { "const": "modulo" } } },
       "then": {
         "required": ["dimensiones"],
-        "properties": { "electrico": { "$ref": "#/$defs/electrico_modulo" } }
+        "properties": {
+          "dimensiones": { "$ref": "#/$defs/dimensiones_completas" },
+          "electrico": { "$ref": "#/$defs/electrico_modulo" }
+        }
       }
     },
     {
       "if": { "properties": { "tipo": { "const": "inversor" } } },
       "then": {
         "required": ["dimensiones"],
-        "properties": { "electrico": { "$ref": "#/$defs/electrico_inversor" } }
+        "properties": {
+          "dimensiones": { "$ref": "#/$defs/dimensiones_completas" },
+          "electrico": { "$ref": "#/$defs/electrico_inversor" }
+        }
       }
+    },
+    {
+      "if": { "properties": { "tipo": { "const": "medidor" } } },
+      "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_medidor" } } }
     },
     {
       "if": { "properties": { "tipo": { "const": "conmutacion" } } },
@@ -98,7 +113,7 @@
       "description": "Dimensiones exteriores en mm como las da la ficha: ancho (W) × alto (H) × profundidad (D). En módulos FV: alto = lado largo, ancho = lado corto, profundidad = espesor del marco.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["ancho_mm", "alto_mm", "profundidad_mm", "peso_kg"],
+      "required": ["ancho_mm", "alto_mm"],
       "properties": {
         "ancho_mm": { "$ref": "#/$defs/positivo" },
         "alto_mm": { "$ref": "#/$defs/positivo" },
@@ -108,6 +123,47 @@
           "description": "Aclaración de la ficha, por ejemplo 'sin conectores ni soportes' o 'incluye placa de montaje'.",
           "type": "string"
         }
+      }
+    },
+    "dimensiones_completas": {
+      "description": "Módulos e inversores necesitan las tres medidas y el peso para la distribución y el montaje.",
+      "required": ["ancho_mm", "alto_mm", "profundidad_mm", "peso_kg"]
+    },
+    "electrico_medidor": {
+      "description": "Medidor de energía en el PCC.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conexiones", "tension_nominal_texto", "corriente_max_a", "bidireccional", "montaje"],
+      "properties": {
+        "conexiones": {
+          "description": "Tipos de conexión admitidos: 1F-2H, 1F-3H, 2F-3H, 3F-4H.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "enum": ["1F-2H", "1F-3H", "2F-3H", "3F-4H"] }
+        },
+        "tension_nominal_texto": {
+          "description": "Tal como la da la ficha, por ejemplo '3x120/208V'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "rango_tension_pct_un": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min_pct", "max_pct"],
+          "properties": { "min_pct": { "type": "number" }, "max_pct": { "type": "number" } }
+        },
+        "frecuencias_hz": { "type": "array", "items": { "$ref": "#/$defs/positivo" } },
+        "corriente_nominal_a": { "$ref": "#/$defs/positivo" },
+        "corriente_max_a": { "$ref": "#/$defs/positivo" },
+        "conexion_directa": {
+          "description": "true si mide directo (sin transformadores de corriente).",
+          "type": "boolean"
+        },
+        "clase_energia_activa": { "type": "string" },
+        "clase_energia_reactiva": { "type": "string" },
+        "bidireccional": { "type": "boolean" },
+        "montaje": { "enum": ["riel_din", "base_socket", "otro"] },
+        "comunicaciones": { "type": "array", "items": { "type": "string" } }
       }
     },
     "ambiente": {
@@ -223,6 +279,20 @@
         "rango_mppt": { "$ref": "#/$defs/rango_v" },
         "corriente_max_entrada_por_mppt_a": { "$ref": "#/$defs/positivo" },
         "corriente_max_cortocircuito_por_mppt_a": { "$ref": "#/$defs/positivo" },
+        "strings_por_mppt": {
+          "description": "Strings admitidos en cada MPPT, en orden (DEYE 2/2+2 → [2, 2]).",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "corrientes_max_por_mppt_a": {
+          "description": "Cuando la ficha da una corriente distinta por MPPT (Livoltek 32/32/16 A). El campo escalar guarda la mayor.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/positivo" }
+        },
+        "corrientes_cortocircuito_por_mppt_a": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/positivo" }
+        },
         "eficiencia_max_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
         "eficiencia_europea_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
         "bateria": {
@@ -297,6 +367,17 @@
         "tecnologia": { "enum": ["lfp", "nmc", "otra"] },
         "nivel_tension": { "enum": ["baja", "alta"] },
         "tiene_bms": { "type": "boolean" },
+        "marcas_inversor_compatibles": {
+          "description": "Marcas de inversor con las que se puede usar esta batería (campo 'marca' del inversor).",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
+        },
+        "max_sistemas_paralelo": {
+          "description": "Máximo de sistemas (torres) iguales en paralelo sobre un inversor. Si falta, se admite 1.",
+          "type": "integer",
+          "minimum": 1
+        },
         "profundidad_descarga_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
         "corriente_nominal_a": { "$ref": "#/$defs/positivo" },
         "corriente_pico_descarga_a": { "$ref": "#/$defs/positivo" },
@@ -356,7 +437,15 @@
               },
               "modelo_comercial": { "type": "string" },
               "modulos_bateria": { "type": "integer", "minimum": 1 },
+              "pilas_fisicas": {
+                "description": "Número de pilas físicas en que se reparten los módulos (Livoltek BHF-S25/S30 usan 2). No es paralelo eléctrico.",
+                "type": "integer",
+                "minimum": 1
+              },
               "tension_nominal_v": { "$ref": "#/$defs/positivo" },
+              "rango_tension": { "$ref": "#/$defs/rango_v" },
+              "potencia_nominal_w": { "$ref": "#/$defs/positivo" },
+              "potencia_max_w": { "$ref": "#/$defs/positivo" },
               "energia_nominal_kwh": { "$ref": "#/$defs/positivo" },
               "energia_util_kwh": { "$ref": "#/$defs/positivo" },
               "potencia_max_carga_w": { "$ref": "#/$defs/positivo" },

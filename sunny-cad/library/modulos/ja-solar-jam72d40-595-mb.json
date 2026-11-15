@@ -3,6 +3,7 @@
   "id": "ja-solar-jam72d40-595-mb",
   "tipo": "modulo",
   "es_ejemplo": false,
+  "marca": "ja-solar",
   "fabricante": "JA Solar",
   "modelo": "JAM72D40-595/MB",
   "fuente": {
@@ -31,7 +32,10 @@
     "vmp_v": 44.64,
     "imp_a": 13.33,
     "eficiencia_pct": 23.0,
-    "tolerancia_potencia_pct": { "min_pct": 0, "max_pct": 3 },
+    "tolerancia_potencia_pct": {
+      "min_pct": 0,
+      "max_pct": 3
+    },
     "coef_temp_voc_pct_c": -0.26,
     "coef_temp_isc_pct_c": 0.046,
     "coef_temp_pmax_pct_c": -0.29,
@@ -44,5 +48,5 @@
     "carga_estatica_frontal_pa": 5400,
     "carga_estatica_posterior_pa": 2400
   },
-  "notas": "Ficha escaneada (solo imagen): datos transcritos a mano de la página 2, revisar. NOCT 45 ± 2 °C; bifacialidad 80 ± 10 %. Datos eléctricos en STC (1000 W/m², 25 °C, AM1.5G). Vidrio doble 2,0/2,0 mm; conector QC 4.10-351 / MC4-EVO2A; cable 4 mm²."
+  "notas": "Ficha escaneada (solo imagen): datos transcritos a mano de la página 2 y verificados a 220 ppp el 2026-11-15. NOCT 45 ± 2 °C; bifacialidad 80 ± 10 %. Datos eléctricos en STC (1000 W/m², 25 °C, AM1.5G). Vidrio doble 2,0/2,0 mm; conector QC 4.10-351 / MC4-EVO2A; cable 4 mm²."
 }

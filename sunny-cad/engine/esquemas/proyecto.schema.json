@@ -249,6 +249,11 @@
           "type": "string",
           "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
         },
+        "sistemas_en_paralelo": {
+          "description": "Solo baterías: número de sistemas (torres) iguales en paralelo. Por defecto 1.",
+          "type": "integer",
+          "minimum": 1
+        },
         "configuracion": {
           "description": "Solo baterías: id de la configuración del componente (número de módulos).",
           "type": "string",

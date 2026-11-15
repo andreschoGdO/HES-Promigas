@@ -31,7 +31,7 @@ renders y planos PDF con el cajetín corporativo.
 - Tipologías estándar: T1 bifásica (inversor híbrido bifásico, o monofásico conectado entre dos fases como el Huawei SUN2000-LC0) y T2 trifásica (inversor híbrido trifásico). El nivel de tensión de la batería lo define el inversor: los equipos del piloto (LUNA2000, DEYE GB-L) son de alta tensión.
 - Arquitecturas: inversor en serie (toda la carga pasa por el inversor) e inversor en paralelo (la carga se alimenta de la red y el inversor entra en respaldo). En serie con punto único de falla exige BYPASS o ATS; en paralelo el ATS (o SmartGuard en Huawei) es indispensable.
 - Bloques mínimos de toda instalación: generación FV, inversor híbrido, BESS con BMS, punto de conexión común (PCC) accesible, CT o medidor bidireccional en el PCC, tablero de cargas críticas (EPS) o respaldo total, monitoreo.
-- Equipos de referencia del piloto: inversores Huawei SUN2000-10K-LC0 y DEYE SUN-15K-SG01HP3-US-AM2, baterías Huawei LUNA2000-7/14/21-S1 y DEYE GB-L, Huawei SmartGuard-63A-S0, módulo JA Solar JAM72D40-595/MB, plataforma FusionSolar. No se usa SmartLogger: el monitoreo en el PCC es un medidor de riel DIN dentro del tablero (ficha pendiente).
+- Equipos de referencia del piloto: inversores Huawei SUN2000-10K-LC0, DEYE SUN-15K-SG01HP3-US-AM2 y Livoltek HP3-10KL2 / HP3-15KL2; baterías Huawei LUNA2000-7/14/21-S1, DEYE GB-L y Livoltek BHF; Huawei SmartGuard-63A-S0; módulo JA Solar JAM72D40-595/MB; medidor STAR DTSY23S de riel DIN dentro del tablero; plataforma FusionSolar. No se usa SmartLogger.
 - Normativa de referencia: RETIE y NTC 2050. No inventar requisitos normativos: si falta un dato, preguntar.
 
 ## Reglas de trabajo para Claude
@@ -62,3 +62,6 @@ renders y planos PDF con el cajetín corporativo.
 - El tipo de cubierta (plana / inclinada) lo indica el usuario en cada vivienda.
 - Datos personales (cliente, ingeniero) solo en `projects/<vivienda>/privado/`, fuera de git.
 - En `library/fichas/` se guardan solo fichas técnicas, no manuales.
+- Cada batería solo se usa con inversores de su misma marca.
+- DEYE GB-L con el SUN-15K: hasta 3 torres en paralelo de 4 módulos cada una.
+- Se usa el SmartGuard-63A-S0 definitivo (la ficha disponible es la preliminar 04-202311).

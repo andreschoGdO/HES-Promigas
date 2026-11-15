@@ -1,0 +1,84 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "livoltek-hp3-10kl2",
+  "tipo": "inversor",
+  "es_ejemplo": false,
+  "marca": "livoltek",
+  "fabricante": "Livoltek",
+  "modelo": "HP3-10KL2",
+  "fuente": {
+    "documento": "Hybrid Inverter Three Phase HP3 — Technical Specification (tabla HP3-5K…15K L2)",
+    "revision": "sin revision",
+    "fecha_consulta": "2026-11-15",
+    "archivo": "library/fichas/livoltek/livoltek-hp3.pdf",
+    "paginas": "3"
+  },
+  "dimensiones": {
+    "ancho_mm": 595,
+    "alto_mm": 485,
+    "profundidad_mm": 235,
+    "peso_kg": 38
+  },
+  "ambiente": {
+    "grado_proteccion": "IP65",
+    "temperatura_operacion_min_c": -25,
+    "temperatura_operacion_max_c": 60
+  },
+  "electrico": {
+    "tipo_inversor": "hibrido",
+    "fases": "trifasica",
+    "conexion_red": "3W+N+PE",
+    "potencia_nominal_ac_w": 10000,
+    "tensiones_nominales_ac_v": [
+      220,
+      230
+    ],
+    "frecuencias_hz": [
+      50,
+      60
+    ],
+    "corriente_max_salida_ac_a": 26.3,
+    "potencia_fv_max_conectable_w": 20000,
+    "numero_mppt": 3,
+    "entradas_fv_totales": 5,
+    "tension_max_dc_v": 1000,
+    "tension_nominal_dc_v": 380,
+    "rango_mppt": {
+      "min_v": 150,
+      "max_v": 950
+    },
+    "corriente_max_entrada_por_mppt_a": 32,
+    "corriente_max_cortocircuito_por_mppt_a": 40,
+    "strings_por_mppt": [
+      2,
+      2,
+      1
+    ],
+    "corrientes_max_por_mppt_a": [
+      32,
+      32,
+      16
+    ],
+    "corrientes_cortocircuito_por_mppt_a": [
+      40,
+      40,
+      20
+    ],
+    "eficiencia_max_pct": 98.2,
+    "eficiencia_europea_pct": 97.8,
+    "bateria": {
+      "nivel_tension": "alta",
+      "rango_tension": {
+        "min_v": 100,
+        "max_v": 700
+      },
+      "corriente_max_carga_a": 50,
+      "corriente_max_descarga_a": 50
+    },
+    "respaldo": {
+      "potencia_respaldo_w": 10000,
+      "potencia_pico_respaldo_w": 20000
+    }
+  },
+  "notas": "Variante L2: red trifásica 127/220 V o 133/230 V (tensión de línea 220/230 V). La ficha marca la serie L2 como 'Upcoming' (próximo lanzamiento): confirmar disponibilidad. Potencia FV máxima = 'Max. PV Input Power' 20000 Wp (sobredimensionamiento DC del 200 %). Potencia máxima de entrada AC: 20000 W. Pico EPS durante 10 s. Comunicación con BMS por CAN. Conmutación a respaldo 'seamless' sin tiempo en la ficha. Variantes D2/T2 (380–415 V) y H2 (277/480 V) de la misma ficha no se cargaron."
+}

@@ -3,6 +3,7 @@
   "id": "deye-sun-15k-sg01hp3-us-am2",
   "tipo": "inversor",
   "es_ejemplo": false,
+  "marca": "deye",
   "fabricante": "Ningbo Deye Inverter Technology Co., Ltd.",
   "modelo": "SUN-15K-SG01HP3-US-AM2",
   "fuente": {
@@ -31,8 +32,12 @@
     "conexion_red": "3L+N+PE",
     "potencia_nominal_ac_w": 15000,
     "potencia_aparente_max_va": 15000,
-    "tensiones_nominales_ac_v": [208],
-    "frecuencias_hz": [60],
+    "tensiones_nominales_ac_v": [
+      208
+    ],
+    "frecuencias_hz": [
+      60
+    ],
     "corriente_max_salida_ac_a": 41.7,
     "corriente_max_paso_red_a": 80,
     "potencia_max_entrada_fv_w": 22500,
@@ -42,17 +47,35 @@
     "tension_max_dc_v": 550,
     "tension_arranque_v": 180,
     "tension_nominal_dc_v": 380,
-    "rango_mppt": { "min_v": 150, "max_v": 500 },
+    "rango_mppt": {
+      "min_v": 150,
+      "max_v": 500
+    },
     "corriente_max_entrada_por_mppt_a": 26,
     "corriente_max_cortocircuito_por_mppt_a": 39,
     "eficiencia_max_pct": 97.6,
     "eficiencia_europea_pct": 97.0,
     "bateria": {
       "nivel_tension": "alta",
-      "rango_tension": { "min_v": 160, "max_v": 500 },
+      "rango_tension": {
+        "min_v": 160,
+        "max_v": 500
+      },
       "corriente_max_carga_a": 50,
       "corriente_max_descarga_a": 50
-    }
+    },
+    "strings_por_mppt": [
+      2,
+      2
+    ],
+    "corrientes_max_por_mppt_a": [
+      26,
+      26
+    ],
+    "corrientes_cortocircuito_por_mppt_a": [
+      39,
+      39
+    ]
   },
   "notas": "Red 120/208 V (Un = 208 V línea, rango 0,85–1,1 Un); frecuencia 60 Hz (rango 55–65). 2 MPPT con 2 strings cada uno (2/2+2). Pico fuera de red: 1,5 veces la potencia nominal durante 10 s. Temperatura: reducción de potencia por encima de 45 °C. Normas de la ficha: IEEE 1547.1, SRD V2.0, FCC, UL 1741."
 }

@@ -1,0 +1,37 @@
+{
+  "version_esquema": "1.0.0",
+  "id": "ejemplo-inversor-hibrido-bifasico",
+  "tipo": "inversor",
+  "es_ejemplo": true,
+  "fabricante": "EJEMPLO, NO REAL",
+  "modelo": "INV-HIB-BIF-EJEMPLO",
+  "fuente": {
+    "documento": "Ficha técnica ficticia — ejemplo, no real. Valores inventados solo para probar el esquema.",
+    "revision": "sin revision",
+    "fecha_consulta": "2026-11-15"
+  },
+  "dimensiones": {
+    "largo_mm": 500,
+    "ancho_mm": 200,
+    "alto_mm": 400,
+    "peso_kg": 25
+  },
+  "electrico": {
+    "tipo_inversor": "hibrido",
+    "fases": "bifasica",
+    "potencia_nominal_ac_w": 5000,
+    "tension_nominal_ac_v": 240,
+    "frecuencia_hz": 60,
+    "numero_mppt": 2,
+    "entradas_por_mppt": 1,
+    "tension_max_dc_v": 500,
+    "rango_mppt": { "min_v": 120, "max_v": 450 },
+    "corriente_max_entrada_por_mppt_a": 15,
+    "bateria": {
+      "nivel_tension": "baja",
+      "rango_tension": { "min_v": 40, "max_v": 60 }
+    },
+    "respaldo": { "potencia_respaldo_w": 5000 }
+  },
+  "notas": "EJEMPLO, NO REAL. No usar en diseños. Ningún dato proviene de una ficha técnica."
+}

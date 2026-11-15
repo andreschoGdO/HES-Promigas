@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sunny-cad.local/esquemas/componente.schema.json",
+  "title": "Componente de biblioteca",
+  "description": "Un equipo de la biblioteca (library/). Todo dato técnico debe venir de la ficha técnica citada en 'fuente'. Unidades en el nombre del campo: _mm, _kg, _w, _kwh, _v, _a, _hz, _pct, _deg.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version_esquema",
+    "id",
+    "tipo",
+    "es_ejemplo",
+    "fabricante",
+    "modelo",
+    "fuente",
+    "dimensiones",
+    "electrico"
+  ],
+  "properties": {
+    "version_esquema": { "const": "1.0.0" },
+    "id": {
+      "description": "Identificador del equipo en la biblioteca: minúsculas, sin tildes ni espacios, separado por guiones.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "tipo": {
+      "enum": [
+        "modulo",
+        "inversor",
+        "bateria",
+        "tablero",
+        "proteccion",
+        "estructura",
+        "medidor",
+        "monitoreo",
+        "conmutacion"
+      ]
+    },
+    "es_ejemplo": {
+      "description": "true si el componente es ficticio (solo para pruebas). Nunca usar un componente de ejemplo en un diseño real.",
+      "type": "boolean"
+    },
+    "fabricante": { "type": "string", "minLength": 1 },
+    "modelo": { "type": "string", "minLength": 1 },
+    "fuente": { "$ref": "#/$defs/fuente" },
+    "dimensiones": { "$ref": "#/$defs/dimensiones" },
+    "electrico": { "type": "object" },
+    "notas": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "tipo": { "const": "modulo" } } },
+      "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_modulo" } } }
+    },
+    {
+      "if": { "properties": { "tipo": { "const": "inversor" } } },
+      "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_inversor" } } }
+    },
+    {
+      "if": { "properties": { "tipo": { "const": "bateria" } } },
+      "then": { "properties": { "electrico": { "$ref": "#/$defs/electrico_bateria" } } }
+    }
+  ],
+  "$defs": {
+    "fuente": {
+      "description": "Ficha técnica de origen de todos los datos del componente.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documento", "revision", "fecha_consulta"],
+      "properties": {
+        "documento": {
+          "description": "Título del documento tal como aparece en la ficha.",
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "description": "Versión o revisión de la ficha (por ejemplo 'V1.2'). Si la ficha no la indica, escribir 'sin revision'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "fecha_consulta": {
+          "description": "Fecha en que se tomó la ficha (AAAA-MM-DD).",
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "url": { "type": "string", "pattern": "^https?://" },
+        "archivo": {
+          "description": "Ruta de la ficha dentro del repositorio, si se guardó una copia.",
+          "type": "string"
+        },
+        "paginas": { "type": "string" }
+      }
+    },
+    "positivo": { "type": "number", "exclusiveMinimum": 0 },
+    "no_negativo": { "type": "number", "minimum": 0 },
+    "rango_v": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_v", "max_v"],
+      "properties": {
+        "min_v": { "$ref": "#/$defs/no_negativo" },
+        "max_v": { "$ref": "#/$defs/positivo" }
+      }
+    },
+    "dimensiones": {
+      "description": "Dimensiones exteriores en milímetros y peso en kg.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["largo_mm", "ancho_mm", "alto_mm", "peso_kg"],
+      "properties": {
+        "largo_mm": { "$ref": "#/$defs/positivo" },
+        "ancho_mm": { "$ref": "#/$defs/positivo" },
+        "alto_mm": { "$ref": "#/$defs/positivo" },
+        "peso_kg": { "$ref": "#/$defs/positivo" }
+      }
+    },
+    "electrico_modulo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "potencia_stc_w",
+        "voc_v",
+        "isc_a",
+        "vmp_v",
+        "imp_a",
+        "coef_temp_voc_pct_c",
+        "coef_temp_pmax_pct_c",
+        "tension_max_sistema_v"
+      ],
+      "properties": {
+        "potencia_stc_w": { "$ref": "#/$defs/positivo" },
+        "voc_v": { "$ref": "#/$defs/positivo" },
+        "isc_a": { "$ref": "#/$defs/positivo" },
+        "vmp_v": { "$ref": "#/$defs/positivo" },
+        "imp_a": { "$ref": "#/$defs/positivo" },
+        "coef_temp_voc_pct_c": { "type": "number" },
+        "coef_temp_isc_pct_c": { "type": "number" },
+        "coef_temp_pmax_pct_c": { "type": "number" },
+        "tension_max_sistema_v": { "$ref": "#/$defs/positivo" },
+        "fusible_max_serie_a": { "$ref": "#/$defs/positivo" },
+        "bifacial": { "type": "boolean" }
+      }
+    },
+    "electrico_inversor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tipo_inversor",
+        "fases",
+        "potencia_nominal_ac_w",
+        "tension_nominal_ac_v",
+        "frecuencia_hz",
+        "numero_mppt",
+        "entradas_por_mppt",
+        "tension_max_dc_v",
+        "rango_mppt",
+        "corriente_max_entrada_por_mppt_a"
+      ],
+      "properties": {
+        "tipo_inversor": { "enum": ["hibrido", "red", "aislado"] },
+        "fases": { "enum": ["monofasica", "bifasica", "trifasica"] },
+        "potencia_nominal_ac_w": { "$ref": "#/$defs/positivo" },
+        "potencia_max_ac_w": { "$ref": "#/$defs/positivo" },
+        "tension_nominal_ac_v": { "$ref": "#/$defs/positivo" },
+        "frecuencia_hz": { "$ref": "#/$defs/positivo" },
+        "potencia_max_fv_w": { "$ref": "#/$defs/positivo" },
+        "numero_mppt": { "type": "integer", "minimum": 1 },
+        "entradas_por_mppt": { "type": "integer", "minimum": 1 },
+        "tension_max_dc_v": { "$ref": "#/$defs/positivo" },
+        "rango_mppt": { "$ref": "#/$defs/rango_v" },
+        "corriente_max_entrada_por_mppt_a": { "$ref": "#/$defs/positivo" },
+        "corriente_max_cortocircuito_por_mppt_a": { "$ref": "#/$defs/positivo" },
+        "bateria": {
+          "description": "Puerto de batería (solo inversores híbridos).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nivel_tension", "rango_tension"],
+          "properties": {
+            "nivel_tension": { "enum": ["baja", "alta"] },
+            "rango_tension": { "$ref": "#/$defs/rango_v" },
+            "corriente_max_carga_a": { "$ref": "#/$defs/positivo" },
+            "corriente_max_descarga_a": { "$ref": "#/$defs/positivo" }
+          }
+        },
+        "respaldo": {
+          "description": "Salida de respaldo (EPS / backup).",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["potencia_respaldo_w"],
+          "properties": {
+            "potencia_respaldo_w": { "$ref": "#/$defs/positivo" },
+            "tiempo_conmutacion_ms": { "$ref": "#/$defs/no_negativo" }
+          }
+        }
+      },
+      "if": { "properties": { "tipo_inversor": { "const": "hibrido" } } },
+      "then": { "required": ["bateria"] }
+    },
+    "electrico_bateria": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tecnologia",
+        "nivel_tension",
+        "tension_nominal_v",
+        "capacidad_util_kwh",
+        "potencia_max_carga_w",
+        "potencia_max_descarga_w",
+        "tiene_bms"
+      ],
+      "properties": {
+        "tecnologia": { "enum": ["lfp", "nmc", "otra"] },
+        "nivel_tension": { "enum": ["baja", "alta"] },
+        "tension_nominal_v": { "$ref": "#/$defs/positivo" },
+        "rango_tension": { "$ref": "#/$defs/rango_v" },
+        "capacidad_util_kwh": { "$ref": "#/$defs/positivo" },
+        "capacidad_nominal_kwh": { "$ref": "#/$defs/positivo" },
+        "potencia_max_carga_w": { "$ref": "#/$defs/positivo" },
+        "potencia_max_descarga_w": { "$ref": "#/$defs/positivo" },
+        "profundidad_descarga_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+        "tiene_bms": { "type": "boolean" },
+        "modulos_expandibles": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

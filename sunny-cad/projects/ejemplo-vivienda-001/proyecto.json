@@ -1,0 +1,60 @@
+{
+  "version_esquema": "1.0.0",
+  "id": "ejemplo-vivienda-001",
+  "es_ejemplo": true,
+  "nombre": "Vivienda de ejemplo (ejemplo, no real)",
+  "estado": "borrador",
+  "sistema_coordenadas": {
+    "unidad_longitud": "mm",
+    "origen": "esquina_suroeste",
+    "eje_x": "este",
+    "eje_y": "norte",
+    "eje_z": "arriba",
+    "referencia_azimut": "norte_horario"
+  },
+  "ubicacion": {
+    "municipio": "Municipio de ejemplo",
+    "departamento": "Departamento de ejemplo"
+  },
+  "sistema": {
+    "tipologia": "T1",
+    "fases_red": "bifasica",
+    "arquitectura": "paralelo",
+    "respaldo": "cargas_criticas_eps",
+    "conmutacion": "ats"
+  },
+  "vivienda": {
+    "numero_pisos": 1,
+    "cubiertas": [
+      {
+        "id": "cubierta-01",
+        "tipo": "inclinada",
+        "material": "teja_fibrocemento",
+        "contorno_mm": [[0, 0], [10000, 0], [10000, 8000], [0, 8000]],
+        "cota_base_mm": 3000,
+        "inclinacion_deg": 15,
+        "azimut_deg": 180,
+        "obstaculos": [
+          {
+            "id": "obstaculo-01",
+            "tipo": "tanque",
+            "contorno_mm": [[8000, 6000], [9000, 6000], [9000, 7000], [8000, 7000]],
+            "altura_mm": 1200
+          }
+        ]
+      }
+    ]
+  },
+  "equipos": [
+    {
+      "id": "inversor-01",
+      "tipo": "inversor",
+      "componente_ref": "ejemplo-inversor-hibrido-bifasico",
+      "ubicacion_texto": "Muro de ejemplo"
+    }
+  ],
+  "informacion_faltante": [
+    "Ejemplo, no real: no se requiere información adicional para este caso de prueba."
+  ],
+  "notas": "EJEMPLO, NO REAL. Solo para probar el esquema."
+}

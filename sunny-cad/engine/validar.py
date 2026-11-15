@@ -1,0 +1,165 @@
+"""Validación de los contratos de datos de sunny-cad.
+
+Valida los componentes de ``library/`` y los proyectos de ``projects/`` contra sus
+esquemas JSON y aplica comprobaciones que JSON Schema no puede expresar:
+
+- el ``id`` coincide con el nombre del archivo (componentes) o de la carpeta (proyectos);
+- cada ``componente_ref`` existe en la biblioteca y su ``tipo`` coincide;
+- los ``id`` de equipos y cubiertas no se repiten;
+- los contornos son polígonos válidos y los obstáculos quedan dentro de su cubierta;
+- un proyecto real (``es_ejemplo: false``) no usa componentes de ejemplo.
+
+Uso::
+
+    python -m engine.validar            # valida todo library/ y projects/
+    python -m engine.validar RUTA ...   # valida solo los archivos indicados
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from functools import cache
+from pathlib import Path
+from typing import Any
+
+from jsonschema import Draft202012Validator
+from shapely.geometry import Polygon
+
+RAIZ = Path(__file__).resolve().parent.parent
+DIR_ESQUEMAS = RAIZ / "engine" / "esquemas"
+DIR_BIBLIOTECA = RAIZ / "library"
+DIR_PROYECTOS = RAIZ / "projects"
+
+
+def cargar_json(ruta: Path) -> Any:
+    with ruta.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+@cache
+def validador(nombre_esquema: str) -> Draft202012Validator:
+    esquema = cargar_json(DIR_ESQUEMAS / f"{nombre_esquema}.schema.json")
+    Draft202012Validator.check_schema(esquema)
+    return Draft202012Validator(esquema)
+
+
+def errores_esquema(datos: Any, nombre_esquema: str) -> list[str]:
+    errores = sorted(validador(nombre_esquema).iter_errors(datos), key=lambda e: list(e.path))
+    return [f"{'/'.join(map(str, e.path)) or '(raiz)'}: {e.message}" for e in errores]
+
+
+def cargar_biblioteca(dir_biblioteca: Path = DIR_BIBLIOTECA) -> dict[str, dict[str, Any]]:
+    """Devuelve {id: componente} con todos los JSON de la biblioteca."""
+    return {
+        datos["id"]: datos
+        for ruta in sorted(dir_biblioteca.rglob("*.json"))
+        if isinstance(datos := cargar_json(ruta), dict) and "id" in datos
+    }
+
+
+def validar_componente(datos: Any, ruta: Path | None = None) -> list[str]:
+    errores = errores_esquema(datos, "componente")
+    if ruta is not None and isinstance(datos, dict) and datos.get("id") != ruta.stem:
+        errores.append(f"id: '{datos.get('id')}' no coincide con el archivo '{ruta.name}'")
+    return errores
+
+
+def _errores_contorno(puntos: list[list[float]], donde: str) -> tuple[Polygon | None, list[str]]:
+    poligono = Polygon(puntos)
+    if not poligono.is_valid or poligono.area <= 0:
+        return None, [f"{donde}: el contorno no es un polígono válido (cruzado o sin área)"]
+    return poligono, []
+
+
+def validar_proyecto(
+    datos: Any,
+    ruta: Path | None = None,
+    biblioteca: dict[str, dict[str, Any]] | None = None,
+) -> list[str]:
+    errores = errores_esquema(datos, "proyecto")
+    if errores:
+        # Las comprobaciones siguientes suponen que la estructura es correcta.
+        return errores
+
+    if ruta is not None and datos["id"] != ruta.parent.name:
+        errores.append(f"id: '{datos['id']}' no coincide con la carpeta '{ruta.parent.name}'")
+
+    # Geometría de cubiertas y obstáculos.
+    ids_cubiertas: set[str] = set()
+    for i, cubierta in enumerate(datos["vivienda"]["cubiertas"]):
+        donde = f"vivienda/cubiertas/{i}"
+        if cubierta["id"] in ids_cubiertas:
+            errores.append(f"{donde}/id: '{cubierta['id']}' repetido")
+        ids_cubiertas.add(cubierta["id"])
+        poligono, errs = _errores_contorno(cubierta["contorno_mm"], f"{donde}/contorno_mm")
+        errores += errs
+        for j, obstaculo in enumerate(cubierta["obstaculos"]):
+            donde_obs = f"{donde}/obstaculos/{j}/contorno_mm"
+            poligono_obs, errs = _errores_contorno(obstaculo["contorno_mm"], donde_obs)
+            errores += errs
+            if poligono and poligono_obs and not poligono.covers(poligono_obs):
+                errores.append(f"{donde_obs}: el obstáculo se sale de la cubierta")
+
+    # Equipos y referencias a la biblioteca.
+    if biblioteca is None:
+        biblioteca = cargar_biblioteca()
+    ids_equipos: set[str] = set()
+    for i, equipo in enumerate(datos["equipos"]):
+        donde = f"equipos/{i}"
+        if equipo["id"] in ids_equipos:
+            errores.append(f"{donde}/id: '{equipo['id']}' repetido")
+        ids_equipos.add(equipo["id"])
+        componente = biblioteca.get(equipo["componente_ref"])
+        if componente is None:
+            errores.append(
+                f"{donde}/componente_ref: '{equipo['componente_ref']}' no existe en library/"
+            )
+            continue
+        if componente.get("tipo") != equipo["tipo"]:
+            errores.append(
+                f"{donde}/tipo: '{equipo['tipo']}' no coincide con el componente "
+                f"'{componente['id']}' (tipo '{componente.get('tipo')}')"
+            )
+        if not datos["es_ejemplo"] and componente.get("es_ejemplo", False):
+            errores.append(
+                f"{donde}/componente_ref: un proyecto real no puede usar el componente "
+                f"de ejemplo '{componente['id']}'"
+            )
+    return errores
+
+
+def validar_archivo(ruta: Path) -> list[str]:
+    datos = cargar_json(ruta)
+    if ruta.name == "proyecto.json":
+        return validar_proyecto(datos, ruta)
+    return validar_componente(datos, ruta)
+
+
+def archivos_por_defecto() -> list[Path]:
+    return sorted(DIR_BIBLIOTECA.rglob("*.json")) + sorted(DIR_PROYECTOS.glob("*/proyecto.json"))
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    rutas = [Path(a).resolve() for a in argv] or archivos_por_defecto()
+    total_errores = 0
+    for ruta in rutas:
+        etiqueta = ruta.relative_to(RAIZ) if ruta.is_relative_to(RAIZ) else ruta
+        try:
+            errores = validar_archivo(ruta)
+        except (OSError, json.JSONDecodeError) as exc:
+            errores = [f"no se pudo leer: {exc}"]
+        if errores:
+            total_errores += len(errores)
+            print(f"ERROR {etiqueta}")
+            for error in errores:
+                print(f"  - {error}")
+        else:
+            print(f"OK    {etiqueta}")
+    print(f"\n{len(rutas)} archivo(s) revisado(s), {total_errores} error(es).")
+    return 1 if total_errores else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

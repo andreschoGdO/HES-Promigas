@@ -333,62 +333,81 @@ def _tubo(ruta: list[list[float]], radio: float) -> trimesh.Trimesh:
 def canalizaciones(
     proyecto: dict[str, Any], entrada: dict[str, Any], elems: list[Elemento]
 ) -> list[Elemento]:
-    """Rutas de cableado esquemáticas (borrador): módulos, inversor, batería, tablero, buitrón.
+    """Rutas de cableado esquemáticas (borrador), siempre adosadas a muros o sobre losas.
 
-    Todas parten de la esquina de la terraza alta donde está el muro de equipos ("de" del muro).
-    DC: de cada zona de módulos al inversor rodeando la esquina; batería: bajo el inversor;
-    AC: inversor → tablero FV, y tablero FV → buitrón por encima de los equipos (baja N pisos).
+    Todas pasan por la esquina de la terraza alta donde empieza el muro de equipos ("de" del
+    muro). Los tramos horizontales sobre los muros van por debajo de su coronación (alto del
+    volumen − 80 mm) y separados 100–160 mm de la pared:
+    - DC pérgola: baja por el muro bajo la viga durmiente, dobla la esquina y sigue por el muro
+      de equipos hasta el inversor.
+    - DC terraza alta: corre sobre la losa alta, baja por el muro y sigue hasta el inversor.
+    - Batería: del inversor baja por el muro hasta la batería.
+    - AC: inversor → tablero FV por el muro, y tablero FV → buitrón por el muro, entrando al
+      buitrón por arriba junto a la pared (baja N pisos hasta el tablero existente).
     """
     muro = entrada["muro_equipos"]
     esquina = np.array(muro["de"], float)
     w = np.subtract(muro["a"], muro["de"])
     w = w / np.linalg.norm(w)
     r = math.radians(entrada["rumbo_muro_equipos_deg"] - 90)
-    n = np.array([math.sin(r), math.cos(r)])  # hacia afuera del muro
+    n = np.array([math.sin(r), math.cos(r)])  # hacia afuera del muro de equipos
     ub = entrada["ubicaciones"]
+    por_id = {e.id: e for e in elems}
+    inv, bat = por_id.get("inversor-01"), por_id.get("bateria-01")
+    if inv is None:
+        return []
 
-    def s_de(p):  # posición a lo largo del muro
+    viv = proyecto["vivienda"]
+    cubs = {c["id"]: c for c in viv["cubiertas"]}
+    cota_min = min((c["cota_base_mm"] or 0) for c in viv["cubiertas"])
+    altos = [c for c in viv["cubiertas"] if (c["cota_base_mm"] or 0) > cota_min]
+    z_coronacion = (
+        min((c["cota_base_mm"] for c in altos), default=3000) - 80
+    )  # bajo el borde del muro
+    z_dc, z_ac = z_coronacion, z_coronacion - 90
+
+    def s_de(p):  # posición a lo largo del muro de equipos
         return float(np.dot(np.subtract(p, esquina), w))
 
     def en_muro(s_mm, z, salida=100):
         q = esquina + w * s_mm + n * salida
         return [float(q[0]), float(q[1]), float(z)]
 
-    por_id = {e.id: e for e in elems}
-    inv = por_id.get("inversor-01")
-    bat = por_id.get("bateria-01")
-    if inv is None:
-        return []
     s_inv = s_de(ub["inversor-01"]["punto"])
     z_inv_top, z_inv_bot = float(inv.malla.bounds[1][2]), float(inv.malla.bounds[0][2])
     out = []
-    viv = proyecto["vivienda"]
-    cubs = {c["id"]: c for c in viv["cubiertas"]}
     for z in viv.get("zonas_instalacion", []):
         cota = cubs[z["cubierta_ref"]]["cota_base_mm"] or 0
         plano = plano_zona(z, cota + (z.get("altura_estructura_mm") or 0))
-        v = min(z["contorno_mm"], key=lambda p: np.linalg.norm(np.subtract(p, esquina)))
+        v = np.array(
+            min(z["contorno_mm"], key=lambda p: np.linalg.norm(np.subtract(p, esquina))), float
+        )
         if z["estructura"] == "pergola":
-            zr = plano(*v) - 450  # bajo las vigas
-            hacia = np.subtract(v, esquina)
-            hacia = hacia / (np.linalg.norm(hacia) or 1)
-            codo = esquina + n * 120 + hacia * 120
+            # Normal del muro de la pérgola hacia la terraza (hacia el centro de la zona)
+            a_lo_largo = (v - esquina) / (np.linalg.norm(v - esquina) or 1)
+            m = np.array([-a_lo_largo[1], a_lo_largo[0]])
+            if np.dot(np.mean(z["contorno_mm"], axis=0) - esquina, m) < 0:
+                m = -m
+            arriba = v + m * 160
+            z_viga = plano(*v) - 450
+            codo = esquina + m * 160 + n * 160
             ruta = [
-                [v[0], v[1], zr],
-                [float(codo[0]), float(codo[1]), zr],
-                en_muro(s_inv, zr),
-                en_muro(s_inv, z_inv_top),
+                [*arriba, z_viga],
+                [*arriba, z_dc],
+                [*codo, z_dc],
+                en_muro(s_inv - 120, z_dc, 160),
+                en_muro(s_inv - 120, z_inv_top, 160),
             ]
         else:
             zr = cota + 60
-            borde_in = esquina + w * 250 - n * 150
+            sobre_losa = esquina + w * 250 - n * 150
             ruta = [
-                [v[0], v[1], zr],
-                [float(borde_in[0]), float(borde_in[1]), zr],
+                [*v, zr],
+                [*sobre_losa, zr],
                 en_muro(250, zr),
-                en_muro(250, z_inv_top + 100),
-                en_muro(s_inv - 150, z_inv_top + 100),
-                en_muro(s_inv - 150, z_inv_top),
+                en_muro(250, z_dc),
+                en_muro(s_inv - 60, z_dc),
+                en_muro(s_inv - 60, z_inv_top),
             ]
         out.append(
             Elemento(
@@ -428,8 +447,13 @@ def canalizaciones(
     tab = ub.get("tablero-fv")
     if tab:
         s_tab = s_de(tab["punto"])
-        z_ac = z_inv_top - 120
-        ruta = [en_muro(s_inv + 250, z_ac), en_muro(s_tab - 150, z_ac)]
+        z_tab_top = tab["z_mm"] + entrada.get("tablero_fv", {}).get("alto_mm", 800) / 2
+        ruta = [
+            en_muro(s_inv + 200, z_inv_top),
+            en_muro(s_inv + 200, z_ac),
+            en_muro(s_tab, z_ac),
+            en_muro(s_tab, z_tab_top),
+        ]
         out.append(
             Elemento(
                 "ruta-ac-inversor",
@@ -445,16 +469,13 @@ def canalizaciones(
         )
         b = entrada.get("buitron")
         if b:
-            s_b = s_de(b["punto"])
-            sal_b = float(np.dot(np.subtract(b["punto"], esquina), n))
-            z_alto = z_inv_top + 180
-            z_tab_top = tab["z_mm"] + entrada.get("tablero_fv", {}).get("alto_mm", 800) / 2
+            # Entra al buitrón por arriba, junto a la pared (el buitrón está adosado al muro)
+            s_b = s_de(b["punto"]) + b["ancho_mm"] / 2 - 120
             ruta = [
-                en_muro(s_tab, z_tab_top),
-                en_muro(s_tab, z_alto),
-                en_muro(s_b, z_alto),
-                en_muro(s_b, z_alto, sal_b),
-                en_muro(s_b, b["alto_mm"], sal_b),
+                en_muro(s_tab - 120, z_tab_top),
+                en_muro(s_tab - 120, z_ac - 60),
+                en_muro(s_b, z_ac - 60),
+                en_muro(s_b, b["alto_mm"]),
             ]
             out.append(
                 Elemento(
@@ -465,8 +486,8 @@ def canalizaciones(
                         "circuito": "AC",
                         "descripcion": (
                             "AC tablero FV → buitrón; baja "
-                            f"{entrada.get('pisos_hasta_tablero_existente', '?')} "
-                            "pisos al tablero existente"
+                            f"{entrada.get('pisos_hasta_tablero_existente', '?')} pisos "
+                            "al tablero existente"
                         ),
                         "ruta_mm": ruta,
                         "es_esquematico": True,

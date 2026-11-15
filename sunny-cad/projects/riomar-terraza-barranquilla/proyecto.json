@@ -33,11 +33,15 @@
         "material": "losa_concreto",
         "contorno_mm": [
           [8233, 16014],
-          [10304, 14727],
-          [14829, 9187],
-          [16022, 5199],
+          [0, 8821],
           [8659, 0],
-          [0, 8821]
+          [16022, 5199],
+          [14829, 9187],
+          [10306, 14724],
+          [12313, 16551],
+          [11233, 17741],
+          [9224, 15912],
+          [10291, 14736]
         ],
         "cota_base_mm": 0,
         "inclinacion_deg": 0,
@@ -55,21 +59,6 @@
           [14829, 9187]
         ],
         "cota_base_mm": 2000,
-        "inclinacion_deg": 0,
-        "azimut_deg": null,
-        "obstaculos": []
-      },
-      {
-        "id": "cubierta-03",
-        "tipo": "plana",
-        "material": "losa_concreto",
-        "contorno_mm": [
-          [11233, 17735],
-          [12307, 16551],
-          [10304, 14727],
-          [9230, 15912]
-        ],
-        "cota_base_mm": 0,
         "inclinacion_deg": 0,
         "azimut_deg": null,
         "obstaculos": []
@@ -393,7 +382,7 @@
     "zona-02/altura_estructura_mm: altura del borde bajo de los módulos sobre la cubierta (mm)",
     "equipos: capacidad del totalizador y demanda de la vivienda (en serie toda la carga pasa por el inversor: máx. 23 kW de entrada AC)",
     "equipos: altura de piso y recorrido horizontal hasta el tablero existente (supuestos 3,0 m y 3 m)",
-    "equipos: ancho del buitrón (supuesto 40 cm) y fondo de la franja frente a los equipos (supuesto 1,6 m)"
+    "equipos: ancho del buitrón (supuesto 40 cm) y fondo del piso frente a los equipos (supuesto 1,6 m)"
   ],
   "condiciones_diseno": {
     "temperatura_min_c": 15,

@@ -27,11 +27,15 @@
       "id": "cubierta-01",
       "contorno_px": [
         [231.0, 186.5],
-        [255.3, 201.6],
-        [308.4, 266.6],
-        [322.4, 313.4],
+        [134.4, 270.9],
         [236.0, 374.4],
-        [134.4, 270.9]
+        [322.4, 313.4],
+        [308.4, 266.6],
+        [255.33, 201.64],
+        [278.87, 180.2],
+        [266.2, 166.23],
+        [242.63, 187.7],
+        [255.15, 201.5]
       ],
       "tipo": "plana",
       "material": "losa_concreto",
@@ -39,7 +43,7 @@
       "inclinacion_deg": 0,
       "azimut_deg": null,
       "obstaculos": [],
-      "observaciones": "Terraza baja, piso 19 (usuario). Losa con impermeabilización asfáltica en parches (fotos). Pretil de ladrillo en el perímetro; muros de la terraza alta y de un cuarto técnico al norte. Sin sombras: edificio de 19 pisos (usuario). Aquí va la pérgola de 34 m²."
+      "observaciones": "Terraza baja, piso 19 (usuario). Losa con impermeabilización asfáltica en parches (fotos). Pretil de ladrillo en el perímetro; muros de la terraza alta y de un cuarto técnico al norte. Sin sombras: edificio de 19 pisos (usuario). Aquí va la pérgola de 34 m². Piso continuo (usuario): incluye la franja frente a los equipos en la cara noroeste de la terraza alta (SUPUESTO de 1,6 m de fondo; no estaba en el trazado de Maps)."
     },
     {
       "id": "cubierta-02",
@@ -56,22 +60,6 @@
       "azimut_deg": null,
       "obstaculos": [],
       "observaciones": "Terraza alta (otro nivel, usuario): 13 m² útiles. En las fotos tiene pararrayos y salidas de ventilación en el borde. Está 2 m por encima de la terraza baja (usuario)."
-    },
-    {
-      "id": "cubierta-03",
-      "contorno_px": [
-        [266.2, 166.3],
-        [278.8, 180.2],
-        [255.3, 201.6],
-        [242.7, 187.7]
-      ],
-      "tipo": "plana",
-      "material": "losa_concreto",
-      "cota_base_mm": 0,
-      "inclinacion_deg": 0,
-      "azimut_deg": null,
-      "obstaculos": [],
-      "observaciones": "SUPUESTO: franja de terraza baja frente a la cara noroeste de la terraza alta (donde van los equipos), no incluida en el trazado de Maps. 2,71 m a lo largo de la cara × 1,6 m de fondo."
     }
   ],
   "notas": "Vértices ubicados por el borde oscuro de los marcadores de Maps (±0,5 px ≈ ±4 cm). El rótulo '40.00 m' de la captura no corresponde a ningún lado ni acumulado del polígono: no se usa. La línea entre los vértices 2 y 5 separa la terraza baja (cubierta-01) de la alta (cubierta-02). Cotas Z medidas desde la losa de la terraza baja (piso 19) = 0."

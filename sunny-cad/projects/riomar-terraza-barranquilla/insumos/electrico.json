@@ -9,23 +9,23 @@
   "ubicacion_texto": "Cara noroeste (costado izquierdo) de la terraza alta, entre el buitrón y la esquina interior",
   "ubicaciones": {
     "bateria-01": {
-      "punto": [10912, 15434],
+      "punto": [10993, 15508],
       "z_mm": 0,
       "es_supuesto": true
     },
     "inversor-01": {
-      "punto": [11521, 16005],
+      "punto": [11602, 16079],
       "z_mm": 1500,
       "es_supuesto": true
     },
     "tablero-fv": {
-      "punto": [12014, 16429],
+      "punto": [12044, 16456],
       "z_mm": 1400,
       "es_supuesto": true
     }
   },
   "rumbo_edificio_deg": 50.8,
-  "nota": "Equipos en la cara noroeste de la terraza alta (flecha del usuario sobre el render), desde la esquina con la pérgola (derecha): buitrón 0–0,40 m, batería 0,49–1,36 m, inversor 1,46–2,06 m (centro a 1,5 m), tablero FV 2,21–2,61 m; esquina interior a 2,71 m. Posiciones exactas SUPUESTAS.",
+  "nota": "Equipos en la cara noroeste de la terraza alta, desde la esquina con la pérgola (derecha): buitrón 0–0,40 m; batería 0,60–1,47 m (20 cm libres respecto al buitrón, pedido del usuario); inversor 1,57–2,17 m (centro a 1,5 m); tablero FV 2,25–2,65 m; esquina interior a 2,71 m. Posiciones SUPUESTAS.",
   "tablero_fv": {
     "ancho_mm": 400,
     "alto_mm": 800,

@@ -36,6 +36,7 @@ from engine.biblioteca import (
     coherencia_componente,
     compatibilidad_inversor_bateria,
 )
+from engine.pendientes import errores_pendientes, errores_privacidad
 
 RAIZ = Path(__file__).resolve().parent.parent
 DIR_ESQUEMAS = RAIZ / "engine" / "esquemas"
@@ -96,6 +97,9 @@ def validar_proyecto(
         # Las comprobaciones siguientes suponen que la estructura es correcta.
         return errores
 
+    errores += errores_pendientes(datos)
+    errores += errores_privacidad(datos)
+
     if ruta is not None and datos["id"] != ruta.parent.name:
         errores.append(f"id: '{datos['id']}' no coincide con la carpeta '{ruta.parent.name}'")
 
@@ -149,7 +153,7 @@ def validar_proyecto(
 def _errores_sistema(datos: dict[str, Any], biblioteca: dict[str, dict[str, Any]]) -> list[str]:
     """Reglas entre equipos: tipología vs fases del inversor y compatibilidad inversor-batería."""
     errores: list[str] = []
-    tipologia = datos["sistema"]["tipologia"]
+    tipologia = datos["sistema"]["tipologia"]  # None = pendiente: no se revisan las fases
     inversores = [
         (e, biblioteca[e["componente_ref"]]) for e in datos["equipos"] if e["tipo"] == "inversor"
     ]
@@ -158,7 +162,7 @@ def _errores_sistema(datos: dict[str, Any], biblioteca: dict[str, dict[str, Any]
     ]
     for equipo, inversor in inversores:
         fases = inversor["electrico"]["fases"]
-        if fases not in FASES_POR_TIPOLOGIA[tipologia]:
+        if tipologia is not None and fases not in FASES_POR_TIPOLOGIA[tipologia]:
             errores.append(
                 f"{equipo['id']}: un inversor {fases} no corresponde a la tipología {tipologia}"
             )
@@ -217,6 +221,8 @@ def validar_archivo(ruta: Path) -> list[str]:
         return validar_proyecto(datos, ruta)
     if ruta.name == "datos_privados.json":
         return validar_datos_privados(datos)
+    if ruta.name == "lectura.json":
+        return errores_esquema(datos, "lectura")
     return validar_componente(datos, ruta)
 
 
@@ -225,6 +231,7 @@ def archivos_por_defecto() -> list[Path]:
         sorted(DIR_BIBLIOTECA.rglob("*.json"))
         + sorted(DIR_PROYECTOS.glob("*/proyecto.json"))
         + sorted(DIR_PROYECTOS.glob("*/privado/datos_privados.json"))
+        + sorted(DIR_PROYECTOS.glob("*/insumos/lectura.json"))
     )
 
 

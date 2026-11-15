@@ -68,6 +68,12 @@ renders y planos PDF con el cajetín corporativo.
 - Livoltek BHF G2 (módulo 5,12 kWh): hasta 2 torres de 3 módulos en paralelo (≈ 30 kWh). Livoltek HP3 variante L2 (127/220 V).
 - El medidor STAR DTSY23S es de medida directa (sin CT) y se usa tanto en viviendas bifásicas como trifásicas.
 
+- Una vivienda nueva se lee desde fotos y una vista de Google Maps (no hay DWG/DXF). La IA propone el
+  trazado en píxeles; el código lo convierte a mm con la escala; el usuario lo revisa sobre la imagen.
+- Datos que no se ven quedan en null y en `informacion_faltante`; nunca se suponen.
+- Coordenadas: 2 decimales en `proyecto.json`; las exactas, fotos y capturas solo en `privado/`.
+- Los planos de "Casa de la Gerente" y "Reserva Pance Casa 2" son ejemplos del resultado esperado.
+
 ## Prácticas observadas en instalaciones reales (guía, no norma)
 Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y fotos de obra.
 - Módulos coplanares con la cubierta (al ras), sobre lámina metálica trapezoidal, entre pretiles.

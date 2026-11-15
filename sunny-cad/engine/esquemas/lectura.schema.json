@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sunny-cad.local/esquemas/lectura.schema.json",
+  "title": "Trazado de la vivienda sobre una imagen",
+  "description": "projects/<vivienda>/insumos/lectura.json: contornos en píxeles sobre una vista superior (Google Maps satelital u ortofoto) y la forma de obtener la escala. La IA propone el trazado; el usuario lo revisa sobre la imagen de verificación; el código lo convierte a mm.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version_esquema", "imagen", "escala", "cubiertas"],
+  "properties": {
+    "version_esquema": { "const": "1.1.0" },
+    "imagen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archivo", "ancho_px", "alto_px", "fuente", "rotacion_norte_deg"],
+      "properties": {
+        "archivo": {
+          "description": "Ruta relativa a la carpeta del proyecto, normalmente dentro de privado/.",
+          "type": "string",
+          "minLength": 1
+        },
+        "ancho_px": { "type": "integer", "minimum": 1 },
+        "alto_px": { "type": "integer", "minimum": 1 },
+        "fuente": { "enum": ["google_maps_satelital", "ortofoto", "dron_cenital", "otra"] },
+        "rotacion_norte_deg": {
+          "description": "Ángulo, en sentido horario, desde 'arriba' en la imagen hasta el norte. Google Maps sin girar = 0.",
+          "type": "number",
+          "minimum": -360,
+          "maximum": 360
+        }
+      }
+    },
+    "escala": {
+      "oneOf": [
+        {
+          "description": "Dos puntos sobre la barra de escala de la imagen, o sobre una medida conocida en obra.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["metodo", "p1_px", "p2_px", "longitud_m"],
+          "properties": {
+            "metodo": { "enum": ["barra_escala", "medida_conocida"] },
+            "p1_px": { "$ref": "#/$defs/punto_px" },
+            "p2_px": { "$ref": "#/$defs/punto_px" },
+            "longitud_m": { "type": "number", "exclusiveMinimum": 0 },
+            "descripcion": { "type": "string" }
+          }
+        },
+        {
+          "description": "Escala calculada con la proyección Web Mercator si se conoce el nivel de zoom del mapa.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["metodo", "latitud_deg", "zoom", "escala_pantalla"],
+          "properties": {
+            "metodo": { "const": "web_mercator" },
+            "latitud_deg": { "type": "number", "minimum": -85, "maximum": 85 },
+            "zoom": { "type": "number", "minimum": 0, "maximum": 23 },
+            "escala_pantalla": {
+              "description": "Píxeles de la captura por píxel CSS (1 en pantallas normales, 2 en retina).",
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "cubiertas": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "contorno_px", "obstaculos"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^cubierta-\\d{2}$" },
+          "contorno_px": { "$ref": "#/$defs/contorno_px" },
+          "tipo": { "enum": ["plana", "inclinada", null] },
+          "material": {
+            "enum": ["losa_concreto", "teja_barro", "teja_fibrocemento", "lamina_metalica", "otro", null]
+          },
+          "cota_base_mm": { "type": ["number", "null"], "minimum": 0 },
+          "inclinacion_deg": { "type": ["number", "null"], "minimum": 0, "maximum": 90 },
+          "azimut_deg": { "type": ["number", "null"], "minimum": 0, "exclusiveMaximum": 360 },
+          "obstaculos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "tipo", "contorno_px"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^obstaculo-\\d{2}$" },
+                "tipo": { "enum": ["tanque", "chimenea", "claraboya", "antena", "muro", "otro"] },
+                "contorno_px": { "$ref": "#/$defs/contorno_px" },
+                "altura_mm": { "type": ["number", "null"], "exclusiveMinimum": 0 }
+              }
+            }
+          },
+          "observaciones": {
+            "description": "Lo que se ve en fotos o en la imagen (pretiles, canales, sombras…).",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "notas": { "type": "string" }
+  },
+  "$defs": {
+    "punto_px": {
+      "type": "array",
+      "prefixItems": [{ "type": "number" }, { "type": "number" }],
+      "items": false,
+      "minItems": 2
+    },
+    "contorno_px": {
+      "description": "Polígono en píxeles de la imagen [x, y] (y hacia abajo), sin repetir el primer punto.",
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/punto_px" }
+    }
+  }
+}

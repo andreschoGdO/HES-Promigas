@@ -3,7 +3,7 @@
 Herramienta de diseño 3D y planos para sistemas solares residenciales con almacenamiento
 (proyecto Sunny). Las reglas y el plan por pasos están en [CLAUDE.md](CLAUDE.md).
 
-Estado: **Paso 1** — entorno, estructura y contratos de datos.
+Estado: **Paso 3** — lectura de la vivienda desde fotos y Google Maps.
 
 ## Preparar el entorno
 
@@ -45,3 +45,34 @@ Los datos del cliente y del ingeniero responsable **no** van en `proyecto.json`.
 `templates/datos_privados.plantilla.json` a `projects/<vivienda>/privado/datos_privados.json`
 y llénalo. La carpeta `privado/` está en `.gitignore` y nunca se sube al repositorio;
 `python -m engine.validar` la revisa si existe.
+
+## Lectura de una vivienda nueva (Paso 3)
+
+1. Crear el proyecto (las coordenadas exactas quedan en `privado/`, al proyecto van con 2 decimales):
+
+   ```bash
+   python -m engine.lectura nuevo casa-ejemplo --nombre "Casa ejemplo" --municipio Cali \
+       --departamento "Valle del Cauca" --lat 3.3197 --lon -76.5441
+   ```
+
+2. Copiar las fotos en `projects/<id>/privado/fotos/` y la captura de Google Maps (vista satelital,
+   desde arriba, norte arriba, **con la barra de escala visible** y la casa ocupando buena parte de
+   la imagen) en `projects/<id>/privado/`.
+3. Escribir `projects/<id>/insumos/lectura.json` (esquema `engine/esquemas/lectura.schema.json`):
+   contornos en píxeles de cada cubierta y obstáculo, y la escala (barra de escala, una medida
+   conocida o el zoom del mapa). Lo propone la IA; lo revisa el usuario.
+4. Armar la propuesta, revisar la imagen `privado/verificacion_trazado.png` (trazado con las
+   medidas de cada lado) y la diferencia que se imprime:
+
+   ```bash
+   python -m engine.lectura proponer casa-ejemplo
+   ```
+
+5. Si está bien, aplicarla:
+
+   ```bash
+   python -m engine.lectura proponer casa-ejemplo --aplicar
+   ```
+
+Lo que no se ve en la imagen (inclinación, azimut, alturas, tipología…) queda en `null` y en
+`informacion_faltante`; el proyecto no puede salir de `borrador` mientras haya datos pendientes.

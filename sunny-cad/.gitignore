@@ -8,3 +8,6 @@ __pycache__/
 
 # Datos personales de cada vivienda (cliente, ingeniero): nunca a git
 projects/*/privado/
+
+# Propuestas de cambio pendientes de aprobación
+projects/*/proyecto.propuesta.json

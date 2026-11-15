@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sunny-cad.local/esquemas/proyecto.schema.json",
   "title": "Proyecto de vivienda",
-  "description": "Fuente de verdad de una instalación: projects/<vivienda>/proyecto.json. Geometría en mm; ejes X este, Y norte, Z arriba; origen en la esquina suroeste de la vivienda. Ángulos en grados.",
+  "description": "Fuente de verdad de una instalación: projects/<vivienda>/proyecto.json. Geometría en mm; ejes X este, Y norte, Z arriba; origen en la esquina suroeste de la vivienda. Ángulos en grados. Los campos en null son datos pendientes: deben figurar en informacion_faltante.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,7 +19,9 @@
     "informacion_faltante"
   ],
   "properties": {
-    "version_esquema": { "const": "1.1.0" },
+    "version_esquema": {
+      "const": "1.1.0"
+    },
     "id": {
       "description": "Igual al nombre de la carpeta en projects/.",
       "type": "string",
@@ -29,19 +31,45 @@
       "description": "true si el proyecto es ficticio (solo para pruebas).",
       "type": "boolean"
     },
-    "nombre": { "type": "string", "minLength": 1 },
-    "estado": { "enum": ["borrador", "en_revision", "aprobado"] },
+    "nombre": {
+      "type": "string",
+      "minLength": 1
+    },
+    "estado": {
+      "enum": [
+        "borrador",
+        "en_revision",
+        "aprobado"
+      ]
+    },
     "sistema_coordenadas": {
       "description": "Declaración explícita de las convenciones; no se permite otra.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["unidad_longitud", "origen", "eje_x", "eje_y", "eje_z", "referencia_azimut"],
+      "required": [
+        "unidad_longitud",
+        "origen",
+        "eje_x",
+        "eje_y",
+        "eje_z",
+        "referencia_azimut"
+      ],
       "properties": {
-        "unidad_longitud": { "const": "mm" },
-        "origen": { "const": "esquina_suroeste" },
-        "eje_x": { "const": "este" },
-        "eje_y": { "const": "norte" },
-        "eje_z": { "const": "arriba" },
+        "unidad_longitud": {
+          "const": "mm"
+        },
+        "origen": {
+          "const": "esquina_suroeste"
+        },
+        "eje_x": {
+          "const": "este"
+        },
+        "eje_y": {
+          "const": "norte"
+        },
+        "eje_z": {
+          "const": "arriba"
+        },
         "referencia_azimut": {
           "description": "Azimut medido desde el norte, en sentido horario (0 = norte, 90 = este, 180 = sur, 270 = oeste).",
           "const": "norte_horario"
@@ -51,75 +79,225 @@
     "ubicacion": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["municipio", "departamento"],
+      "required": [
+        "municipio",
+        "departamento"
+      ],
       "properties": {
-        "municipio": { "type": "string", "minLength": 1 },
-        "departamento": { "type": "string", "minLength": 1 },
-        "direccion": { "type": "string" },
-        "latitud_deg": { "type": "number", "minimum": -90, "maximum": 90 },
-        "longitud_deg": { "type": "number", "minimum": -180, "maximum": 180 },
-        "altitud_msnm": { "type": "number" }
+        "municipio": {
+          "type": "string",
+          "minLength": 1
+        },
+        "departamento": {
+          "type": "string",
+          "minLength": 1
+        },
+        "latitud_deg": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90,
+          "description": "Redondeada a 2 decimales (~1 km). La coordenada exacta va en privado/datos_privados.json."
+        },
+        "longitud_deg": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180,
+          "description": "Redondeada a 2 decimales (~1 km). La coordenada exacta va en privado/datos_privados.json."
+        },
+        "altitud_msnm": {
+          "type": "number"
+        }
       }
     },
     "sistema": {
       "description": "Configuración eléctrica general (tipología y arquitectura Sunny).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["tipologia", "fases_red", "arquitectura", "respaldo", "conmutacion"],
+      "required": [
+        "tipologia",
+        "fases_red",
+        "arquitectura",
+        "respaldo",
+        "conmutacion"
+      ],
       "properties": {
         "tipologia": {
-          "description": "T1 bifásica (batería de baja tensión) o T2 trifásica (batería de alta tensión).",
-          "enum": ["T1", "T2"]
+          "anyOf": [
+            {
+              "enum": [
+                "T1",
+                "T2"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "T1 bifásica (batería de baja tensión) o T2 trifásica (batería de alta tensión)."
         },
-        "fases_red": { "enum": ["monofasica", "bifasica", "trifasica"] },
-        "tension_red_v": { "type": "number", "exclusiveMinimum": 0 },
+        "fases_red": {
+          "anyOf": [
+            {
+              "enum": [
+                "monofasica",
+                "bifasica",
+                "trifasica"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tension_red_v": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
         "arquitectura": {
-          "description": "serie: toda la carga pasa por el inversor. paralelo: la carga se alimenta de la red y el inversor entra en respaldo.",
-          "enum": ["serie", "paralelo"]
+          "anyOf": [
+            {
+              "enum": [
+                "serie",
+                "paralelo"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "serie: toda la carga pasa por el inversor. paralelo: la carga se alimenta de la red y el inversor entra en respaldo."
         },
-        "respaldo": { "enum": ["cargas_criticas_eps", "respaldo_total"] },
+        "respaldo": {
+          "anyOf": [
+            {
+              "enum": [
+                "cargas_criticas_eps",
+                "respaldo_total"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "conmutacion": {
-          "description": "Medio de conmutación. Serie exige bypass o ATS; paralelo exige ATS o SmartGuard.",
-          "enum": ["bypass", "ats", "smartguard"]
+          "anyOf": [
+            {
+              "enum": [
+                "bypass",
+                "ats",
+                "smartguard"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Medio de conmutación. Serie exige bypass o ATS; paralelo exige ATS o SmartGuard."
         },
-        "operador_red": { "type": "string" }
+        "operador_red": {
+          "type": "string"
+        }
       },
       "allOf": [
         {
-          "if": { "properties": { "tipologia": { "const": "T1" } } },
-          "then": { "properties": { "fases_red": { "const": "bifasica" } } }
+          "if": {
+            "properties": {
+              "tipologia": {
+                "const": "T1"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fases_red": {
+                "const": "bifasica"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "tipologia": { "const": "T2" } } },
-          "then": { "properties": { "fases_red": { "const": "trifasica" } } }
+          "if": {
+            "properties": {
+              "tipologia": {
+                "const": "T2"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fases_red": {
+                "const": "trifasica"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "arquitectura": { "const": "serie" } } },
-          "then": { "properties": { "conmutacion": { "enum": ["bypass", "ats"] } } }
+          "if": {
+            "properties": {
+              "arquitectura": {
+                "const": "serie"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "conmutacion": {
+                "enum": [
+                  "bypass",
+                  "ats"
+                ]
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "arquitectura": { "const": "paralelo" } } },
-          "then": { "properties": { "conmutacion": { "enum": ["ats", "smartguard"] } } }
+          "if": {
+            "properties": {
+              "arquitectura": {
+                "const": "paralelo"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "conmutacion": {
+                "enum": [
+                  "ats",
+                  "smartguard"
+                ]
+              }
+            }
+          }
         }
       ]
     },
     "vivienda": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cubiertas"],
+      "required": [
+        "cubiertas"
+      ],
       "properties": {
-        "numero_pisos": { "type": "integer", "minimum": 1 },
+        "numero_pisos": {
+          "type": "integer",
+          "minimum": 1
+        },
         "cubiertas": {
           "type": "array",
-          "minItems": 1,
-          "items": { "$ref": "#/$defs/cubierta" }
+          "minItems": 0,
+          "items": {
+            "$ref": "#/$defs/cubierta"
+          }
         }
       }
     },
     "equipos": {
       "description": "Instancias de equipos en este proyecto. Cada una apunta a un componente de library/.",
       "type": "array",
-      "items": { "$ref": "#/$defs/equipo" }
+      "items": {
+        "$ref": "#/$defs/equipo"
+      }
     },
     "insumos": {
       "description": "Archivos de entrada en projects/<vivienda>/insumos/.",
@@ -127,37 +305,70 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["archivo", "descripcion"],
+        "required": [
+          "archivo",
+          "descripcion"
+        ],
         "properties": {
-          "archivo": { "type": "string", "minLength": 1 },
-          "descripcion": { "type": "string" }
+          "archivo": {
+            "type": "string",
+            "minLength": 1
+          },
+          "descripcion": {
+            "type": "string"
+          }
         }
       }
     },
     "informacion_faltante": {
-      "description": "Datos que faltan y deben pedirse al usuario antes de diseñar.",
+      "description": "Datos que faltan. Cada campo en null debe tener una entrada que empiece por su ruta, por ejemplo 'cubierta-01/inclinacion_deg: …' o 'sistema/tipologia: …'.",
       "type": "array",
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "revisiones": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["revision", "fecha", "descripcion"],
+        "required": [
+          "revision",
+          "fecha",
+          "descripcion"
+        ],
         "properties": {
-          "revision": { "type": "string", "minLength": 1 },
-          "fecha": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-          "descripcion": { "type": "string", "minLength": 1 }
+          "revision": {
+            "type": "string",
+            "minLength": 1
+          },
+          "fecha": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "descripcion": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },
-    "notas": { "type": "string" }
+    "notas": {
+      "type": "string"
+    }
   },
   "$defs": {
     "punto_2d_mm": {
       "type": "array",
-      "prefixItems": [{ "type": "number" }, { "type": "number" }],
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
       "items": false,
       "minItems": 2
     },
@@ -165,7 +376,9 @@
       "description": "Polígono en proyección horizontal (planta), puntos [x, y] en mm, sin repetir el primero al final.",
       "type": "array",
       "minItems": 3,
-      "items": { "$ref": "#/$defs/punto_2d_mm" }
+      "items": {
+        "$ref": "#/$defs/punto_2d_mm"
+      }
     },
     "cubierta": {
       "type": "object",
@@ -181,24 +394,65 @@
         "obstaculos"
       ],
       "properties": {
-        "id": { "type": "string", "pattern": "^cubierta-\\d{2}$" },
+        "id": {
+          "type": "string",
+          "pattern": "^cubierta-\\d{2}$"
+        },
         "tipo": {
-          "description": "Lo indica el usuario para cada vivienda; no se deduce de la inclinación.",
-          "enum": ["plana", "inclinada"]
+          "anyOf": [
+            {
+              "enum": [
+                "plana",
+                "inclinada"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Lo indica el usuario para cada vivienda; no se deduce de la inclinación."
         },
         "material": {
-          "enum": ["losa_concreto", "teja_barro", "teja_fibrocemento", "lamina_metalica", "otro"]
+          "anyOf": [
+            {
+              "enum": [
+                "losa_concreto",
+                "teja_barro",
+                "teja_fibrocemento",
+                "lamina_metalica",
+                "otro"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
-        "contorno_mm": { "$ref": "#/$defs/contorno_mm" },
+        "contorno_mm": {
+          "$ref": "#/$defs/contorno_mm"
+        },
         "cota_base_mm": {
           "description": "Altura Z del borde más bajo de la cubierta.",
-          "type": "number",
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0
         },
-        "inclinacion_deg": { "type": "number", "minimum": 0, "maximum": 90 },
+        "inclinacion_deg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 90
+        },
         "azimut_deg": {
           "description": "Hacia dónde mira la caída del agua (azimut desde el norte, horario).",
-          "type": "number",
+          "type": [
+            "number",
+            "null"
+          ],
           "minimum": 0,
           "exclusiveMaximum": 360
         },
@@ -207,14 +461,36 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "tipo", "contorno_mm", "altura_mm"],
+            "required": [
+              "id",
+              "tipo",
+              "contorno_mm",
+              "altura_mm"
+            ],
             "properties": {
-              "id": { "type": "string", "pattern": "^obstaculo-\\d{2}$" },
-              "tipo": { "enum": ["tanque", "chimenea", "claraboya", "antena", "muro", "otro"] },
-              "contorno_mm": { "$ref": "#/$defs/contorno_mm" },
+              "id": {
+                "type": "string",
+                "pattern": "^obstaculo-\\d{2}$"
+              },
+              "tipo": {
+                "enum": [
+                  "tanque",
+                  "chimenea",
+                  "claraboya",
+                  "antena",
+                  "muro",
+                  "otro"
+                ]
+              },
+              "contorno_mm": {
+                "$ref": "#/$defs/contorno_mm"
+              },
               "altura_mm": {
                 "description": "Altura del obstáculo sobre la superficie de la cubierta.",
-                "type": "number",
+                "type": [
+                  "number",
+                  "null"
+                ],
                 "exclusiveMinimum": 0
               }
             }
@@ -225,7 +501,11 @@
     "equipo": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "tipo", "componente_ref"],
+      "required": [
+        "id",
+        "tipo",
+        "componente_ref"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -266,40 +546,148 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "tipo": { "const": "modulo" } } },
-          "then": { "properties": { "id": { "pattern": "^modulo-" } } }
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "modulo"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^modulo-"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "tipo": { "const": "inversor" } } },
-          "then": { "properties": { "id": { "pattern": "^inversor-" } } }
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "inversor"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^inversor-"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "tipo": { "const": "bateria" } } },
-          "then": { "properties": { "id": { "pattern": "^bateria-" } } }
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "bateria"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^bateria-"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "tipo": { "const": "tablero" } } },
-          "then": { "properties": { "id": { "pattern": "^tablero-" } } }
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "tablero"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^tablero-"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "tipo": { "const": "proteccion" } } },
-          "then": { "properties": { "id": { "pattern": "^proteccion-" } } }
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "proteccion"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^proteccion-"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "tipo": { "const": "estructura" } } },
-          "then": { "properties": { "id": { "pattern": "^estructura-" } } }
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "estructura"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^estructura-"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "tipo": { "const": "medidor" } } },
-          "then": { "properties": { "id": { "pattern": "^medidor-" } } }
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "medidor"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^medidor-"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "tipo": { "const": "monitoreo" } } },
-          "then": { "properties": { "id": { "pattern": "^monitoreo-" } } }
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "monitoreo"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^monitoreo-"
+              }
+            }
+          }
         },
         {
-          "if": { "properties": { "tipo": { "const": "conmutacion" } } },
-          "then": { "properties": { "id": { "pattern": "^conmutacion-" } } }
+          "if": {
+            "properties": {
+              "tipo": {
+                "const": "conmutacion"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^conmutacion-"
+              }
+            }
+          }
         }
       ]
     }

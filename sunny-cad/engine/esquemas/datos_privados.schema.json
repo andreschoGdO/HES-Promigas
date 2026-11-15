@@ -5,31 +5,78 @@
   "description": "Datos personales para el cajetín: projects/<vivienda>/privado/datos_privados.json. La carpeta privado/ nunca se sube a git.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version_esquema", "cliente", "ingeniero_responsable"],
+  "required": [
+    "version_esquema"
+  ],
   "properties": {
-    "version_esquema": { "const": "1.1.0" },
+    "version_esquema": {
+      "const": "1.1.0"
+    },
     "cliente": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["nombre"],
+      "required": [
+        "nombre"
+      ],
       "properties": {
-        "nombre": { "type": "string", "minLength": 1 },
-        "documento_identidad": { "type": "string" },
-        "direccion": { "type": "string" },
-        "telefono": { "type": "string" },
-        "correo": { "type": "string" },
-        "numero_cuenta_operador_red": { "type": "string" }
+        "nombre": {
+          "type": "string",
+          "minLength": 1
+        },
+        "documento_identidad": {
+          "type": "string"
+        },
+        "direccion": {
+          "type": "string"
+        },
+        "telefono": {
+          "type": "string"
+        },
+        "correo": {
+          "type": "string"
+        },
+        "numero_cuenta_operador_red": {
+          "type": "string"
+        }
       }
     },
     "ingeniero_responsable": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["nombre"],
+      "required": [
+        "nombre"
+      ],
       "properties": {
-        "nombre": { "type": "string", "minLength": 1 },
-        "matricula_profesional": { "type": "string" }
+        "nombre": {
+          "type": "string",
+          "minLength": 1
+        },
+        "matricula_profesional": {
+          "type": "string"
+        }
       }
     },
-    "notas": { "type": "string" }
+    "notas": {
+      "type": "string"
+    },
+    "ubicacion_exacta": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "latitud_deg": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitud_deg": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "direccion": {
+          "type": "string"
+        }
+      }
+    }
   }
 }

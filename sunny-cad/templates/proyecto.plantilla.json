@@ -1,0 +1,32 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "",
+  "es_ejemplo": false,
+  "nombre": "",
+  "estado": "borrador",
+  "sistema_coordenadas": {
+    "unidad_longitud": "mm",
+    "origen": "esquina_suroeste",
+    "eje_x": "este",
+    "eje_y": "norte",
+    "eje_z": "arriba",
+    "referencia_azimut": "norte_horario"
+  },
+  "ubicacion": {
+    "municipio": "",
+    "departamento": ""
+  },
+  "sistema": {
+    "tipologia": null,
+    "fases_red": null,
+    "arquitectura": null,
+    "respaldo": null,
+    "conmutacion": null
+  },
+  "vivienda": {
+    "cubiertas": []
+  },
+  "equipos": [],
+  "insumos": [],
+  "informacion_faltante": []
+}

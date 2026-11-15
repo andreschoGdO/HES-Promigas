@@ -10,38 +10,14 @@
   "escala": {
     "metodo": "poligono_medido",
     "contorno_px": [
-      [
-        231.0,
-        186.5
-      ],
-      [
-        255.3,
-        201.6
-      ],
-      [
-        300.0,
-        161.0
-      ],
-      [
-        353.0,
-        226.0
-      ],
-      [
-        308.4,
-        266.6
-      ],
-      [
-        322.4,
-        313.4
-      ],
-      [
-        236.0,
-        374.4
-      ],
-      [
-        134.4,
-        270.9
-      ]
+      [231.0, 186.5],
+      [255.3, 201.6],
+      [300.0, 161.0],
+      [353.0, 226.0],
+      [308.4, 266.6],
+      [322.4, 313.4],
+      [236.0, 374.4],
+      [134.4, 270.9]
     ],
     "area_m2": 176.15,
     "perimetro_m": 56.39
@@ -50,34 +26,16 @@
     {
       "id": "cubierta-01",
       "contorno_px": [
-        [
-          231.0,
-          186.5
-        ],
-        [
-          255.3,
-          201.6
-        ],
-        [
-          308.4,
-          266.6
-        ],
-        [
-          322.4,
-          313.4
-        ],
-        [
-          236.0,
-          374.4
-        ],
-        [
-          134.4,
-          270.9
-        ]
+        [231.0, 186.5],
+        [255.3, 201.6],
+        [308.4, 266.6],
+        [322.4, 313.4],
+        [236.0, 374.4],
+        [134.4, 270.9]
       ],
       "tipo": "plana",
       "material": "losa_concreto",
-      "cota_base_mm": null,
+      "cota_base_mm": 0,
       "inclinacion_deg": 0,
       "azimut_deg": null,
       "obstaculos": [],
@@ -86,31 +44,19 @@
     {
       "id": "cubierta-02",
       "contorno_px": [
-        [
-          255.3,
-          201.6
-        ],
-        [
-          300.0,
-          161.0
-        ],
-        [
-          353.0,
-          226.0
-        ],
-        [
-          308.4,
-          266.6
-        ]
+        [255.3, 201.6],
+        [300.0, 161.0],
+        [353.0, 226.0],
+        [308.4, 266.6]
       ],
       "tipo": "plana",
       "material": "losa_concreto",
-      "cota_base_mm": null,
+      "cota_base_mm": 2000,
       "inclinacion_deg": 0,
       "azimut_deg": null,
       "obstaculos": [],
-      "observaciones": "Terraza alta (otro nivel, usuario): 13 m² útiles. En las fotos tiene pararrayos y salidas de ventilación en el borde."
+      "observaciones": "Terraza alta (otro nivel, usuario): 13 m² útiles. En las fotos tiene pararrayos y salidas de ventilación en el borde. Está 2 m por encima de la terraza baja (usuario)."
     }
   ],
-  "notas": "Vértices ubicados por el borde oscuro de los marcadores de Maps (±0,5 px ≈ ±4 cm). El rótulo '40.00 m' de la captura no corresponde a ningún lado ni acumulado del polígono: no se usa. La línea entre los vértices 2 y 5 separa la terraza baja (cubierta-01) de la alta (cubierta-02)."
+  "notas": "Vértices ubicados por el borde oscuro de los marcadores de Maps (±0,5 px ≈ ±4 cm). El rótulo '40.00 m' de la captura no corresponde a ningún lado ni acumulado del polígono: no se usa. La línea entre los vértices 2 y 5 separa la terraza baja (cubierta-01) de la alta (cubierta-02). Cotas Z medidas desde la losa de la terraza baja (piso 19) = 0."
 }

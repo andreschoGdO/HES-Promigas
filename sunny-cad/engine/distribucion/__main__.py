@@ -21,6 +21,7 @@ from shapely.geometry import Polygon
 
 from engine import jsonfmt, validar
 from engine.distribucion import colocacion, dibujo
+from engine.pendientes import rutas_pendientes, texto_faltante
 
 
 def _rel(ruta: Path) -> Path:
@@ -46,6 +47,10 @@ def proponer(args: argparse.Namespace) -> int:
     nuevos, por_zona = colocacion.equipos_modulos(zonas, modulo)
     otros = [e for e in propuesta["equipos"] if e["tipo"] != "modulo"]
     propuesta["equipos"] = otros + nuevos
+
+    propuesta["informacion_faltante"] = [
+        f for f in propuesta["informacion_faltante"] if not f.startswith("zona-")
+    ] + [texto_faltante(r) for r in rutas_pendientes(propuesta) if r.startswith("zona-")]
 
     errores = validar.validar_proyecto(propuesta, ruta_proyecto, biblioteca)
     (carpeta / "proyecto.propuesta.json").write_text(jsonfmt.dumps(propuesta), encoding="utf-8")

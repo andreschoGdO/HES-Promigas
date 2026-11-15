@@ -23,6 +23,7 @@ from shapely.geometry import Polygon, box
 from shapely.prepared import prep
 
 PASO_BUSQUEDA_MM = 50
+TOLERANCIA_MM = 1  # absorbe el redondeo de las esquinas a mm enteros
 
 
 def direccion(rumbo_deg: float) -> tuple[float, float]:
@@ -69,7 +70,7 @@ def colocar(
     )
     if util.is_empty:
         return []
-    util_p = prep(util)
+    util_p = prep(util.buffer(TOLERANCIA_MM, join_style="mitre"))
     du, dv, gu, gv = huella_mm(modulo, zona)
     pu, pv = du + gu, dv + gv
     umin, vmin, umax, vmax = util.bounds

@@ -206,3 +206,22 @@ def test_cli_rechaza_modulo_que_no_es_modulo(
 ) -> None:
     monkeypatch.setattr(validar, "DIR_PROYECTOS", validar.RAIZ / "projects")
     assert cli(["proponer", "ejemplo-vivienda-001", "--modulo", "deye-gb-l"]) == 1
+
+
+def test_holgura_minima_con_esquinas_redondeadas() -> None:
+    # Pérgola de Riomar: 6,84 × 4,97 m girada 140,8°; JA 595 vertical a 5°, separación 10 mm.
+    # Pendiente: 3 × 2269,3 + 2 × 9,96 = 6827,8 mm ≤ 6840 (12 mm de holgura) → 3 filas.
+    # Fila: 4 × 1134 + 3 × 10 = 4566 ≤ 4970 → 4 por fila. Total 12, aunque las esquinas
+    # se redondeen a mm enteros.
+    ja = validar.cargar_biblioteca()["ja-solar-jam72d40-595-mb"]
+    ul, ua = direccion(140.8), direccion(50.8)
+    cx, cy = 12345.6, 7890.1
+    pts = [
+        [
+            round(cx + sl * 3420 * ul[0] + sa * 2485 * ua[0]),
+            round(cy + sl * 3420 * ul[1] + sa * 2485 * ua[1]),
+        ]
+        for sl, sa in ((-1, -1), (1, -1), (1, 1), (-1, 1))
+    ]
+    z = _zona(contorno_mm=pts, inclinacion_deg=5, azimut_deg=140.8, separacion_mm=10)
+    assert len(colocar(z, ja)) == 12

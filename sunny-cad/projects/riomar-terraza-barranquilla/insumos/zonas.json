@@ -3,20 +3,20 @@
     "id": "zona-01",
     "cubierta_ref": "cubierta-01",
     "contorno_mm": [
-      [14829, 9187],
-      [10304, 14727],
-      [6623, 11720],
-      [11148, 6180]
+      [4751, 9291],
+      [9074, 3991],
+      [12925, 7132],
+      [8602, 12432]
     ],
     "estructura": "pergola",
     "altura_estructura_mm": null,
     "inclinacion_deg": 5,
     "azimut_deg": 140.8,
     "orientacion_modulo": "vertical",
-    "separacion_mm": 20,
+    "separacion_mm": 10,
     "retiro_mm": 0,
     "es_supuesto": true,
-    "nota": "Pérgola tipo carport de 34 m² (usuario). SUPUESTO: rectángulo de 7,15 × 4,75 m pegado al muro de la terraza alta, para quedar a nivel con ella. Altura de la estructura por definir. Opción propuesta: 5° hacia el sureste (140,8°), alineada con el edificio; el usuario pidió sur."
+    "nota": "Pérgola tipo carport de 34 m², rectangular, sobre la terraza baja, en la posición del rectángulo que el usuario marcó en Maps (110,64 m²), reducida a 34 m² alrededor de su centro. SUPUESTOS: (1) el centro de la pérgola coincide con el del rectángulo marcado; (2) medidas 6,84 × 4,97 m (en vez de 6,74 × 5,04 m con las mismas proporciones) para que entren 3 filas de 4 módulos verticales. Alineada con el edificio (rumbo 140,8°). Separación 10 mm (usuario). Altura: a nivel con la terraza alta (+2 m); falta definir la altura exacta."
   },
   {
     "id": "zona-02",
@@ -32,9 +32,9 @@
     "inclinacion_deg": 5,
     "azimut_deg": 140.8,
     "orientacion_modulo": "horizontal",
-    "separacion_mm": 20,
+    "separacion_mm": 30,
     "retiro_mm": 0,
-    "es_supuesto": true,
-    "nota": "Terraza alta: 13 m² útiles (usuario). SUPUESTO: área centrada de 3,06 × 4,25 m. Opción propuesta: 5° hacia el sureste (140,8°), alineada con el edificio; el usuario pidió sur."
+    "es_supuesto": false,
+    "nota": "Terraza alta, +2 m sobre la terraza baja: 13 m² útiles centrados (3,06 × 4,25 m), confirmado por el usuario. Estructura inclinada 5° hacia el sureste (140,8°), aceptado por el usuario. Separación 30 mm (usuario)."
   }
 ]

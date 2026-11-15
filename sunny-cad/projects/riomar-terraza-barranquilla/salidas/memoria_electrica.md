@@ -24,12 +24,12 @@
 
 | Circuito | Tramo | I máx (A) | I conductor (A) | Calibre Cu (AWG) | Longitud est. (m) | Caída (%) | Protección |
 |---|---|---|---|---|---|---|---|
-| DC-S1.1.1 | string S1.1.1 → inversor (MPPT 1) | 18.89 | 23.61 | 10 | 14.0 | 0.45 (máx 2.0) | sin fusible de string (≤ 2 strings por MPPT; fusible máximo del módulo 30 A) |
-| DC-S1.2.1 | string S1.2.1 → inversor (MPPT 2) | 18.89 | 23.61 | 10 | 16.6 | 0.61 (máx 2.0) | sin fusible de string (≤ 2 strings por MPPT; fusible máximo del módulo 30 A) |
+| DC-S1.1.1 | string S1.1.1 → inversor (MPPT 1) | 18.89 | 23.61 | 10 | 14.1 | 0.45 (máx 2.0) | sin fusible de string (≤ 2 strings por MPPT; fusible máximo del módulo 30 A) |
+| DC-S1.2.1 | string S1.2.1 → inversor (MPPT 2) | 18.89 | 23.61 | 10 | 16.7 | 0.61 (máx 2.0) | sin fusible de string (≤ 2 strings por MPPT; fusible máximo del módulo 30 A) |
 | DC-BAT | batería BHF-S10/S15/S20/S25/S30-G2 (s15) → inversor | 48 | 60.0 | 4 | 4.7 | 0.15 (máx 2.0) | interruptor DC 60 A (verificar si el fabricante lo integra) |
-| AC-RED | inversor (puerto red) → tablero FV (contactor / ATS) | 39.4 | 49.25 | 6 | 2.9 | 0.14 (máx 3.0) | interruptor 50 A tripolar |
-| AC-CARGA | inversor (puerto respaldo) → tablero FV | 39.4 | 49.25 | 6 | 2.9 | 0.14 (máx 3.0) | interruptor 50 A tripolar |
-| AC-EXISTENTE | tablero FV → tablero existente de la vivienda | 39.4 | 49.25 | 6 | 16.7 | 0.82 (máx 3.0) | interruptor 50 A tripolar |
+| AC-RED | inversor (puerto red) → tablero FV (contactor / ATS) | 39.4 | 49.25 | 6 | 2.8 | 0.14 (máx 3.0) | interruptor 50 A tripolar |
+| AC-CARGA | inversor (puerto respaldo) → tablero FV | 39.4 | 49.25 | 6 | 2.8 | 0.14 (máx 3.0) | interruptor 50 A tripolar |
+| AC-EXISTENTE | tablero FV → tablero existente de la vivienda | 39.4 | 49.25 | 6 | 16.8 | 0.82 (máx 3.0) | interruptor 50 A tripolar |
 
 ## Resultado
 
@@ -40,4 +40,4 @@
 - zona-02/altura_estructura_mm: altura del borde bajo de los módulos sobre la cubierta (mm)
 - equipos: capacidad del totalizador y demanda de la vivienda (en serie toda la carga pasa por el inversor: máx. 23 kW de entrada AC)
 - equipos: altura de piso y recorrido horizontal hasta el tablero existente (supuestos 3,0 m y 3 m)
-- equipos: ancho del buitrón (supuesto 40 cm) y fondo de la franja frente a los equipos (supuesto 1,6 m)
+- equipos: ancho del buitrón (supuesto 40 cm) y fondo del piso frente a los equipos (supuesto 1,6 m)

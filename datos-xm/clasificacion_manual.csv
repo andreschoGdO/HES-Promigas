@@ -1,0 +1,9 @@
+codigo,tipo,evidencia
+JPR1,EOLICA,"Parque eólico Jepírachi (18,4 MW), retirado en 2023; perfil horario eólico, sin emisiones CO2 en EmisionesCO2Eq"
+3KOD,SOLAR,"Generación nocturna (19h-05h) = 0 en todo su historial"
+3PKN,SOLAR,"Generación nocturna (19h-05h) = 0 en todo su historial"
+3PKH,SOLAR,"Generación nocturna (19h-05h) = 0 en todo su historial"
+3RKN,SOLAR,"Generación nocturna (19h-05h) = 0 en todo su historial"
+ILC1,TERMICA,"Reporta emisiones en EmisionesCO2Eq/Recurso"
+3RKP,TERMICA,"Reporta emisiones en EmisionesCO2Eq/Recurso"
+3KL4,TERMICA,"Reporta emisiones en EmisionesCO2Eq/Recurso"

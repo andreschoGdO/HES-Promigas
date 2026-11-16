@@ -99,8 +99,17 @@ def listado_recursos() -> pd.DataFrame:
                             "recType": "clasificacion", "companyCode": "agente",
                             "operStartdate": "inicio_operacion", "state": "estado"})
     df["tipo"] = df["tipo"].str.upper().str.strip()
+    df["origen_clasificacion"] = "ListadoRecursos"
+    df = df.drop_duplicates("codigo")
+    # ListadoRecursos es una foto actual: los recursos retirados no aparecen. Se completan
+    # con clasificacion_manual.csv (solo casos con evidencia clara, ver README).
+    man = pd.read_csv(DIR / "clasificacion_manual.csv")
+    man = man[~man["codigo"].isin(df["codigo"])]
+    man = man.assign(nombre=None, fuente_energia=None, origen_clasificacion="manual")
+    df = pd.concat([df, man[["codigo", "tipo", "nombre", "fuente_energia",
+                             "origen_clasificacion"]]], ignore_index=True)
     df["fuente"] = df["tipo"].map(FUENTES)
-    return df.drop_duplicates("codigo")
+    return df
 
 
 def main():
@@ -131,14 +140,16 @@ def main():
     dup = gen.duplicated(["fecha", "codigo"]).sum()
     gen = gen.drop_duplicates(["fecha", "codigo"])
 
-    gen = gen.merge(rec[["codigo", "nombre", "tipo", "fuente_energia", "fuente"]],
+    gen = gen.merge(rec[["codigo", "nombre", "tipo", "fuente_energia", "fuente",
+                         "origen_clasificacion"]],
                     on="codigo", how="left")
     gen["tipo"] = gen["tipo"].fillna("SIN_CLASIFICAR")
     gen["mwh"] = gen["kwh"] / 1000.0
 
     # ---------- Detalle por recurso (solo eólica, hidráulica, solar) ----------
     sel = gen[gen["fuente"].notna()].copy()
-    det = sel[["fecha", "codigo", "nombre", "fuente", "fuente_energia", "mwh", "horas_con_dato"]]
+    det = sel[["fecha", "codigo", "nombre", "fuente", "fuente_energia", "origen_clasificacion",
+           "mwh", "horas_con_dato"]]
     det = det.sort_values(["fecha", "fuente", "codigo"])
     det.assign(fecha=det["fecha"].dt.date).rename(columns={"mwh": "generacion_mwh"}).to_csv(
         SALIDA / "generacion_diaria_por_recurso.csv.gz", index=False, float_format="%.4f",
@@ -185,11 +196,17 @@ def main():
     rep.append(f"- Filas recurso-día descargadas: {len(gen):,}; duplicadas eliminadas: {dup}")
     rep.append(f"- Días esperados: {len(fechas)}; días con datos en Gene/Recurso: "
                f"{gen['fecha'].nunique()}")
-    rep.append(f"- Recurso-días con al menos una hora nula: {(gen.horas_con_dato < 24).sum():,} "
+    rep.append(f"- Recurso-días con alguna hora vacía (la API omite las horas sin generación; "
+               f"se suman como 0): {(gen.horas_con_dato < 24).sum():,} "
                f"(sin ninguna hora: {(gen.horas_con_dato == 0).sum():,})")
     for f, lst in dias_falt.items():
         rep.append(f"- Días sin dato para {f}: {len(lst)}" + (f" -> {lst[:20]}" if lst else ""))
-    rep.append(f"- Recursos sin clasificar (no están en ListadoRecursos actual): "
+    man = gen[gen["origen_clasificacion"] == "manual"]
+    rep.append(f"- Recursos clasificados manualmente (clasificacion_manual.csv): "
+               f"{man.codigo.nunique()} -> " + ", ".join(
+                   f"{c} {t}={v / 1e3:,.2f} GWh" for (c, t), v in
+                   man.groupby(["codigo", "tipo"])["mwh"].sum().items()))
+    rep.append(f"- Recursos sin clasificar (ni en ListadoRecursos actual ni en la tabla manual): "
                f"{sin_clas.codigo.nunique()} recursos, "
                f"{sin_clas.mwh.sum() / 1e3:,.3f} GWh en todo el periodo")
     if len(sin_clas):

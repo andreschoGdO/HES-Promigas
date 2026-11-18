@@ -185,3 +185,43 @@ def test_sin_choques_3d_entre_equipos(elems) -> None:
                 continue
             (a0, a1), (b0, b1) = z_local(a, cruce), z_local(b, cruce)
             assert min(a1, b1) <= max(a0, b0), (a.id, b.id, (a0, a1), (b0, b1))
+
+
+@pytest.mark.parametrize("proyecto_id", ["riomar-terraza-barranquilla", "natura-barranquilla"])
+def test_rutas_no_atraviesan_equipos(proyecto_id: str) -> None:
+    """Ninguna canalización atraviesa inversor, batería o tablero (puede tocar su borde)."""
+    from shapely.geometry import LineString, MultiPoint, Point
+
+    carpeta = validar.DIR_PROYECTOS / proyecto_id
+    els = geometria.elementos(
+        validar.cargar_json(carpeta / "proyecto.json"),
+        BIB,
+        validar.cargar_json(carpeta / "insumos" / "electrico.json"),
+    )
+    equipos = [e for e in els if e.tipo in ("inversor", "bateria", "tablero")]
+    rutas = [e for e in els if e.tipo.startswith("canalizacion")]
+    assert rutas
+    for r in rutas:
+        ruta = r.propiedades["ruta_mm"]
+        for a, b in zip(ruta[:-1], ruta[1:], strict=True):
+            for eq in equipos:
+                huella = MultiPoint(eq.malla.vertices[:, :2].tolist()).convex_hull.buffer(-30)
+                geom = LineString([a[:2], b[:2]]) if a[:2] != b[:2] else Point(a[:2])
+                z0, z1 = eq.malla.bounds[0][2], eq.malla.bounds[1][2]
+                solapa_z = max(a[2], b[2]) > z0 + 30 and min(a[2], b[2]) < z1 - 30
+                assert not (geom.intersects(huella) and solapa_z), (r.id, eq.id)
+
+
+def test_paneles_sobre_losa_tienen_soportes() -> None:
+    carpeta = validar.DIR_PROYECTOS / "natura-barranquilla"
+    els = geometria.elementos(
+        validar.cargar_json(carpeta / "proyecto.json"),
+        BIB,
+        validar.cargar_json(carpeta / "insumos" / "electrico.json"),
+    )
+    patas = [e for e in els if "-pata-" in e.id]
+    rieles = [e for e in els if "-riel-" in e.id]
+    assert len(rieles) == 4  # 2 filas × 2 rieles
+    assert patas and all(
+        e.malla.bounds[0][2] == pytest.approx(0) for e in patas
+    )  # apoyan en la losa

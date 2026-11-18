@@ -253,12 +253,9 @@
     }
   ],
   "informacion_faltante": [
-    "sistema: confirmar arquitectura en serie con ATS y respaldo total (tomado de Riomar)",
-    "equipos: potencia del inversor DEYE (en la biblioteca solo está el SUN-15K; la ficha trae 8/10/12K)",
-    "equipos: '3 baterías DEYE' = una torre GB-L de 3 módulos (supuesto)",
-    "equipos: posición exacta de los equipos en la pared y del punto de conexión; altura del cuarto",
-    "zona-01: inclinación, altura de la estructura y si queda sobre la claraboya",
-    "equipos: capacidad del totalizador y demanda de la vivienda"
+    "equipos: posición exacta de los equipos en la pared y medidas de la claraboya",
+    "equipos: capacidad del totalizador y demanda de la vivienda",
+    "equipos: altura de piso y recorrido horizontal hasta el punto de interconexión (supuestos 3,0 m y 3 m)"
   ],
   "condiciones_diseno": {
     "temperatura_min_c": 15,
@@ -266,5 +263,5 @@
     "es_supuesto": false,
     "fuente": "Valores de diseño de Barranquilla confirmados por el usuario en el proyecto Riomar."
   },
-  "notas": "Conjunto trifásico (usuario). Equipos DEYE y JA 595 (usuario)."
+  "notas": "Conjunto trifásico (usuario). Equipos DEYE SUN-15K + GB-L 3 módulos y JA 595 (usuario). Mismo sistema que Riomar: serie, ATS, respaldo total (usuario). Paneles al lado de la claraboya; el cableado baja por ella 2 pisos (usuario). Sin más módulos por sombreado (usuario)."
 }

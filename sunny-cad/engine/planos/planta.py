@@ -25,6 +25,7 @@ CAPA_ELEMENTO = {
     "buitron": "EQUIPO",
     "muro": "CUBIERTA",
     "conexion": "EQUIPO",
+    "claraboya": "CUBIERTA",
 }
 
 
@@ -97,6 +98,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], elems: list[Elemento], 
                 "tablero": "#f4d4cf",
                 "buitron": "#d9c7b8",
                 "conexion": "#d0d0d0",
+                "claraboya": "#cfe6f2",
                 "muro": "#cfc2b4",
             }[e.tipo]
             lam.polilinea(
@@ -120,7 +122,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], elems: list[Elemento], 
             )
     # Etiquetas de equipos
     for e in elems:
-        if e.tipo in ("inversor", "bateria", "tablero", "buitron", "conexion"):
+        if e.tipo in ("inversor", "bateria", "tablero", "buitron", "conexion", "claraboya"):
             cx, cy = np.mean([vista(p) for p in _huella(e)], axis=0)
             nombre = {
                 "inversor": "INV",

@@ -33,6 +33,7 @@ COLORES = {
     "muro": (196, 160, 135, 255),
     "canalizacion_dc": (226, 110, 30, 255),
     "conexion": (120, 120, 120, 255),
+    "claraboya": (150, 200, 225, 140),
     "canalizacion_ac": (60, 90, 170, 255),
     "inversor": (245, 245, 245, 255),
     "bateria": (235, 235, 235, 255),
@@ -185,6 +186,23 @@ def elementos(
         out.append(
             buitron(entrada_electrica["buitron"], entrada_electrica["rumbo_muro_equipos_deg"])
         )
+    for zid, zona in zonas.items():
+        if (
+            zona["estructura"] == "inclinada_sobre_losa"
+            and (zona.get("altura_estructura_mm") or 0) >= 100
+        ):
+            mods = [
+                e for e in proyecto["equipos"] if e.get("colocacion", {}).get("zona_ref") == zid
+            ]
+            if mods:
+                comp = biblioteca[mods[0]["componente_ref"]]
+                out += _soportes(
+                    zona,
+                    [m["colocacion"] for m in mods],
+                    comp,
+                    planos[zid],
+                    _cota(cubiertas[zona["cubierta_ref"]]),
+                )
     if entrada_electrica and "muro_equipos" in entrada_electrica:
         out += canalizaciones(proyecto, entrada_electrica, out)
     if entrada_electrica and "tablero-fv" in entrada_electrica.get("ubicaciones", {}):
@@ -399,6 +417,11 @@ def canalizaciones(
         q = esquina + w * s_mm + n * salida
         return [float(q[0]), float(q[1]), float(z)]
 
+    holgura_piso = 160.0
+    if bat is not None:
+        holgura_piso = max(
+            160.0, float(max(np.dot(p[:2] - esquina, n) for p in bat.malla.vertices)) + 120
+        )
     s_inv = s_de(ub["inversor-01"]["punto"])
     z_inv_top, z_inv_bot = float(inv.malla.bounds[1][2]), float(inv.malla.bounds[0][2])
     z_ac = min(z_coronacion - 90, max(z_inv_top, z_tab_alto) + 150)
@@ -428,10 +451,19 @@ def canalizaciones(
         elif cota <= cota_min:
             # Zona al nivel de la terraza: por el piso hasta el muro de equipos y sube al inversor
             zf = cota + 60
+            patas = [e.propiedades["pie_mm"] for e in elems if e.id.startswith(f"{z['id']}-pata-")]
+            if patas:
+                pie = min(patas, key=lambda p: np.linalg.norm(np.subtract(p[:2], esquina)))
+                v = np.array(pie[:2]) + n * 60  # junto a la pata
+                inicio = [[*v, pie[2]]]
+            else:
+                inicio = []
             s_v = float(np.dot(v - esquina, w))
-            ruta = [
+            # Por el piso sin pasar por la huella de la batería; entra al muro bajo el inversor
+            ruta = inicio + [
                 [*v, zf],
-                en_muro(s_v, zf, 160),
+                en_muro(s_v, zf, holgura_piso),
+                en_muro(s_inv - 60, zf, holgura_piso),
                 en_muro(s_inv - 60, zf, 160),
                 en_muro(s_inv - 60, z_inv_bot, 160),
             ]
@@ -534,22 +566,44 @@ def canalizaciones(
         b = entrada.get("buitron")
         if b:
             # Entra al buitrón por arriba, junto a la pared (el buitrón está adosado al muro)
-            s_b = s_de(b["punto"]) + b["ancho_mm"] / 2 - 120
-            ruta = [
-                en_muro(s_tab - 120, z_tab_top),
-                en_muro(s_tab - 120, z_ac - 60),
-                en_muro(s_b, z_ac - 60),
-                en_muro(s_b, b["alto_mm"]),
-            ]
+            if b["alto_mm"] >= 1200:
+                s_b = s_de(b["punto"]) + b["ancho_mm"] / 2 - 120
+                ruta = [
+                    en_muro(s_tab - 120, z_tab_top),
+                    en_muro(s_tab - 120, z_ac - 60),
+                    en_muro(s_b, z_ac - 60),
+                    en_muro(s_b, b["alto_mm"]),
+                ]
+            else:
+                # Bajante bajo (claraboya): baja por el muro bajo el tablero, sigue por el piso
+                # pegado al muro hasta el borde de la claraboya, sube por su brocal y entra.
+                z_tab_bot = tab["z_mm"] - entrada.get("tablero_fv", {}).get("alto_mm", 800) / 2
+                s_c = s_de(b["punto"])
+                signo = 1 if s_tab > s_c else -1
+                borde = s_c + (b["ancho_mm"] / 2 - 150) * signo
+                # Por el muro a media altura, por encima de la batería y por debajo del inversor
+                z_bat_top = float(bat.malla.bounds[1][2]) if bat is not None else 0.0
+                z_medio = (
+                    min(z_tab_bot - 60, (z_bat_top + z_inv_bot) / 2)
+                    if bat is not None
+                    else z_tab_bot - 60
+                )
+                ruta = [
+                    en_muro(s_tab + 120, z_tab_bot),
+                    en_muro(s_tab + 120, z_medio, 220),
+                    en_muro(borde, z_medio, 220),
+                    en_muro(borde, b["alto_mm"] + 40, 220),
+                    en_muro(borde - 200 * signo, b["alto_mm"] + 40, 220),
+                ]
             out.append(
                 Elemento(
-                    "ruta-ac-buitron",
+                    f"ruta-ac-{b.get('tipo', 'buitron')}",
                     "canalizacion_ac",
                     _tubo(ruta, 25),
                     {
                         "circuito": "AC",
                         "descripcion": (
-                            "AC tablero FV → buitrón; baja "
+                            f"AC tablero FV → {b.get('tipo', 'buitron')}; baja "
                             f"{entrada.get('pisos_hasta_tablero_existente', '?')} pisos "
                             "al tablero existente"
                         ),
@@ -562,14 +616,78 @@ def canalizaciones(
 
 
 def buitron(datos: dict[str, Any], rumbo_deg: float) -> Elemento:
+    """Bajante del cableado al tablero existente: buitrón (volumen) o claraboya (vidrio)."""
+    tipo = datos.get("tipo", "buitron")
     caja = _caja(datos["ancho_mm"], datos["profundidad_mm"], datos["alto_mm"])
     malla = _colocar(caja, (*datos["punto"], datos["z_mm"] + datos["alto_mm"] / 2), rumbo_deg)
-    return Elemento(
-        "buitron-01",
-        "buitron",
-        malla,
-        {"descripcion": "Buitrón del cableado al tablero existente", "es_supuesto": True},
+    nombre = (
+        "Claraboya (bajante del cableado)"
+        if tipo == "claraboya"
+        else "Buitrón del cableado al tablero existente"
     )
+    return Elemento(
+        f"{tipo}-01",
+        tipo,
+        malla,
+        {"descripcion": nombre, "es_supuesto": datos.get("es_supuesto", True)},
+    )
+
+
+def _soportes(
+    zona: dict[str, Any],
+    colocados: list[dict[str, Any]],
+    modulo: dict[str, Any],
+    z_plano,
+    z_piso: float,
+) -> list[Elemento]:
+    """Estructura esquemática de una zona inclinada sobre losa: dos rieles bajo cada fila de módulos
+    (al 20 % y 80 % del largo en la pendiente) y patas desde la losa cada 2 m como máximo."""
+    from engine.distribucion.colocacion import huella_mm
+
+    u, v, _ = ejes(zona)
+    u, v = np.array(u), np.array(v)
+    du, dv, _, _ = huella_mm(modulo, zona)
+    seccion = 40
+    out: list[Elemento] = []
+    filas: dict[int, list[np.ndarray]] = {}
+    for c in colocados:
+        filas.setdefault(c["fila"], []).append(np.array(c["centro_mm"], float))
+    for f, centros in sorted(filas.items()):
+        us = [float(np.dot(c, u)) for c in centros]
+        v_c = float(np.dot(centros[0], v))
+        u0, u1 = min(us) - du / 2 + 50, max(us) + du / 2 - 50
+        for k, frac in enumerate((-0.3, 0.3)):  # 20 % y 80 % del largo en la pendiente
+            vv = v_c + frac * dv
+            a, b = u * u0 + v * vv, u * u1 + v * vv
+            za, zb = z_plano(*a) - seccion / 2 - 5, z_plano(*b) - seccion / 2 - 5
+            out.append(
+                Elemento(
+                    f"{zona['id']}-riel-{f}-{k + 1}",
+                    "estructura",
+                    _viga((*a, za), (*b, zb), seccion, seccion),
+                    {"es_esquematico": True},
+                )
+            )
+            n_patas = max(2, math.ceil((u1 - u0) / 2000) + 1)
+            for t in range(n_patas):
+                q = a + (b - a) * t / (n_patas - 1)
+                z_top = z_plano(*q) - seccion - 5
+                if z_top - z_piso < 50:
+                    continue
+                pata = trimesh.creation.box(extents=(seccion, seccion, z_top - z_piso))
+                pata.apply_translation((q[0], q[1], (z_top + z_piso) / 2))
+                out.append(
+                    Elemento(
+                        f"{zona['id']}-pata-{f}-{k + 1}-{t + 1}",
+                        "estructura",
+                        pata,
+                        {
+                            "es_esquematico": True,
+                            "pie_mm": [float(q[0]), float(q[1]), float(z_top)],
+                        },
+                    )
+                )
+    return out
 
 
 def escena(elems: list[Elemento]) -> trimesh.Scene:
@@ -585,6 +703,7 @@ def escena(elems: list[Elemento]) -> trimesh.Scene:
             baseColorFactor=[r / 255, g / 255, b / 255, alfa / 255],
             metallicFactor=0.6 if el.tipo == "estructura" else 0.0,
             roughnessFactor=0.35 if el.tipo == "modulo" else 0.8,
+            alphaMode="BLEND" if alfa < 255 else "OPAQUE",
         )
         m.visual = trimesh.visual.TextureVisuals(material=material)
         sc.add_geometry(m, node_name=el.id, geom_name=el.id)

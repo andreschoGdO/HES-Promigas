@@ -97,6 +97,7 @@ def vistas(
     if rutas and equipos and entrada:
         b = np.vstack([e.malla.bounds for e in rutas + equipos]) / 1000
         obj = (b.min(axis=0) + b.max(axis=0)) / 2
+        ext = float(max(b.max(axis=0)[:2] - b.min(axis=0)[:2]))
         r = np.radians(entrada["rumbo_muro_equipos_deg"] - 90)
         frente = np.array([np.sin(r), np.cos(r), 0])
         r2 = np.radians(entrada["rumbo_muro_equipos_deg"] + 180)
@@ -104,9 +105,15 @@ def vistas(
         out.append(
             {
                 "nombre": "cableado",
-                "camara": list(obj + 3.0 * frente + 2.2 * derecha + [0, 0, 1.6]),
-                "objetivo": list(obj + 0.6 * derecha),
-                "lente_mm": 24,
+                # Plano medio elevado que encuadre todo el recorrido (crece con su extensión)
+                "camara": list(
+                    obj
+                    + (0.75 * ext + 2.2) * frente
+                    + (0.35 * ext + 1.2) * derecha
+                    + [0, 0, 0.55 * ext + 2.0]
+                ),
+                "objetivo": list(obj),
+                "lente_mm": 26,
             }
         )
     amb = ambientacion(proyecto) if proyecto else None

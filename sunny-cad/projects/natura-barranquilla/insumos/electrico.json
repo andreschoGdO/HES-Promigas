@@ -44,15 +44,19 @@
     "es_supuesto": true,
     "nota": "Tramo de 2,31 m de la cara este del cuarto, centrado frente a los paneles (SUPUESTO)."
   },
-  "punto_conexion": {
-    "punto": [15451, 14763],
+  "nota": "Equipos DEYE (usuario) en la cara este del cuarto. Orden como en Riomar, desde la derecha (norte): batería GB-L de 3 módulos en el piso, inversor (centro a 1,5 m), tablero FV. Posiciones SUPUESTAS. Un solo string de 8 módulos: con 2 strings de 4 la Vmp en caliente queda en 155 V, solo 3 % sobre el mínimo de MPPT (150 V).",
+  "buitron": {
+    "tipo": "claraboya",
+    "punto": [9803, 11401],
     "z_mm": 0,
-    "ancho_mm": 400,
-    "profundidad_mm": 300,
-    "alto_mm": 600,
+    "ancho_mm": 2400,
+    "profundidad_mm": 2000,
+    "alto_mm": 500,
     "es_supuesto": true,
-    "recorrido_adicional_m": 0,
-    "nota": "Punto de conexión marcado por el usuario al noreste del área de paneles; posición estimada desde la imagen de la propuesta (SUPUESTO)."
+    "nota": "Claraboya de vidrio frente a la puerta del cuarto (fotos); por ella baja el cableado al punto de interconexión, 2 pisos abajo (usuario). Medidas (2,4 × 2,0 m, brocal de 0,5 m) y posición SUPUESTAS."
   },
-  "nota": "Equipos DEYE (usuario) en la cara este del cuarto. Orden como en Riomar, desde la derecha (norte): batería GB-L de 3 módulos en el piso, inversor (centro a 1,5 m), tablero FV. Posiciones SUPUESTAS. Un solo string de 8 módulos: con 2 strings de 4 la Vmp en caliente queda en 155 V, solo 3 % sobre el mínimo de MPPT (150 V)."
+  "pisos_hasta_tablero_existente": 2,
+  "altura_piso_mm": 3000,
+  "recorrido_horizontal_tablero_existente_m": 3,
+  "nota_recorrido_existente": "Baja 2 pisos por la claraboya (usuario) hasta el punto de interconexión. SUPUESTOS: altura de piso 3,0 m y 3 m de recorrido horizontal."
 }

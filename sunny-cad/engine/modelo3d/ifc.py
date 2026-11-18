@@ -27,6 +27,7 @@ CLASES = {
     "muro": ("IfcWall", "STANDARD"),
     "canalizacion_dc": ("IfcCableCarrierSegment", "CONDUITSEGMENT"),
     "conexion": ("IfcJunctionBox", "POWER"),
+    "claraboya": ("IfcWindow", "SKYLIGHT"),
     "canalizacion_ac": ("IfcCableCarrierSegment", "CONDUITSEGMENT"),
     "inversor": ("IfcBuildingElementProxy", None),
     "bateria": ("IfcElectricFlowStorageDevice", "BATTERY"),

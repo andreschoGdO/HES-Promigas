@@ -32,6 +32,7 @@ COLORES = {
     "buitron": (196, 160, 135, 255),
     "muro": (196, 160, 135, 255),
     "canalizacion_dc": (226, 110, 30, 255),
+    "conexion": (120, 120, 120, 255),
     "canalizacion_ac": (60, 90, 170, 255),
     "inversor": (245, 245, 245, 255),
     "bateria": (235, 235, 235, 255),
@@ -161,6 +162,25 @@ def elementos(
         and "muro_equipos" in entrada_electrica
     ):
         out.append(muro(entrada_electrica["muro_equipos"], viv["cubiertas"]))
+    if entrada_electrica and "punto_conexion" in entrada_electrica:
+        pc = entrada_electrica["punto_conexion"]
+        caja = _caja(pc.get("ancho_mm", 400), pc.get("profundidad_mm", 300), pc.get("alto_mm", 600))
+        malla = _colocar(
+            caja,
+            (*pc["punto"], pc["z_mm"] + pc.get("alto_mm", 600) / 2),
+            entrada_electrica["rumbo_muro_equipos_deg"],
+        )
+        out.append(
+            Elemento(
+                "punto-conexion",
+                "conexion",
+                malla,
+                {
+                    "descripcion": "Punto de conexión (PCC)",
+                    "es_supuesto": pc.get("es_supuesto", True),
+                },
+            )
+        )
     if entrada_electrica and "buitron" in entrada_electrica:
         out.append(
             buitron(entrada_electrica["buitron"], entrada_electrica["rumbo_muro_equipos_deg"])
@@ -398,6 +418,16 @@ def canalizaciones(
                 en_muro(s_inv - 120, z_dc, 160),
                 en_muro(s_inv - 120, z_inv_top, 160),
             ]
+        elif cota <= cota_min:
+            # Zona al nivel de la terraza: por el piso hasta el muro de equipos y sube al inversor
+            zf = cota + 60
+            s_v = float(np.dot(v - esquina, w))
+            ruta = [
+                [*v, zf],
+                en_muro(s_v, zf, 160),
+                en_muro(s_inv - 60, zf, 160),
+                en_muro(s_inv - 60, z_inv_bot, 160),
+            ]
         else:
             zr = cota + 60
             sobre_losa = esquina + w * 250 - n * 150
@@ -467,6 +497,33 @@ def canalizaciones(
                 },
             )
         )
+        pc = entrada.get("punto_conexion")
+        if pc:
+            # Baja por el muro bajo el tablero y sigue por el piso en L hasta el punto de conexión
+            z_tab_bot = tab["z_mm"] - entrada.get("tablero_fv", {}).get("alto_mm", 800) / 2
+            zf = cota_min + 60
+            s_pc = s_de(pc["punto"])
+            d_pc = float(np.dot(np.subtract(pc["punto"], esquina), n))
+            ruta = [
+                en_muro(s_tab, z_tab_bot),
+                en_muro(s_tab, zf),
+                en_muro(s_tab, zf, d_pc),
+                en_muro(s_pc, zf, d_pc),
+                en_muro(s_pc, pc["z_mm"] + pc.get("alto_mm", 600), d_pc),
+            ]
+            out.append(
+                Elemento(
+                    "ruta-ac-conexion",
+                    "canalizacion_ac",
+                    _tubo(ruta, 25),
+                    {
+                        "circuito": "AC",
+                        "descripcion": "AC tablero FV → punto de conexión",
+                        "ruta_mm": ruta,
+                        "es_esquematico": True,
+                    },
+                )
+            )
         b = entrada.get("buitron")
         if b:
             # Entra al buitrón por arriba, junto a la pared (el buitrón está adosado al muro)

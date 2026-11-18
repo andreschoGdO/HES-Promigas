@@ -26,6 +26,7 @@ CLASES = {
     "buitron": ("IfcBuildingElementProxy", None),
     "muro": ("IfcWall", "STANDARD"),
     "canalizacion_dc": ("IfcCableCarrierSegment", "CONDUITSEGMENT"),
+    "conexion": ("IfcJunctionBox", "POWER"),
     "canalizacion_ac": ("IfcCableCarrierSegment", "CONDUITSEGMENT"),
     "inversor": ("IfcBuildingElementProxy", None),
     "bateria": ("IfcElectricFlowStorageDevice", "BATTERY"),

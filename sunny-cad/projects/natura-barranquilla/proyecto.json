@@ -1,0 +1,270 @@
+{
+  "version_esquema": "1.1.0",
+  "id": "natura-barranquilla",
+  "es_ejemplo": false,
+  "nombre": "Conjunto Natura - Barranquilla",
+  "estado": "borrador",
+  "sistema_coordenadas": {
+    "unidad_longitud": "mm",
+    "origen": "esquina_suroeste",
+    "eje_x": "este",
+    "eje_y": "norte",
+    "eje_z": "arriba",
+    "referencia_azimut": "norte_horario"
+  },
+  "ubicacion": {
+    "municipio": "Barranquilla",
+    "departamento": "Atlántico",
+    "latitud_deg": 11.02,
+    "longitud_deg": -74.86
+  },
+  "sistema": {
+    "tipologia": "T2",
+    "fases_red": "trifasica",
+    "arquitectura": "serie",
+    "respaldo": "respaldo_total",
+    "conmutacion": "ats"
+  },
+  "vivienda": {
+    "cubiertas": [
+      {
+        "id": "cubierta-01",
+        "tipo": "plana",
+        "material": "losa_concreto",
+        "contorno_mm": [
+          [0, 3064],
+          [17993, 0],
+          [20500, 14745],
+          [2507, 17804]
+        ],
+        "cota_base_mm": 0,
+        "inclinacion_deg": 0,
+        "azimut_deg": null,
+        "obstaculos": []
+      },
+      {
+        "id": "cubierta-02",
+        "tipo": "plana",
+        "material": "losa_concreto",
+        "contorno_mm": [
+          [7665, 4789],
+          [9169, 13641],
+          [4950, 14358],
+          [3446, 5507]
+        ],
+        "cota_base_mm": 3000,
+        "inclinacion_deg": 0,
+        "azimut_deg": null,
+        "obstaculos": []
+      }
+    ],
+    "zonas_instalacion": [
+      {
+        "id": "zona-01",
+        "cubierta_ref": "cubierta-01",
+        "contorno_mm": [
+          [10103, 4900],
+          [10738, 9868],
+          [11750, 9716],
+          [12017, 11046],
+          [16705, 10250],
+          [15614, 3998]
+        ],
+        "estructura": "inclinada_sobre_losa",
+        "altura_estructura_mm": 300,
+        "inclinacion_deg": 5,
+        "azimut_deg": 189.9,
+        "orientacion_modulo": "vertical",
+        "separacion_mm": 30,
+        "retiro_mm": 150,
+        "es_supuesto": true,
+        "nota": "Área de 35 m² medida por el usuario; distribución propuesta por el usuario: 2 filas de 4 módulos verticales. SUPUESTOS: estructura inclinada 5° hacia el sur del edificio (189,9°), borde bajo a 30 cm de la losa, separación 30 mm y retiro 15 cm (como en Riomar)."
+      }
+    ]
+  },
+  "equipos": [
+    {
+      "id": "inversor-01",
+      "tipo": "inversor",
+      "componente_ref": "deye-sun-15k-sg01hp3-us-am2",
+      "ubicacion_mm": {
+        "punto": [8484, 8815],
+        "z_mm": 1500,
+        "es_supuesto": true
+      },
+      "ubicacion_texto": "Cara este del cuarto de ladrillo (zona de equipos de la foto, a la izquierda de la puerta)"
+    },
+    {
+      "id": "bateria-01",
+      "tipo": "bateria",
+      "componente_ref": "deye-gb-l",
+      "configuracion": "m3",
+      "sistemas_en_paralelo": 1,
+      "ubicacion_mm": {
+        "punto": [8692, 9627],
+        "z_mm": 0,
+        "es_supuesto": true
+      },
+      "ubicacion_texto": "Cara este del cuarto de ladrillo (zona de equipos de la foto, a la izquierda de la puerta)"
+    },
+    {
+      "id": "medidor-01",
+      "tipo": "medidor",
+      "componente_ref": "star-dtsy23s",
+      "ubicacion_texto": "Cara este del cuarto de ladrillo (zona de equipos de la foto, a la izquierda de la puerta)"
+    },
+    {
+      "id": "modulo-001",
+      "tipo": "modulo",
+      "componente_ref": "ja-solar-jam72d40-595-mb",
+      "colocacion": {
+        "zona_ref": "zona-01",
+        "centro_mm": [11477, 8437],
+        "rumbo_fila_deg": 99.9,
+        "orientacion": "vertical",
+        "inclinacion_deg": 5,
+        "azimut_deg": 189.9,
+        "fila": 1,
+        "columna": 1
+      },
+      "string": "S1.1.1"
+    },
+    {
+      "id": "modulo-002",
+      "tipo": "modulo",
+      "componente_ref": "ja-solar-jam72d40-595-mb",
+      "colocacion": {
+        "zona_ref": "zona-01",
+        "centro_mm": [12623, 8236],
+        "rumbo_fila_deg": 99.9,
+        "orientacion": "vertical",
+        "inclinacion_deg": 5,
+        "azimut_deg": 189.9,
+        "fila": 1,
+        "columna": 2
+      },
+      "string": "S1.1.1"
+    },
+    {
+      "id": "modulo-003",
+      "tipo": "modulo",
+      "componente_ref": "ja-solar-jam72d40-595-mb",
+      "colocacion": {
+        "zona_ref": "zona-01",
+        "centro_mm": [13770, 8036],
+        "rumbo_fila_deg": 99.9,
+        "orientacion": "vertical",
+        "inclinacion_deg": 5,
+        "azimut_deg": 189.9,
+        "fila": 1,
+        "columna": 3
+      },
+      "string": "S1.1.1"
+    },
+    {
+      "id": "modulo-004",
+      "tipo": "modulo",
+      "componente_ref": "ja-solar-jam72d40-595-mb",
+      "colocacion": {
+        "zona_ref": "zona-01",
+        "centro_mm": [14917, 7836],
+        "rumbo_fila_deg": 99.9,
+        "orientacion": "vertical",
+        "inclinacion_deg": 5,
+        "azimut_deg": 189.9,
+        "fila": 1,
+        "columna": 4
+      },
+      "string": "S1.1.1"
+    },
+    {
+      "id": "modulo-005",
+      "tipo": "modulo",
+      "componente_ref": "ja-solar-jam72d40-595-mb",
+      "colocacion": {
+        "zona_ref": "zona-01",
+        "centro_mm": [11081, 6172],
+        "rumbo_fila_deg": 99.9,
+        "orientacion": "vertical",
+        "inclinacion_deg": 5,
+        "azimut_deg": 189.9,
+        "fila": 2,
+        "columna": 1
+      },
+      "string": "S1.1.1"
+    },
+    {
+      "id": "modulo-006",
+      "tipo": "modulo",
+      "componente_ref": "ja-solar-jam72d40-595-mb",
+      "colocacion": {
+        "zona_ref": "zona-01",
+        "centro_mm": [12228, 5971],
+        "rumbo_fila_deg": 99.9,
+        "orientacion": "vertical",
+        "inclinacion_deg": 5,
+        "azimut_deg": 189.9,
+        "fila": 2,
+        "columna": 2
+      },
+      "string": "S1.1.1"
+    },
+    {
+      "id": "modulo-007",
+      "tipo": "modulo",
+      "componente_ref": "ja-solar-jam72d40-595-mb",
+      "colocacion": {
+        "zona_ref": "zona-01",
+        "centro_mm": [13375, 5771],
+        "rumbo_fila_deg": 99.9,
+        "orientacion": "vertical",
+        "inclinacion_deg": 5,
+        "azimut_deg": 189.9,
+        "fila": 2,
+        "columna": 3
+      },
+      "string": "S1.1.1"
+    },
+    {
+      "id": "modulo-008",
+      "tipo": "modulo",
+      "componente_ref": "ja-solar-jam72d40-595-mb",
+      "colocacion": {
+        "zona_ref": "zona-01",
+        "centro_mm": [14521, 5571],
+        "rumbo_fila_deg": 99.9,
+        "orientacion": "vertical",
+        "inclinacion_deg": 5,
+        "azimut_deg": 189.9,
+        "fila": 2,
+        "columna": 4
+      },
+      "string": "S1.1.1"
+    }
+  ],
+  "insumos": [
+    {
+      "archivo": "privado/fotos/cuarto_y_claraboya.jpg",
+      "descripcion": "Foto · 1500×2000 px"
+    },
+    {
+      "archivo": "privado/fotos/zona_equipos_anotada.jpg",
+      "descripcion": "Foto · 293×363 px"
+    }
+  ],
+  "informacion_faltante": [
+    "sistema: confirmar arquitectura en serie con ATS y respaldo total (tomado de Riomar)",
+    "equipos: potencia del inversor DEYE (en la biblioteca solo está el SUN-15K; la ficha trae 8/10/12K)",
+    "equipos: '3 baterías DEYE' = una torre GB-L de 3 módulos (supuesto)",
+    "equipos: posición exacta de los equipos en la pared y del punto de conexión; altura del cuarto",
+    "zona-01: inclinación, altura de la estructura y si queda sobre la claraboya",
+    "equipos: capacidad del totalizador y demanda de la vivienda"
+  ],
+  "condiciones_diseno": {
+    "temperatura_min_c": 15,
+    "temperatura_max_ambiente_c": 40,
+    "es_supuesto": false,
+    "fuente": "Valores de diseño de Barranquilla confirmados por el usuario en el proyecto Riomar."
+  },
+  "notas": "Conjunto trifásico (usuario). Equipos DEYE y JA 595 (usuario)."
+}

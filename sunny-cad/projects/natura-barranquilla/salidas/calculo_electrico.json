@@ -1,0 +1,108 @@
+{
+  "temperaturas_c": {
+    "minima": 15,
+    "max_ambiente": 40,
+    "max_celda": 71.25
+  },
+  "limites_string": {
+    "voc_frio_por_modulo_v": 53.95,
+    "vmp_caliente_por_modulo_v": 38.65,
+    "n_min": 4,
+    "n_max": 10,
+    "motivo_n_max": "tensión máxima DC del inversor"
+  },
+  "opciones_strings": [
+    [
+      8
+    ],
+    [4, 4]
+  ],
+  "strings": [
+    {
+      "string": "S1.1.1",
+      "mppt": 1,
+      "modulos": 8,
+      "voc_frio_v": 431.6,
+      "vmp_caliente_v": 309.2,
+      "vmp_frio_v": 367.5,
+      "isc_a": 15.11,
+      "imp_a": 14.4
+    }
+  ],
+  "potencia_fv_w": 4760,
+  "relacion_dc_ac": 0.317,
+  "bateria": {
+    "configuracion": "m3",
+    "tension_nominal_v": 307.2,
+    "energia_util_kwh": 11.04,
+    "potencia_nominal_w": null,
+    "potencia_max_w": null
+  },
+  "circuitos": [
+    {
+      "id": "DC-S1.1.1",
+      "tramo": "string S1.1.1 → inversor (MPPT 1)",
+      "corriente_max_a": 18.89,
+      "corriente_requerida_conductor_a": 23.61,
+      "calibre_awg": "10",
+      "longitud_estimada_m": 13.4,
+      "tension_operacion_v": 357.1,
+      "caida_pct": 0.43,
+      "limite_caida_pct": 2.0,
+      "proteccion": "sin fusible de string (≤ 2 strings por MPPT; fusible máximo del módulo 30 A)"
+    },
+    {
+      "id": "DC-BAT",
+      "tramo": "batería GB-L (m3) → inversor",
+      "corriente_max_a": 50,
+      "corriente_requerida_conductor_a": 62.5,
+      "calibre_awg": "4",
+      "longitud_estimada_m": 4.8,
+      "tension_operacion_v": 307.2,
+      "caida_pct": 0.15,
+      "limite_caida_pct": 2.0,
+      "proteccion": "interruptor DC 63 A (verificar si el fabricante lo integra)"
+    },
+    {
+      "id": "AC-RED",
+      "tramo": "inversor (puerto red) → tablero FV (contactor / ATS)",
+      "corriente_max_a": 41.7,
+      "corriente_requerida_conductor_a": 52.12,
+      "calibre_awg": "6",
+      "longitud_estimada_m": 2.9,
+      "tension_operacion_v": 208,
+      "caida_pct": 0.16,
+      "limite_caida_pct": 3.0,
+      "proteccion": "interruptor 60 A tripolar"
+    },
+    {
+      "id": "AC-CARGA",
+      "tramo": "inversor (puerto respaldo) → tablero FV",
+      "corriente_max_a": 41.7,
+      "corriente_requerida_conductor_a": 52.12,
+      "calibre_awg": "6",
+      "longitud_estimada_m": 2.9,
+      "tension_operacion_v": 208,
+      "caida_pct": 0.16,
+      "limite_caida_pct": 3.0,
+      "proteccion": "interruptor 60 A tripolar"
+    },
+    {
+      "id": "AC-EXISTENTE",
+      "tramo": "tablero FV → tablero existente de la vivienda",
+      "corriente_max_a": 41.7,
+      "corriente_requerida_conductor_a": 52.12,
+      "calibre_awg": "6",
+      "longitud_estimada_m": 19.2,
+      "tension_operacion_v": 208,
+      "caida_pct": 1.05,
+      "limite_caida_pct": 3.0,
+      "proteccion": "interruptor 60 A tripolar"
+    }
+  ],
+  "errores": [],
+  "criterios": {
+    "archivo": "templates/criterios_electricos.json",
+    "estado": "por_confirmar"
+  }
+}

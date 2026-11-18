@@ -33,6 +33,11 @@ def longitud_existente(entrada, ub_tab, rumbo, criterios) -> float | None:
     """Tablero FV → buitrón → baja N pisos → recorrido horizontal hasta el tablero existente."""
     if entrada.get("longitud_ac_existente_m"):
         return entrada["longitud_ac_existente_m"]
+    pc = entrada.get("punto_conexion")
+    if pc and ub_tab:  # punto de conexión en la terraza: ruta en L por muro y piso
+        return circuitos.longitud_ruta_m(
+            tuple(ub_tab["punto"]), ub_tab["z_mm"], tuple(pc["punto"]), pc["z_mm"], rumbo, criterios
+        ) + pc.get("recorrido_adicional_m", 0)
     b = entrada.get("buitron")
     pisos = entrada.get("pisos_hasta_tablero_existente")
     if not (b and pisos and ub_tab):

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "zona-01",
+    "cubierta_ref": "cubierta-01",
+    "contorno_mm": [
+      [10103, 4900],
+      [10738, 9868],
+      [11750, 9716],
+      [12017, 11046],
+      [16705, 10250],
+      [15614, 3998]
+    ],
+    "estructura": "inclinada_sobre_losa",
+    "altura_estructura_mm": 300,
+    "inclinacion_deg": 5,
+    "azimut_deg": 189.9,
+    "orientacion_modulo": "vertical",
+    "separacion_mm": 30,
+    "retiro_mm": 150,
+    "es_supuesto": true,
+    "nota": "Área de 35 m² medida por el usuario; distribución propuesta por el usuario: 2 filas de 4 módulos verticales. SUPUESTOS: estructura inclinada 5° hacia el sur del edificio (189,9°), borde bajo a 30 cm de la losa, separación 30 mm y retiro 15 cm (como en Riomar)."
+  }
+]

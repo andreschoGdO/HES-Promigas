@@ -1,0 +1,58 @@
+{
+  "inversor": "deye-sun-15k-sg01hp3-us-am2",
+  "bateria": {
+    "componente": "deye-gb-l",
+    "configuracion": "m3",
+    "sistemas_en_paralelo": 1
+  },
+  "medidor": "star-dtsy23s",
+  "strings": [
+    8
+  ],
+  "ubicacion_texto": "Cara este del cuarto de ladrillo (zona de equipos de la foto, a la izquierda de la puerta)",
+  "rumbo_edificio_deg": 279.6,
+  "rumbo_muro_equipos_deg": 189.6,
+  "ubicaciones": {
+    "bateria-01": {
+      "punto": [8692, 9627],
+      "z_mm": 0,
+      "es_supuesto": true
+    },
+    "inversor-01": {
+      "punto": [8484, 8815],
+      "z_mm": 1500,
+      "es_supuesto": true
+    },
+    "tablero-fv": {
+      "punto": [8356, 8198],
+      "z_mm": 1400,
+      "es_supuesto": true
+    }
+  },
+  "tablero_fv": {
+    "ancho_mm": 400,
+    "alto_mm": 800,
+    "profundidad_mm": 200,
+    "nota": "Medidas SUPUESTAS (como en Riomar). Contiene el contactor (ATS) y el medidor."
+  },
+  "muro_equipos": {
+    "de": [8582, 10188],
+    "a": [8195, 7911],
+    "alto_mm": 3000,
+    "espesor_mm": 150,
+    "modelar": false,
+    "es_supuesto": true,
+    "nota": "Tramo de 2,31 m de la cara este del cuarto, centrado frente a los paneles (SUPUESTO)."
+  },
+  "punto_conexion": {
+    "punto": [15451, 14763],
+    "z_mm": 0,
+    "ancho_mm": 400,
+    "profundidad_mm": 300,
+    "alto_mm": 600,
+    "es_supuesto": true,
+    "recorrido_adicional_m": 0,
+    "nota": "Punto de conexión marcado por el usuario al noreste del área de paneles; posición estimada desde la imagen de la propuesta (SUPUESTO)."
+  },
+  "nota": "Equipos DEYE (usuario) en la cara este del cuarto. Orden como en Riomar, desde la derecha (norte): batería GB-L de 3 módulos en el piso, inversor (centro a 1,5 m), tablero FV. Posiciones SUPUESTAS. Un solo string de 8 módulos: con 2 strings de 4 la Vmp en caliente queda en 155 V, solo 3 % sobre el mínimo de MPPT (150 V)."
+}

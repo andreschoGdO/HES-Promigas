@@ -1,0 +1,58 @@
+{
+  "version_esquema": "1.1.0",
+  "imagen": {
+    "archivo": "privado/medidas_area.jpg",
+    "ancho_px": 574,
+    "alto_px": 403,
+    "fuente": "otra",
+    "rotacion_norte_deg": 0
+  },
+  "escala": {
+    "metodo": "poligono_medido",
+    "contorno_px": [
+      [220.8, 292.3],
+      [234.6, 184.3],
+      [256.6, 187.6],
+      [262.4, 158.7],
+      [364.3, 176.0],
+      [340.6, 311.9]
+    ],
+    "area_m2": 35.0,
+    "perimetro_m": 24.1
+  },
+  "cubiertas": [
+    {
+      "id": "cubierta-01",
+      "contorno_px": [
+        [1.2, 332.2],
+        [392.3, 398.8],
+        [446.8, 78.3],
+        [55.7, 11.8]
+      ],
+      "tipo": "plana",
+      "material": "losa_concreto",
+      "cota_base_mm": 0,
+      "inclinacion_deg": 0,
+      "azimut_deg": null,
+      "obstaculos": [],
+      "observaciones": "Terraza (piso continuo con impermeabilización). SUPUESTO: se modela un rectángulo de 3 m alrededor del cuarto y del área de instalación; el resto de la cubierta no se trazó. Hay una claraboya de vidrio frente a la puerta del cuarto (foto) y condensadoras de aire."
+    },
+    {
+      "id": "cubierta-02",
+      "contorno_px": [
+        [167.8, 294.7],
+        [200.5, 102.3],
+        [108.8, 86.7],
+        [76.1, 279.1]
+      ],
+      "tipo": "plana",
+      "material": "losa_concreto",
+      "cota_base_mm": 3000,
+      "inclinacion_deg": 0,
+      "azimut_deg": null,
+      "obstaculos": [],
+      "observaciones": "Cuarto de ladrillo con puerta (fotos). Medidas en planta desde el bloque naranja de la imagen del usuario (≈ 4,3 × 9,0 m). Altura de 3,0 m SUPUESTA."
+    }
+  ],
+  "notas": "Imagen con el área de instalación medida por el usuario (lados 5,0 / 1,0 / 1,3 / 4,8 / 6,4 / 5,6 m; 35 m²). Norte arriba (supuesto, como Google Maps). El polígono calculado da 35,3 m²."
+}

@@ -205,7 +205,10 @@ if isinstance(datos_vistas, dict):
 for v in datos_vistas:
     camara.location = Vector(v["camara"])
     direccion = Vector(v["objetivo"]) - camara.location
-    camara.rotation_euler = direccion.to_track_quat("-Z", "Y").to_euler()
+    if v.get("ortho_m"):
+        camara.rotation_euler = (0, 0, 0)  # cenital: mira hacia abajo con el norte (+Y) arriba
+    else:
+        camara.rotation_euler = direccion.to_track_quat("-Z", "Y").to_euler()
     if v.get("ortho_m"):
         camara.data.type = "ORTHO"
         camara.data.ortho_scale = v["ortho_m"]

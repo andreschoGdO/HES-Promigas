@@ -384,7 +384,13 @@ def canalizaciones(
     z_coronacion = (
         min((c["cota_base_mm"] for c in altos), default=3000) - 80
     )  # bajo el borde del muro
-    z_dc, z_ac = z_coronacion, z_coronacion - 90
+    z_dc = z_coronacion
+    z_tab_alto = 0.0
+    if ub.get("tablero-fv"):
+        z_tab_alto = (
+            ub["tablero-fv"]["z_mm"] + entrada.get("tablero_fv", {}).get("alto_mm", 800) / 2
+        )
+    # La AC entre equipos corre poco por encima del equipo más alto (y nunca sobre la coronación)
 
     def s_de(p):  # posición a lo largo del muro de equipos
         return float(np.dot(np.subtract(p, esquina), w))
@@ -395,6 +401,7 @@ def canalizaciones(
 
     s_inv = s_de(ub["inversor-01"]["punto"])
     z_inv_top, z_inv_bot = float(inv.malla.bounds[1][2]), float(inv.malla.bounds[0][2])
+    z_ac = min(z_coronacion - 90, max(z_inv_top, z_tab_alto) + 150)
     out = []
     for z in viv.get("zonas_instalacion", []):
         cota = cubs[z["cubierta_ref"]]["cota_base_mm"] or 0

@@ -130,6 +130,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], elems: list[Elemento], 
                 "tablero": "TFV",
                 "buitron": "BUITRÓN",
                 "conexion": "PCC",
+                "claraboya": "CLARABOYA (bajante)",
             }[e.tipo]
             lam.texto((cx, cy), nombre, 1.1, "EQUIPO", "centro", negrita=True)
 

@@ -109,3 +109,15 @@ def test_planos_con_datos_personales_van_a_privado(
     doc = ezdxf.readfile(destino / "privado" / "planos" / "PRO-ARQ-RIOMAR-DIS-001.dxf")
     textos = [t.dxf.text for t in doc.modelspace().query("TEXT")]
     assert any("M.P. XX-000" in t for t in textos)
+
+
+def test_planos_de_natura_se_generan(tmp_path, monkeypatch) -> None:
+    """Cada tipo de elemento del modelo (claraboya, soportes…) tiene rótulo en las láminas."""
+    import shutil
+
+    origen = validar.DIR_PROYECTOS / "natura-barranquilla"
+    destino = tmp_path / "natura-barranquilla"
+    shutil.copytree(origen, destino, ignore=shutil.ignore_patterns("privado", "render_*.png"))
+    monkeypatch.setattr(validar, "DIR_PROYECTOS", tmp_path)
+    assert cli(["generar", "natura-barranquilla", "--fecha", "2026-11-18"]) == 0
+    assert (destino / "salidas" / "planos" / "natura-barranquilla_planos.pdf").is_file()

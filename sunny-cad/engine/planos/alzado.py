@@ -16,8 +16,15 @@ NOMBRES = {
     "inversor": "INVERSOR",
     "bateria": "BATERÍA",
     "buitron": "BUITRÓN",
+    "claraboya": "CLARABOYA",
 }
-RELLENO = {"tablero": "#f4d4cf", "inversor": "#f4d4cf", "bateria": "#f4d4cf", "buitron": "#e6d9cc"}
+RELLENO = {
+    "tablero": "#f4d4cf",
+    "inversor": "#f4d4cf",
+    "bateria": "#f4d4cf",
+    "buitron": "#e6d9cc",
+    "claraboya": "#cfe6f2",
+}
 
 
 def _cota_h(lam, x1, x2, y, texto, capa="COTA"):

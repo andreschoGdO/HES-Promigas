@@ -124,7 +124,7 @@ def dibujar(
     # Rutas de cableado proyectadas sobre el muro (las que corren cerca de él)
     normal = np.array([-d[1], d[0]])
     for e in elems:
-        if not e.tipo.startswith("canalizacion"):
+        if not e.tipo.startswith("canalizacion") or e.propiedades.get("nivel_inferior"):
             continue
         pts = []
         for x, y, z in e.propiedades["ruta_mm"]:

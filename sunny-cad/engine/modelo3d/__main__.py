@@ -40,6 +40,8 @@ def vistas(
     proyecto: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Cámaras en metros (X este, Y norte, Z arriba)."""
+    inferiores = [e for e in elems if e.propiedades.get("nivel_inferior")]
+    elems = [e for e in elems if not e.propiedades.get("nivel_inferior")]
     modulos = [e for e in elems if e.tipo == "modulo"]
     todo = np.vstack([e.malla.bounds for e in elems]) / 1000
     centro = (todo.min(axis=0) + todo.max(axis=0)) / 2
@@ -116,6 +118,37 @@ def vistas(
                 "lente_mm": 26,
             }
         )
+    bajante = [e for e in inferiores if e.tipo.startswith("canalizacion")]
+    if bajante and entrada:
+        # Corte vertical frente al recorrido: de los equipos en la terraza a la claraboya y, por
+        # el vacío, dos pisos abajo hasta el tablero existente. La cámara está afuera del
+        # edificio y el plano de corte (clip_inicio_m) quita fachada y paneles de su lado.
+        sel = [
+            e
+            for e in elems + inferiores
+            if e.tipo in ("claraboya", "tablero", "inversor", "bateria", "tablero_existente")
+        ]
+        ruta = np.array(bajante[0].propiedades["ruta_mm"]) / 1000
+        b = np.vstack([ruta, *(e.malla.bounds / 1000 for e in sel)])
+        mn, mx = b.min(axis=0), b.max(axis=0)
+        obj = (mn + mx) / 2
+        r = np.radians(entrada["rumbo_muro_equipos_deg"] - 90)
+        frente = np.array([np.sin(r), np.cos(r), 0])
+        r2 = np.radians(entrada["rumbo_muro_equipos_deg"] + 180)
+        derecha = np.array([np.sin(r2), np.cos(r2), 0])
+        d_obj = float(np.dot(obj[:2] - ruta[0][:2], frente[:2]))  # obj relativo a la ruta
+        distancia = 9.3
+        camara = obj + distancia * frente + 1.8 * derecha + [0, 0, 0.5]
+        out.append(
+            {
+                "nombre": "bajante",
+                "camara": list(camara),
+                "objetivo": list(obj),
+                "lente_mm": 22,
+                # Corta todo lo que está a más de 0,25 m delante de la ruta (lado de la cámara)
+                "clip_inicio_m": float(distancia - 0.25 + d_obj),
+            }
+        )
     amb = ambientacion(proyecto) if proyecto else None
     if amb and equipos:
         amb["evitar"] = [[float(v) for v in e.malla.centroid[:2] / 1000] for e in equipos]
@@ -139,7 +172,22 @@ def vistas(
         }
         for v in out
     ]
-    return {"vistas": vs, "ambientacion": amb}
+    suelo = min((e.malla.bounds[0][2] for e in inferiores), default=0) / 1000 - 0.25
+    # Luz de techo en cada piso inferior (la losa de la terraza les da sombra)
+    luces = []
+    for e in inferiores:
+        if e.tipo == "losa_inferior":
+            (x0, y0, _z0), (x1, y1, z1) = e.malla.bounds / 1000
+            techo = z1 + (entrada or {}).get("altura_piso_mm", 3000) / 1000 - 0.45
+            luces.append(
+                {"centro": [(x0 + x1) / 2, (y0 + y1) / 2, techo], "tamano": [x1 - x0, y1 - y0]}
+            )
+    return {
+        "vistas": vs,
+        "ambientacion": amb,
+        "suelo_z_m": float(min(suelo, -0.25)),
+        "luces": luces,
+    }
 
 
 def ambientacion(proyecto: dict[str, Any]) -> dict[str, Any] | None:

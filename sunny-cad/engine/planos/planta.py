@@ -115,7 +115,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], elems: list[Elemento], 
         lam.texto((cx, cy - 1.6), e.propiedades["string"], 1.3, "TEXTO", "centro")
     # Rutas de cableado (esquemáticas, desde el modelo 3D)
     for e in elems:
-        if e.tipo.startswith("canalizacion"):
+        if e.tipo.startswith("canalizacion") and not e.propiedades.get("nivel_inferior"):
             capa = "DC" if e.propiedades["circuito"] == "DC" else "AC"
             lam.polilinea(
                 [vista(p[:2]) for p in e.propiedades["ruta_mm"]], capa, trazo="discontinuo"

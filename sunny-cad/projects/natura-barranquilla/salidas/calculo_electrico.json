@@ -93,9 +93,9 @@
       "corriente_max_a": 41.7,
       "corriente_requerida_conductor_a": 52.12,
       "calibre_awg": "6",
-      "longitud_estimada_m": 18.9,
+      "longitud_estimada_m": 19.9,
       "tension_operacion_v": 208,
-      "caida_pct": 1.03,
+      "caida_pct": 1.09,
       "limite_caida_pct": 3.0,
       "proteccion": "interruptor 60 A tripolar"
     }

@@ -9,7 +9,8 @@ Genera, desde proyecto.json, el cálculo eléctrico y los renders del proyecto:
 - PRO-ARQ-<P>-DIS-001  Planta de cubierta: distribución de módulos, equipos y rutas de cableado
 - PRO-ARQ-<P>-ALZ-002  Alzado del muro de equipos con rutas de cableado (si está definido)
 - PRO-ELE-<P>-UNI-003  Diagrama unifilar
-- PRO-ARQ-<P>-REN-004/005  Renders (vistas generales; planta superior, cableado y equipos)
+- PRO-ARQ-<P>-REN-004/005/006  Renders (vistas generales; planta superior, cableado y equipos;
+  bajante hasta el punto de conexión si se modelan los pisos inferiores)
 
 Salida: un PDF con todas las láminas y un DXF por lámina. Si el proyecto tiene datos personales
 en privado/datos_privados.json, los planos van a ``privado/planos/`` (fuera de git).
@@ -40,6 +41,7 @@ TITULOS_RENDER = {
     "superior": "Vista superior (norte arriba)",
     "cableado": "Rutas de cableado",
     "equipos": "Muro de equipos",
+    "bajante": "Corte: bajante de la AC por la claraboya hasta el tablero existente",
 }
 
 
@@ -218,12 +220,19 @@ def laminas(proyecto, biblioteca, entrada, calc, renders: dict[str, Path]) -> li
             "Vista superior, rutas de cableado y equipos (renders)",
             ["superior", "cableado", "equipos"],
         ),
+        ("Ruta de cableado hasta el punto de conexión (render)", ["bajante"]),
     ]
     for titulo, nombres in grupos:
         imgs = [(n, renders[n]) for n in nombres if n in renders]
         if imgs:
             lam = nueva("ARQ", "REN", titulo, escala="N/A", unidad="N/A")
             lam.notas = ["Renders ilustrativos; la ambientación de la terraza es decorativa."]
+            if nombres == ["bajante"]:
+                lam.notas = [
+                    "Corte esquemático: pisos inferiores, vacío y tablero existente SUPUESTOS.",
+                    "La AC baja por el vacío de la claraboya, corre por el techo del piso −2 "
+                    "y baja al tablero existente (punto de conexión).",
+                ]
             _lamina_render(lam, cajetin.area_dibujo(lam, plantilla), imgs)
     return out
 

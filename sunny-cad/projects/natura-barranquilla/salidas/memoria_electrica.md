@@ -27,7 +27,7 @@
 | DC-BAT | batería GB-L (m3) → inversor | 50 | 62.5 | 4 | 4.8 | 0.15 (máx 2.0) | interruptor DC 63 A (verificar si el fabricante lo integra) |
 | AC-RED | inversor (puerto red) → tablero FV (contactor / ATS) | 41.7 | 52.12 | 6 | 2.9 | 0.16 (máx 3.0) | interruptor 60 A tripolar |
 | AC-CARGA | inversor (puerto respaldo) → tablero FV | 41.7 | 52.12 | 6 | 2.9 | 0.16 (máx 3.0) | interruptor 60 A tripolar |
-| AC-EXISTENTE | tablero FV → tablero existente de la vivienda | 41.7 | 52.12 | 6 | 18.9 | 1.03 (máx 3.0) | interruptor 60 A tripolar |
+| AC-EXISTENTE | tablero FV → tablero existente de la vivienda | 41.7 | 52.12 | 6 | 19.9 | 1.09 (máx 3.0) | interruptor 60 A tripolar |
 
 ## Resultado
 

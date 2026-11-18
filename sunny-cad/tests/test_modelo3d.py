@@ -225,3 +225,36 @@ def test_paneles_sobre_losa_tienen_soportes() -> None:
     assert patas and all(
         e.malla.bounds[0][2] == pytest.approx(0) for e in patas
     )  # apoyan en la losa
+
+
+def test_natura_claraboya_separada_y_bajante_al_tablero_existente() -> None:
+    """Claraboya a 0,70 m de la pared de la puerta; la AC baja 2 pisos por el vacío, corre por
+    el techo del piso −2 y baja al tablero existente."""
+    import numpy as np
+
+    carpeta = validar.DIR_PROYECTOS / "natura-barranquilla"
+    entrada = validar.cargar_json(carpeta / "insumos" / "electrico.json")
+    els = geometria.elementos(validar.cargar_json(carpeta / "proyecto.json"), BIB, entrada)
+    por_id = {e.id: e for e in els}
+    m = entrada["muro_equipos"]
+    de = np.array(m["de"], float)
+    r = math.radians(entrada["rumbo_muro_equipos_deg"] - 90)
+    n = np.array([math.sin(r), math.cos(r)])
+    d = (por_id["claraboya-01"].malla.vertices[:, :2] - de) @ n
+    assert d.min() == pytest.approx(700, abs=5)
+    # Dos losas inferiores (−3,0 m y −6,0 m) y el tablero existente en el piso −2
+    assert sorted(e.malla.bounds[1][2] for e in els if e.tipo == "losa_inferior") == [-6000, -3000]
+    te = por_id["tablero-existente"]
+    assert te.malla.bounds[0][2] == pytest.approx(-6000 + 1500 - 400)
+    ruta = por_id["ruta-ac-existente"].propiedades["ruta_mm"]
+    assert ruta[0] == por_id["ruta-ac-claraboya"].propiedades["ruta_mm"][-1]  # continua
+    assert ruta[-1][2] == pytest.approx(te.malla.bounds[1][2])  # llega al tablero por arriba
+    assert -3500 < min(p[2] for p in ruta[:-1]) < -3200  # corre bajo el techo del piso −2
+    # El tramo vertical baja dentro del vacío de la claraboya
+    from shapely.geometry import MultiPoint, Point
+
+    vacio = MultiPoint(por_id["claraboya-01"].malla.vertices[:, :2].tolist()).convex_hull
+    assert vacio.contains(Point(ruta[1][:2]))
+    # El tramo por el piso de la terraza no pisa la claraboya: sube por su lado
+    piso = [p for p in por_id["ruta-ac-claraboya"].propiedades["ruta_mm"] if p[2] < 100]
+    assert all(not vacio.buffer(-1).contains(Point(p[:2])) for p in piso)

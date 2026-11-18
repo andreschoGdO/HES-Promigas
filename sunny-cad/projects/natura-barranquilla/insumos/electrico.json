@@ -14,17 +14,26 @@
   "rumbo_muro_equipos_deg": 189.6,
   "ubicaciones": {
     "bateria-01": {
-      "punto": [8692, 9627],
+      "punto": [
+        8692,
+        9627
+      ],
       "z_mm": 0,
       "es_supuesto": true
     },
     "inversor-01": {
-      "punto": [8484, 8815],
+      "punto": [
+        8484,
+        8815
+      ],
       "z_mm": 1500,
       "es_supuesto": true
     },
     "tablero-fv": {
-      "punto": [8356, 8198],
+      "punto": [
+        8356,
+        8198
+      ],
       "z_mm": 1400,
       "es_supuesto": true
     }
@@ -36,8 +45,14 @@
     "nota": "Medidas SUPUESTAS (como en Riomar). Contiene el contactor (ATS) y el medidor."
   },
   "muro_equipos": {
-    "de": [8582, 10188],
-    "a": [8195, 7911],
+    "de": [
+      8582,
+      10188
+    ],
+    "a": [
+      8195,
+      7911
+    ],
     "alto_mm": 3000,
     "espesor_mm": 150,
     "modelar": false,
@@ -47,16 +62,33 @@
   "nota": "Equipos DEYE (usuario) en la cara este del cuarto. Orden como en Riomar, desde la derecha (norte): batería GB-L de 3 módulos en el piso, inversor (centro a 1,5 m), tablero FV. Posiciones SUPUESTAS. Un solo string de 8 módulos: con 2 strings de 4 la Vmp en caliente queda en 155 V, solo 3 % sobre el mínimo de MPPT (150 V).",
   "buitron": {
     "tipo": "claraboya",
-    "punto": [9803, 11401],
+    "punto": [
+      10526,
+      11482
+    ],
     "z_mm": 0,
     "ancho_mm": 2400,
     "profundidad_mm": 2000,
     "alto_mm": 500,
     "es_supuesto": true,
-    "nota": "Claraboya de vidrio frente a la puerta del cuarto (fotos); por ella baja el cableado al punto de interconexión, 2 pisos abajo (usuario). Medidas (2,4 × 2,0 m, brocal de 0,5 m) y posición SUPUESTAS."
+    "nota": "Claraboya de vidrio frente a la puerta del cuarto, separada unos 0,70 m de la pared de la puerta (usuario); por ella baja el cableado al punto de interconexión, 2 pisos abajo (usuario). Medidas (2,4 × 2,0 m, brocal de 0,5 m) y posición a lo largo de la pared SUPUESTAS.",
+    "separacion_muro_mm": 700
   },
   "pisos_hasta_tablero_existente": 2,
   "altura_piso_mm": 3000,
   "recorrido_horizontal_tablero_existente_m": 3,
-  "nota_recorrido_existente": "Baja 2 pisos por la claraboya (usuario) hasta el punto de interconexión. SUPUESTOS: altura de piso 3,0 m y 3 m de recorrido horizontal."
+  "nota_recorrido_existente": "Baja 2 pisos por la claraboya (usuario) hasta el punto de interconexión. SUPUESTOS: altura de piso 3,0 m y 3 m de recorrido horizontal.",
+  "edificio_inferior": {
+    "modelar": true,
+    "espesor_losa_mm": 200,
+    "espesor_fachada_mm": 150,
+    "tablero_existente": {
+      "ancho_mm": 400,
+      "alto_mm": 800,
+      "profundidad_mm": 150,
+      "z_centro_sobre_piso_mm": 1500
+    },
+    "es_supuesto": true,
+    "nota": "Pisos inferiores esquemáticos para mostrar la bajante: misma huella de la terraza, 3,0 m por piso. La AC baja por el vacío bajo la claraboya, en el piso −2 sale a la derecha (mirando la claraboya desde la puerta) por el techo 3 m y baja al tablero existente (punto de conexión). Todo SUPUESTO."
+  }
 }

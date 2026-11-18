@@ -62,7 +62,9 @@ sol.data.angle = 0.02
 sol.rotation_euler = (math.radians(35), math.radians(15), math.radians(160))
 escena.collection.objects.link(sol)
 
-bpy.ops.mesh.primitive_plane_add(size=200, location=(0, 0, -0.25))
+_v = json.load(open(vistas_json))
+suelo_z = _v.get("suelo_z_m", -0.25) if isinstance(_v, dict) else -0.25
+bpy.ops.mesh.primitive_plane_add(size=200, location=(0, 0, suelo_z))
 suelo = bpy.context.active_object
 mat_suelo = bpy.data.materials.new("suelo")
 mat_suelo.use_nodes = True
@@ -73,6 +75,14 @@ mat_suelo.node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value 
     1,
 )
 suelo.data.materials.append(mat_suelo)
+for i, luz in enumerate(_v.get("luces", []) if isinstance(_v, dict) else []):
+    datos = bpy.data.lights.new(f"techo{i}", type="AREA")
+    datos.shape = "RECTANGLE"
+    datos.size, datos.size_y = luz["tamano"]
+    datos.energy = 2.5 * luz["tamano"][0] * luz["tamano"][1]
+    obj_luz = bpy.data.objects.new(f"techo{i}", datos)
+    obj_luz.location = luz["centro"]
+    escena.collection.objects.link(obj_luz)
 
 
 # ---------------------------------------------------------------- materiales
@@ -216,5 +226,6 @@ for v in datos_vistas:
         camara.data.type = "PERSP"
         camara.data.lens = v.get("lente_mm", 35)
     camara.data.clip_end = 500
+    camara.data.clip_start = v.get("clip_inicio_m", 0.1)
     escena.render.filepath = f"{salida}/render_{v['nombre']}.png"
     bpy.ops.render.render(write_still=True)

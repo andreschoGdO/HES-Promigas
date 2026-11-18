@@ -104,6 +104,14 @@ Control: el perímetro calculado debe coincidir con el de Maps (tolerancia 2 %).
 2. Escribir `insumos/electrico.json`: inversor, batería y configuración, medidor, ubicaciones de los
    equipos sobre el muro (`muro_equipos`, distancias desde la esquina), buitrón, pisos que baja el
    cableado hasta el tablero existente, rumbos del edificio y del muro.
+   - La bajante puede ser un buitrón adosado (`"tipo": "buitron"`, alto ≥ 1,2 m) o una claraboya
+     (`"tipo": "claraboya"`, brocal bajo). Si la claraboya está separada del muro (> 0,3 m), la AC
+     baja al piso pasando la claraboya, cruza el piso y sube por el lado del brocal.
+   - Con `"edificio_inferior": {"modelar": true, ...}` se modelan los pisos de abajo (losas, fachada
+     y vacío translúcidos), la AC baja por el vacío, corre por el techo del último piso el
+     `recorrido_horizontal_tablero_existente_m` "a la derecha" (mirando la bajante desde el muro de
+     equipos) y baja al tablero existente; se genera la vista de corte `render_bajante.png` y su
+     lámina REN.
 3. Proponer, leer `salidas/memoria_electrica.md` y aplicar:
 
 ```bash
@@ -158,3 +166,10 @@ de decisiones y supuestos por confirmar.
 - El alzado del muro de equipos detecta choques que la planta esconde.
 - La ductería debe ir siempre por muros, losas o estructura; nunca en el aire.
 - Dejar en el proyecto solo coordenadas con 2 decimales; lo exacto y las fotos, en `privado/`.
+
+## Lecciones del proyecto Natura
+
+- Preguntar la separación entre la bajante (claraboya/buitrón) y el muro o la puerta: en Natura la
+  claraboya estaba a 0,70 m de la puerta y eso cambia la ruta por el piso.
+- Para mostrar el recorrido hasta el punto de conexión, modelar los pisos inferiores
+  (`edificio_inferior`) y revisar `render_bajante.png`: es un corte, la cámara recorta la fachada.

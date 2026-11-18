@@ -38,6 +38,11 @@ COLORES = {
     "inversor": (245, 245, 245, 255),
     "bateria": (235, 235, 235, 255),
     "tablero": (200, 200, 195, 255),
+    "losa_inferior": (185, 185, 180, 255),
+    "fachada": (215, 205, 190, 35),
+    "vacio": (170, 200, 215, 45),
+    "muro_interior": (196, 160, 135, 110),
+    "tablero_existente": (150, 150, 145, 255),
 }
 
 
@@ -575,26 +580,51 @@ def canalizaciones(
                     en_muro(s_b, b["alto_mm"]),
                 ]
             else:
-                # Bajante bajo (claraboya): baja por el muro bajo el tablero, sigue por el piso
-                # pegado al muro hasta el borde de la claraboya, sube por su brocal y entra.
+                # Bajante bajo (claraboya): baja por el muro bajo el tablero y corre a media
+                # altura (por encima de la batería, por debajo del inversor).
                 z_tab_bot = tab["z_mm"] - entrada.get("tablero_fv", {}).get("alto_mm", 800) / 2
                 s_c = s_de(b["punto"])
                 signo = 1 if s_tab > s_c else -1
-                borde = s_c + (b["ancho_mm"] / 2 - 150) * signo
-                # Por el muro a media altura, por encima de la batería y por debajo del inversor
                 z_bat_top = float(bat.malla.bounds[1][2]) if bat is not None else 0.0
                 z_medio = (
                     min(z_tab_bot - 60, (z_bat_top + z_inv_bot) / 2)
                     if bat is not None
                     else z_tab_bot - 60
                 )
-                ruta = [
-                    en_muro(s_tab + 120, z_tab_bot),
-                    en_muro(s_tab + 120, z_medio, 220),
-                    en_muro(borde, z_medio, 220),
-                    en_muro(borde, b["alto_mm"] + 40, 220),
-                    en_muro(borde - 200 * signo, b["alto_mm"] + 40, 220),
-                ]
+                d_c = float(np.dot(np.subtract(b["punto"], esquina), n))
+                cerca = d_c - b["profundidad_mm"] / 2  # cara de la claraboya hacia el muro
+                if cerca > 300:
+                    # Claraboya separada del muro (frente a la puerta): baja al piso pasando la
+                    # claraboya, cruza el piso hacia afuera, sube por el lado del brocal y entra.
+                    s_lado = s_c + signo * b["ancho_mm"] / 2
+                    s_bajar = s_lado + signo * 300
+                    d_med = cerca + min(300.0, b["profundidad_mm"] / 2)
+                    zf = cota_min + 60
+                    ruta = [
+                        en_muro(s_tab + 120, z_tab_bot),
+                        en_muro(s_tab + 120, z_medio, 220),
+                        en_muro(s_bajar, z_medio, 220),
+                        en_muro(s_bajar, zf, 220),
+                        en_muro(s_bajar, zf, d_med),
+                        en_muro(s_lado + signo * 45, zf, d_med),
+                        en_muro(s_lado + signo * 45, b["alto_mm"] + 40, d_med),
+                        en_muro(s_lado - signo * 60, b["alto_mm"] + 40, d_med),
+                    ]
+                    inferior = entrada.get("edificio_inferior") or {}
+                    if inferior.get("modelar"):
+                        out += _bajante_inferior(
+                            proyecto, entrada, esquina, w, n, ruta[-1], s_c, d_c
+                        )
+                else:
+                    # Claraboya junto al muro: sigue pegado al muro hasta su borde y entra.
+                    borde = s_c + (b["ancho_mm"] / 2 - 150) * signo
+                    ruta = [
+                        en_muro(s_tab + 120, z_tab_bot),
+                        en_muro(s_tab + 120, z_medio, 220),
+                        en_muro(borde, z_medio, 220),
+                        en_muro(borde, b["alto_mm"] + 40, 220),
+                        en_muro(borde - 200 * signo, b["alto_mm"] + 40, 220),
+                    ]
             out.append(
                 Elemento(
                     f"ruta-ac-{b.get('tipo', 'buitron')}",
@@ -612,6 +642,140 @@ def canalizaciones(
                     },
                 )
             )
+    return out
+
+
+def _bajante_inferior(
+    proyecto: dict[str, Any],
+    entrada: dict[str, Any],
+    esquina: np.ndarray,
+    w: np.ndarray,
+    n: np.ndarray,
+    inicio: list[float],
+    s_c: float,
+    d_c: float,
+) -> list[Elemento]:
+    """Pisos inferiores esquemáticos y la AC que baja por el vacío de la claraboya.
+
+    Losas de cada piso con el hueco del vacío, fachada y paredes del vacío translúcidas. En el
+    último piso la ruta sale del vacío "a la derecha" (mirando la claraboya desde el muro de
+    equipos), corre por el techo el recorrido horizontal y baja por un muro al tablero existente.
+    """
+    b = entrada["buitron"]
+    inf = entrada["edificio_inferior"]
+    pisos = int(entrada.get("pisos_hasta_tablero_existente") or 1)
+    alto_piso = float(entrada.get("altura_piso_mm") or 3000)
+    esp = float(inf.get("espesor_losa_mm", ESPESOR_LOSA_MM))
+    esp_f = float(inf.get("espesor_fachada_mm", 150))
+    horizontal = float(entrada.get("recorrido_horizontal_tablero_existente_m") or 3) * 1000
+    te = inf.get("tablero_existente", {})
+
+    def pt(s_mm, d_mm):
+        q = esquina + w * s_mm + n * d_mm
+        return (float(q[0]), float(q[1]))
+
+    def rect(s0, s1, d0, d1):
+        return Polygon([pt(s0, d0), pt(s1, d0), pt(s1, d1), pt(s0, d1)])
+
+    def solido(pol, z0, z1):
+        return trimesh.creation.extrude_polygon(pol, z1 - z0).apply_translation((0, 0, z0))
+
+    from shapely.ops import unary_union
+
+    huella = unary_union([Polygon(c["contorno_mm"]) for c in proyecto["vivienda"]["cubiertas"]])
+    a2, p2 = b["ancho_mm"] / 2, b["profundidad_mm"] / 2
+    vacio = rect(s_c - a2, s_c + a2, d_c - p2, d_c + p2)
+    z_fondo = -pisos * alto_piso
+    prop = {"es_supuesto": True, "es_esquematico": True, "nivel_inferior": True}
+    out: list[Elemento] = []
+    for k in range(1, pisos + 1):
+        z = -k * alto_piso
+        out.append(
+            Elemento(
+                f"losa-piso-m{k}",
+                "losa_inferior",
+                solido(huella.difference(vacio), z - esp, z),
+                {**prop, "descripcion": f"Losa del piso {-k} (esquemática)"},
+            )
+        )
+    out.append(
+        Elemento(
+            "fachada-inferior",
+            "fachada",
+            solido(huella.difference(huella.buffer(-esp_f)), z_fondo - esp, -ESPESOR_LOSA_MM),
+            {**prop, "descripcion": "Fachada de los pisos inferiores (translúcida)"},
+        )
+    )
+    out.append(
+        Elemento(
+            "vacio-claraboya",
+            "vacio",
+            solido(vacio.buffer(100, join_style=2).difference(vacio), z_fondo, -ESPESOR_LOSA_MM),
+            {**prop, "descripcion": "Paredes del vacío bajo la claraboya"},
+        )
+    )
+    # "Derecha" mirando la claraboya desde el muro de equipos (de frente a +n)
+    derecha = np.array([n[1], -n[0]])
+    sd = 1 if float(np.dot(w, derecha)) > 0 else -1
+    s_lado = s_c + sd * a2
+    z_techo = z_fondo + alto_piso - esp
+    z_corre = z_techo - 150
+    s_fin = s_lado + sd * (100 + horizontal)
+    d_m = float(np.dot(np.subtract(inicio[:2], esquina), n))
+    alto_te = te.get("alto_mm", 800)
+    prof_te = te.get("profundidad_mm", 150)
+    z_te = z_fondo + te.get("z_centro_sobre_piso_mm", 1500)
+    # Muro paralelo al de equipos, detrás de la ruta: el tablero queda de frente a la vista
+    d_muro = d_m - prof_te / 2
+    s_m0, s_m1 = sorted((s_fin - sd * min(1200.0, horizontal - 200), s_fin + sd * 1200))
+    out.append(
+        Elemento(
+            "muro-piso-inferior",
+            "muro_interior",
+            solido(rect(s_m0, s_m1, d_muro - 150, d_muro), z_fondo, z_techo),
+            {**prop, "descripcion": f"Muro del piso {-pisos} con el tablero existente"},
+        )
+    )
+    ancho_te = te.get("ancho_mm", 400)
+    out.append(
+        Elemento(
+            "tablero-existente",
+            "tablero_existente",
+            solido(
+                rect(s_fin - ancho_te / 2, s_fin + ancho_te / 2, d_muro, d_muro + prof_te),
+                z_te - alto_te / 2,
+                z_te + alto_te / 2,
+            ),
+            {**prop, "descripcion": "Tablero existente (punto de conexión)"},
+        )
+    )
+
+    def p3(s_mm, z):
+        x, y = pt(s_mm, d_m)
+        return [x, y, float(z)]
+
+    ruta = [
+        [float(x) for x in inicio],
+        [float(inicio[0]), float(inicio[1]), z_corre],
+        p3(s_fin, z_corre),
+        p3(s_fin, z_te + alto_te / 2),
+    ]
+    out.append(
+        Elemento(
+            "ruta-ac-existente",
+            "canalizacion_ac",
+            _tubo(ruta, 25),
+            {
+                **prop,
+                "circuito": "AC",
+                "descripcion": (
+                    f"AC claraboya → tablero existente: baja {pisos} pisos por el vacío, "
+                    f"{horizontal / 1000:g} m por el techo y baja al tablero"
+                ),
+                "ruta_mm": ruta,
+            },
+        )
+    )
     return out
 
 

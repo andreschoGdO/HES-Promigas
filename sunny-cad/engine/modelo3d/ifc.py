@@ -33,6 +33,11 @@ CLASES = {
     "bateria": ("IfcElectricFlowStorageDevice", "BATTERY"),
     "tablero": ("IfcElectricDistributionBoard", "DISTRIBUTIONBOARD"),
     "medidor": ("IfcFlowMeter", "ENERGYMETER"),
+    "losa_inferior": ("IfcSlab", "FLOOR"),
+    "fachada": ("IfcWall", "STANDARD"),
+    "vacio": ("IfcWall", "SHAFT"),
+    "muro_interior": ("IfcWall", "PARTITIONING"),
+    "tablero_existente": ("IfcElectricDistributionBoard", "DISTRIBUTIONBOARD"),
 }
 NOMBRE_TIPO = {
     "volumen": "Volumen de la terraza alta",

@@ -27,7 +27,7 @@
 | DC-BAT | batería GB-L (m3) → inversor | 50 | 62.5 | 4 | 4.8 | 0.15 (máx 2.0) | interruptor DC 63 A (verificar si el fabricante lo integra) |
 | AC-RED | inversor (puerto red) → tablero FV (contactor / ATS) | 41.7 | 52.12 | 6 | 2.9 | 0.16 (máx 3.0) | interruptor 60 A tripolar |
 | AC-CARGA | inversor (puerto respaldo) → tablero FV | 41.7 | 52.12 | 6 | 2.9 | 0.16 (máx 3.0) | interruptor 60 A tripolar |
-| AC-EXISTENTE | tablero FV → tablero existente de la vivienda | 41.7 | 52.12 | 6 | 19.2 | 1.05 (máx 3.0) | interruptor 60 A tripolar |
+| AC-EXISTENTE | tablero FV → tablero existente de la vivienda | 41.7 | 52.12 | 6 | 18.9 | 1.03 (máx 3.0) | interruptor 60 A tripolar |
 
 ## Resultado
 
@@ -35,9 +35,6 @@
 
 ## Información faltante
 
-- sistema: confirmar arquitectura en serie con ATS y respaldo total (tomado de Riomar)
-- equipos: potencia del inversor DEYE (en la biblioteca solo está el SUN-15K; la ficha trae 8/10/12K)
-- equipos: '3 baterías DEYE' = una torre GB-L de 3 módulos (supuesto)
-- equipos: posición exacta de los equipos en la pared y del punto de conexión; altura del cuarto
-- zona-01: inclinación, altura de la estructura y si queda sobre la claraboya
+- equipos: posición exacta de los equipos en la pared y medidas de la claraboya
 - equipos: capacidad del totalizador y demanda de la vivienda
+- equipos: altura de piso y recorrido horizontal hasta el punto de interconexión (supuestos 3,0 m y 3 m)

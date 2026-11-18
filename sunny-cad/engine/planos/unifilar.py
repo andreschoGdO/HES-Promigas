@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from engine.planos.lamina import Lamina
+from engine.planos.textos import fabricante_corto, nombre_equipo
 
 
 def _caja(lam, x, y, w, h, titulo, lineas=(), capa="UNIFILAR", trazo="continuo", relleno=None):
@@ -92,7 +93,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], calc: dict[str, Any], b
         ih,
         "INVERSOR HÍBRIDO",
         [
-            f"{inv['fabricante']} {inv['modelo']}",
+            nombre_equipo(inv),
             f"{inv['electrico']['potencia_nominal_ac_w'] / 1000:g} kW · "
             f"{inv['electrico']['conexion_red']}",
         ],
@@ -124,7 +125,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], calc: dict[str, Any], b
         26,
         "BATERÍA (BESS + BMS)",
         [
-            f"{bat['fabricante']} {conf['configuracion'].upper()}",
+            f"{fabricante_corto(bat)} {bat['modelo'].split('/')[0]} · {conf['configuracion'].upper()}",
             f"{conf['tension_nominal_v']} V · {conf['energia_util_kwh']} kWh útiles",
         ],
         "DC",
@@ -220,7 +221,7 @@ def dibujar(lam: Lamina, area, proyecto: dict[str, Any], calc: dict[str, Any], b
     largo = f"L≈{e['longitud_estimada_m']} m" if e["longitud_estimada_m"] else "longitud pendiente"
     lam.texto(
         (tx + tw - 6, (carga_y + y0 + 8) / 2),
-        f"{e['calibre_awg']} AWG · baja por buitrón · {largo}",
+        f"{e['calibre_awg']} AWG · {e['tramo'].split('→')[-1].strip()} · {largo}",
         1.7,
         "AC",
         rotacion=90,

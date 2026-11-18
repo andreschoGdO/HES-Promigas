@@ -13,6 +13,7 @@ from shapely.geometry import MultiPoint, Polygon
 
 from engine.modelo3d.geometria import Elemento
 from engine.planos.lamina import Lamina, Vista
+from engine.planos.textos import fabricante_corto, nombre_equipo
 
 ESCALAS = (50, 75, 100, 125, 150, 200, 250)
 COLOR_STRING = ["#2b5aa8", "#0f8a6a", "#9b4fb3", "#c77b12", "#b33a3a", "#3a8fb3"]
@@ -161,7 +162,7 @@ def _cuadro(lam, x, y, w, h, proyecto, elems, biblioteca, strings) -> None:
     if "inversor" in eq:
         inv = biblioteca[eq["inversor"]["componente_ref"]]
         filas += [
-            ("Inversor", f"{inv['fabricante']} {inv['modelo']}"),
+            ("Inversor", nombre_equipo(inv)),
             ("Potencia AC", f"{inv['electrico']['potencia_nominal_ac_w'] / 1000:g} kW"),
         ]
     if "bateria" in eq:
@@ -172,7 +173,10 @@ def _cuadro(lam, x, y, w, h, proyecto, elems, biblioteca, strings) -> None:
             if c["id"] == eq["bateria"]["configuracion"]
         )
         filas += [
-            ("Batería", f"{bat['fabricante']} {conf.get('modelo_comercial', conf['id'])}"),
+            (
+                "Batería",
+                f"{fabricante_corto(bat)} {bat['modelo'].split('/')[0]} · {conf.get('modelo_comercial', conf['id']).upper()}",
+            ),
             (
                 "Energía",
                 f"{conf.get('energia_nominal_kwh', conf['energia_util_kwh'])} kWh "
@@ -197,7 +201,6 @@ def _cuadro(lam, x, y, w, h, proyecto, elems, biblioteca, strings) -> None:
         ("- - -", "zona de instalación"),
         ("DC (naranja)", "ruta de cableado DC"),
         ("AC (azul)", "ruta de cableado AC"),
-        ("Madera", "estructura de la pérgola"),
         ("Cotas", "en metros; NPT = nivel de piso terminado"),
     ]
     yy = y + h - 6
@@ -216,6 +219,8 @@ def _cuadro(lam, x, y, w, h, proyecto, elems, biblioteca, strings) -> None:
         lam.texto((x + (8 if color else 3), yy), k, 2.1, "NOTA")
         lam.texto((x + 40, yy), v, 2.1, "TEXTO")
         yy -= 5
+    if any(z["estructura"] == "pergola" for z in proyecto["vivienda"].get("zonas_instalacion", [])):
+        filas.append(("Madera", "estructura de la pérgola"))
     notas = [n for n in proyecto["informacion_faltante"]][:6]
     if notas:
         yy -= 3

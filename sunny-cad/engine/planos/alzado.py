@@ -63,7 +63,7 @@ def dibujar(
     lam.texto((ox + W + 2, oy - 4), "NPT ±0.00 (terraza baja)", 2.0, "NOTA")
     lam.texto(
         (ox + W / 2, oy + H + 4),
-        "MURO DEL COSTADO IZQUIERDO — ALZADO FRONTAL",
+        "MURO DE EQUIPOS — ALZADO FRONTAL",
         2.8,
         "TEXTO",
         "centro",
@@ -147,14 +147,16 @@ def dibujar(
         _cota_v(lam, xv + 0 if z0 <= 1 else xv, oy + z0 * k, oy + z1 * k, f"{(z1 - z0) / 1000:.2f}")
     _cota_h(lam, ox, ox + W, oy + H + 10, f"{largo / 1000:.2f} (trazado)")
     _cota_v(lam, ox - 8, oy, oy + H, f"{alto / 1000:.2f}")
-    lam.texto((ox + W + 2, oy + H - 3), "Esquina con la terraza alta →", 1.8, "NOTA")
+    lam.texto(
+        (ox + W + 2, oy + H - 3), "Origen de cotas: esquina interior (izquierda)", 1.8, "NOTA"
+    )
 
     notas = [
         "NOTAS:",
         "1. Cotas en metros. Medidas de los equipos según su ficha técnica (biblioteca).",
-        f"2. Muro medido en obra: 2,31 m; en el trazado de Maps: {largo / 1000:.2f} m.",
-        "3. Posiciones, altura del muro y buitrón son SUPUESTOS a confirmar en obra.",
-        "4. DC de los strings llega desde la pérgola; AC al tablero existente baja por el buitrón (h = 1,70 m).",
+        f"2. Tramo de muro de equipos: {largo / 1000:.2f} m.",
+        "3. Posiciones de los equipos y elementos marcados como supuesto: confirmar en obra.",
+        "4. Rutas de cableado esquemáticas: DC desde los módulos, AC hacia el punto de conexión.",
         "5. Distancias de trabajo y alturas de montaje: verificar según RETIE y el fabricante.",
     ]
     for i, t in enumerate(notas):

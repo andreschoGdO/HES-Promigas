@@ -598,7 +598,8 @@ def canalizaciones(
                     # claraboya, cruza el piso hacia afuera, sube por el lado del brocal y entra.
                     s_lado = s_c + signo * b["ancho_mm"] / 2
                     s_bajar = s_lado + signo * 300
-                    d_med = cerca + min(300.0, b["profundidad_mm"] / 2)
+                    # Pegado a la esquina del brocal: adentro baja junto a dos paredes del vacío
+                    d_med = cerca + 80
                     zf = cota_min + 60
                     ruta = [
                         en_muro(s_tab + 120, z_tab_bot),
@@ -714,9 +715,13 @@ def _bajante_inferior(
             {**prop, "descripcion": "Paredes del vacío bajo la claraboya"},
         )
     )
-    # "Derecha" mirando la claraboya desde el muro de equipos (de frente a +n)
+    # Sentido del recorrido en el último piso, mirando la claraboya desde el muro de equipos
+    # (de frente a +n): "derecha" o "izquierda". La ruta baja en la esquina del vacío más
+    # cercana al muro y corre pegada a la pared del vacío hasta salir por el lado elegido.
     derecha = np.array([n[1], -n[0]])
     sd = 1 if float(np.dot(w, derecha)) > 0 else -1
+    if inf.get("lado_recorrido", "derecha") == "izquierda":
+        sd = -sd
     s_lado = s_c + sd * a2
     z_techo = z_fondo + alto_piso - esp
     z_corre = z_techo - 150
@@ -727,7 +732,7 @@ def _bajante_inferior(
     z_te = z_fondo + te.get("z_centro_sobre_piso_mm", 1500)
     # Muro paralelo al de equipos, detrás de la ruta: el tablero queda de frente a la vista
     d_muro = d_m - prof_te / 2
-    s_m0, s_m1 = sorted((s_fin - sd * min(1200.0, horizontal - 200), s_fin + sd * 1200))
+    s_m0, s_m1 = sorted((s_fin - sd * min(1200.0, horizontal - 200), s_fin + sd * 500))
     out.append(
         Elemento(
             "muro-piso-inferior",

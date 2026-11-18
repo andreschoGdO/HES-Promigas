@@ -109,8 +109,8 @@ Control: el perímetro calculado debe coincidir con el de Maps (tolerancia 2 %).
      baja al piso pasando la claraboya, cruza el piso y sube por el lado del brocal.
    - Con `"edificio_inferior": {"modelar": true, ...}` se modelan los pisos de abajo (losas, fachada
      y vacío translúcidos), la AC baja por el vacío, corre por el techo del último piso el
-     `recorrido_horizontal_tablero_existente_m` "a la derecha" (mirando la bajante desde el muro de
-     equipos) y baja al tablero existente; se genera la vista de corte `render_bajante.png` y su
+     `recorrido_horizontal_tablero_existente_m` hacia `"lado_recorrido"` ("derecha" o "izquierda",
+     mirando la bajante desde el muro de equipos; preguntarlo) y baja al tablero existente; se genera la vista de corte `render_bajante.png` y su
      lámina REN.
 3. Proponer, leer `salidas/memoria_electrica.md` y aplicar:
 

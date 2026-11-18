@@ -138,7 +138,9 @@ def vistas(
         derecha = np.array([np.sin(r2), np.cos(r2), 0])
         d_obj = float(np.dot(obj[:2] - ruta[0][:2], frente[:2]))  # obj relativo a la ruta
         distancia = 9.3
-        camara = obj + distancia * frente + 1.8 * derecha + [0, 0, 0.5]
+        camara = (
+            obj + distancia * frente + [0, 0, 0.5]
+        )  # de frente: el corte queda paralelo a la ruta
         out.append(
             {
                 "nombre": "bajante",

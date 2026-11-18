@@ -89,6 +89,7 @@
       "z_centro_sobre_piso_mm": 1500
     },
     "es_supuesto": true,
-    "nota": "Pisos inferiores esquemáticos para mostrar la bajante: misma huella de la terraza, 3,0 m por piso. La AC baja por el vacío bajo la claraboya, en el piso −2 sale a la derecha (mirando la claraboya desde la puerta) por el techo 3 m y baja al tablero existente (punto de conexión). Todo SUPUESTO."
+    "nota": "Pisos inferiores esquemáticos para mostrar la bajante: misma huella de la terraza, 3,0 m por piso (confirmado). La AC baja por el vacío bajo la claraboya, en el piso −2 sale a la izquierda (mirando la claraboya desde la puerta; corregido por el usuario), corre 3 m por el techo y baja al tablero existente (punto de conexión). Recorrido y tablero existente confirmados por el usuario; posición exacta del tablero SUPUESTA.",
+    "lado_recorrido": "izquierda"
   }
 }

@@ -14,3 +14,6 @@ projects/*/proyecto.propuesta.json
 
 # Imágenes de verificación (se regeneran con los comandos)
 projects/*/salidas/verificacion_*
+
+# Propuestas de edición pendientes de aprobación (Paso 8)
+projects/*/propuestas/

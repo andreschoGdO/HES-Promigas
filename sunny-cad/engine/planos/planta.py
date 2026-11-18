@@ -206,6 +206,8 @@ def _cuadro(lam, x, y, w, h, proyecto, elems, biblioteca, strings) -> None:
         ("AC (azul)", "ruta de cableado AC"),
         ("Cotas", "en metros; NPT = nivel de piso terminado"),
     ]
+    if any(z["estructura"] == "pergola" for z in proyecto["vivienda"].get("zonas_instalacion", [])):
+        filas.append(("Madera", "estructura de la pérgola"))
     yy = y + h - 6
     lam.rect(x, y, w, h, "CAJETIN")
     for k, v in filas:
@@ -222,17 +224,3 @@ def _cuadro(lam, x, y, w, h, proyecto, elems, biblioteca, strings) -> None:
         lam.texto((x + (8 if color else 3), yy), k, 2.1, "NOTA")
         lam.texto((x + 40, yy), v, 2.1, "TEXTO")
         yy -= 5
-    if any(z["estructura"] == "pergola" for z in proyecto["vivienda"].get("zonas_instalacion", [])):
-        filas.append(("Madera", "estructura de la pérgola"))
-    notas = [n for n in proyecto["informacion_faltante"]][:6]
-    if notas:
-        yy -= 3
-        lam.texto((x + 3, yy), "PENDIENTES", 2.6, "TEXTO", negrita=True)
-        yy -= 5
-        import textwrap
-
-        for n_ in notas:
-            for linea in textwrap.wrap(n_, 74)[:3]:
-                lam.texto((x + 3, yy), linea, 1.7, "NOTA")
-                yy -= 3
-            yy -= 1

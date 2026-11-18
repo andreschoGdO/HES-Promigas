@@ -43,14 +43,14 @@ renders y planos PDF con el cajetín corporativo.
 6. No pasar al siguiente paso hasta que el usuario lo apruebe.
 
 ## Plan por pasos
-1. Entorno, estructura y contratos de datos (este paso)
+1. Entorno, estructura y contratos de datos
 2. Biblioteca de componentes
 3. Lectura de la vivienda (DXF, PDF, fotos)
 4. Motor de distribución de módulos
 5. Motor eléctrico
 6. Modelo IFC, visor 3D y renders
 7. Planos con cajetín y PDF
-8. Edición por lenguaje natural con aprobación
+8. Edición por lenguaje natural con aprobación (`engine/edicion`, ver PROCESO.md §8)
 9. Interfaz web
 10. Piloto y validación
 

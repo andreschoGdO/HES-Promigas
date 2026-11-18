@@ -140,11 +140,33 @@ cableado, equipos). Revisar en especial:
 .venv/bin/python -m engine.planos generar <id>
 ```
 
-Cinco láminas A3 (planta, alzado del muro de equipos, unifilar y dos de renders) en PDF y DXF. Si
+Láminas A3 (planta, alzado del muro de equipos, unifilar y dos o tres de renders) en PDF y DXF. Si
 hay datos personales (diseñador, cliente) en `privado/datos_privados.json`, los planos se guardan
 en `privado/planos/` y no se suben a git.
 
-## 8. Cierre
+## 8. Cambios por lenguaje natural (Paso 8)
+
+Cualquier ajuste posterior ("sube el inversor 20 cm", "inclina los paneles a 10°", "quita el
+módulo 8 por sombra", "cambia a 2 strings de 4") se pide en español. Claude lo traduce a
+operaciones; el código las aplica sobre una copia, redistribuye y recalcula lo eléctrico, valida y
+muestra la diferencia. Nada cambia hasta `aplicar`:
+
+```bash
+.venv/bin/python -m engine.edicion proponer <id> "sube el inversor 20 cm"
+.venv/bin/python -m engine.edicion ver <id>                 # resumen y diferencia
+.venv/bin/python -m engine.edicion aplicar <id> --regenerar # o: descartar <id>
+.venv/bin/python -m engine.edicion operaciones              # operaciones disponibles
+```
+
+- Requiere `ANTHROPIC_API_KEY` en el entorno (nunca en el repositorio). Sin clave, las operaciones
+  se pueden escribir a mano en un JSON y pasar con `--operaciones ops.json`.
+- Operaciones: `establecer` (campo existente), `mover_equipo`, `cambiar_equipo`,
+  `cambiar_strings`, `cambiar_zona`, `quitar_modulos`.
+- La propuesta queda en `propuestas/edicion/` (fuera de git); lo aplicado queda en
+  `historial_ediciones.json`. Una propuesta inválida no se puede aplicar.
+- Después de aplicar, regenerar renders (`--render`) y planos.
+
+## 9. Cierre
 
 ```bash
 .venv/bin/ruff check . && .venv/bin/pytest -q && .venv/bin/python -m engine.validar

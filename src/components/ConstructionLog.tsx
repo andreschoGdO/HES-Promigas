@@ -16,14 +16,7 @@ import {
   NotebookPen, Plus, MapPin, Camera, ImagePlus, X, Lock, Unlock, FileDown, Trash2, Cloud, Layers, ArrowLeft, Pencil,
 } from 'lucide-react';
 import { compressImageIfNeeded } from '@/lib/image-compress';
-
-const ETAPAS = [
-  'Alistamiento de sitio', 'Cimentación / anclajes', 'Estructura de montaje', 'Instalación de paneles',
-  'Cableado DC', 'Cableado AC', 'Tablero SSFV / inversor', 'Puesta en marcha', 'Ajustes / retrabajo',
-  'Retraso — clima', 'Retraso — material', 'Retraso — otro', 'Otro',
-];
-const CLIMAS = ['Soleado', 'Parcialmente nublado', 'Nublado', 'Lluvia', 'Lluvia fuerte / tormenta'];
-const PHOTO_CATEGORIES = ['Avance general', 'Estructura', 'Paneles', 'Cableado', 'Tablero / Inversor', 'Incidencia', 'Otro'];
+import { ETAPAS, CLIMAS, PHOTO_CATEGORIES } from '@/lib/construction-log-catalog';
 
 interface LogListItem {
   id: string;

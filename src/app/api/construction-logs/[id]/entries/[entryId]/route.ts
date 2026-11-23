@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireUser } from '@/lib/api-auth';
+import { checkLogAccess } from '@/lib/api-access';
 
 interface RouteContext {
   params: Promise<{ id: string; entryId: string }>;
@@ -14,7 +16,11 @@ interface RouteContext {
  */
 export async function PATCH(request: Request, context: RouteContext) {
   try {
+    const auth = await requireUser(request);
+    if ('response' in auth) return auth.response;
     const { id, entryId } = await context.params;
+    const blocked = await checkLogAccess(auth.user, id);
+    if (blocked) return blocked;
     const body = await request.json();
 
     const { data: log, error: logErr } = await supabaseAdmin
@@ -62,9 +68,25 @@ export async function PATCH(request: Request, context: RouteContext) {
  * Borra una entrada (y sus fotos, por cascade). Útil para corregir un
  * registro digitado por error.
  */
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   try {
+    const auth = await requireUser(request);
+    if ('response' in auth) return auth.response;
     const { id, entryId } = await context.params;
+    const blocked = await checkLogAccess(auth.user, id);
+    if (blocked) return blocked;
+
+    // La entrada debe pertenecer a ESTA bitácora antes de tocar sus archivos:
+    // sin esto, con el id de una bitácora propia se podían borrar del Storage
+    // las fotos de una entrada ajena.
+    const { data: owned } = await supabaseAdmin
+      .from('construction_log_entries')
+      .select('id')
+      .eq('id', entryId)
+      .eq('log_id', id)
+      .maybeSingle();
+    if (!owned) return NextResponse.json({ error: 'Entrada no encontrada' }, { status: 404 });
+
     const { data: photos } = await supabaseAdmin
       .from('construction_log_entry_photos')
       .select('storage_path')

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { createSupabaseServer } from '@/lib/supabase-server';
 import { linkVisitToInventory } from '@/lib/inventory-visit-link';
-import { getRoleFromEmail } from '@/lib/user-role';
+import { requireUser, restrictedEmail, isUuid } from '@/lib/api-auth';
 
 /**
  * GET /api/visits?type=&casa=&status=&from=&to=
- * Lista visitas con filtros opcionales.
+ * Lista visitas con filtros opcionales. Requiere sesión (cookie web o
+ * Bearer de la app móvil).
  *
  * Autorización por rol:
  *   - admin (gdo/promigas): ve todas las visitas, todos los filtros funcionan.
@@ -15,6 +15,10 @@ import { getRoleFromEmail } from '@/lib/user-role';
  *                           Los demás filtros se aplican sobre ese subconjunto.
  */
 export async function GET(request: Request) {
+  const auth = await requireUser(request);
+  if ('response' in auth) return auth.response;
+  const restrictToEmail = restrictedEmail(auth.user);
+
   const url = new URL(request.url);
   const type = url.searchParams.get('type');
   const casa = url.searchParams.get('casa');
@@ -24,20 +28,6 @@ export async function GET(request: Request) {
   const technician = url.searchParams.get('technician');
   const contratista = url.searchParams.get('contratista');
   const limit = Math.min(Number(url.searchParams.get('limit') ?? 100), 500);
-
-  // Determinar rol del usuario logueado para aplicar filtro de aislamiento.
-  let restrictToEmail: string | null = null;
-  try {
-    const supa = await createSupabaseServer();
-    const { data } = await supa.auth.getUser();
-    const email = data.user?.email ?? null;
-    if (email && getRoleFromEmail(email) === 'user') {
-      restrictToEmail = email.toLowerCase();
-    }
-  } catch {
-    // Si falla la lectura de sesión, NO aplicamos restricción adicional —
-    // el middleware ya bloqueó el acceso sin login.
-  }
 
   let q = supabaseAdmin
     .from('field_visits')
@@ -62,24 +52,38 @@ export async function GET(request: Request) {
 /**
  * POST /api/visits
  * Crea una nueva visita (draft o completed).
+ *
+ * `id` opcional (UUID generado por la app móvil): hace la creación
+ * idempotente — si ya existe una visita con ese id se devuelve esa misma
+ * (`existing: true`) en vez de duplicarla, para que un reintento tras perder
+ * la conexión sea seguro.
  */
 export async function POST(request: Request) {
   try {
+    const auth = await requireUser(request);
+    if ('response' in auth) return auth.response;
+    const { user } = auth;
+
     const body = await request.json();
     if (!body.visit_type || !['previa', 'instalacion', 'emergencia', 'normalizacion', 'om', 'abastecimiento', 'comisionamiento'].includes(body.visit_type)) {
       return NextResponse.json({ error: 'visit_type inválido' }, { status: 400 });
     }
 
-    // created_by se setea del usuario logueado para evitar que un cliente
-    // malicioso lo manipule. Si no hay sesión (entorno dev con DISABLE_AUTH),
-    // se acepta lo del body como fallback.
-    let createdBy: string | null = null;
-    try {
-      const supa = await createSupabaseServer();
-      const { data } = await supa.auth.getUser();
-      createdBy = data.user?.email?.toLowerCase() ?? null;
-    } catch { /* sin sesión disponible */ }
-    if (!createdBy) createdBy = body.created_by ?? body.technician_email ?? null;
+    if (body.id !== undefined) {
+      if (!isUuid(body.id)) return NextResponse.json({ error: 'id inválido' }, { status: 400 });
+      const { data: existing } = await supabaseAdmin.from('field_visits').select('*').eq('id', body.id).maybeSingle();
+      if (existing) {
+        const mine = restrictedEmail(user);
+        if (mine && (existing.created_by ?? '').toLowerCase() !== mine) {
+          return NextResponse.json({ error: 'no autorizado' }, { status: 403 });
+        }
+        return NextResponse.json({ visit: existing, inventoryLink: null, existing: true });
+      }
+    }
+
+    // created_by sale de la sesión para que un cliente no pueda manipularlo.
+    // Solo sin sesión (entorno dev con DISABLE_AUTH) se acepta lo del body.
+    const createdBy: string | null = user?.email ?? body.created_by ?? body.technician_email ?? null;
 
     const payload: Record<string, unknown> = {
       visit_type: body.visit_type,
@@ -97,6 +101,7 @@ export async function POST(request: Request) {
       created_by: createdBy,
       completed_at: body.status === 'completed' ? new Date().toISOString() : null,
     };
+    if (isUuid(body.id)) payload.id = body.id;
     // contratista solo si fue enviado — la columna existe a partir de migración 34.
     // Si la migración no se aplicó todavía, omitir el campo evita romper el INSERT.
     if (body.contratista !== undefined) payload.contratista = body.contratista;

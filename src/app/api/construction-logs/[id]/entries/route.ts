@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { createSupabaseServer } from '@/lib/supabase-server';
+import { requireUser, isUuid } from '@/lib/api-auth';
+import { checkLogAccess } from '@/lib/api-access';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -8,15 +9,39 @@ interface RouteContext {
 
 /**
  * POST /api/construction-logs/[id]/entries
- * Body: { entry_date?, etapa?, clima?, descripcion, observaciones?, lat?, lng? }
+ * Body: { entry_date?, etapa?, clima?, descripcion, observaciones?, lat?, lng?, id? }
  * Agrega una entrada nueva. Bloquea si la bitácora ya está cerrada.
+ * Requiere sesión y, para contratistas, que la bitácora sea suya.
+ *
+ * `id` opcional (UUID generado por la app móvil): creación idempotente —
+ * si ya existe una entrada con ese id en esta bitácora se devuelve esa
+ * (`existing: true`), aunque la bitácora se haya cerrado entre tanto.
  */
 export async function POST(request: Request, context: RouteContext) {
   try {
+    const auth = await requireUser(request);
+    if ('response' in auth) return auth.response;
+    const { user } = auth;
     const { id } = await context.params;
+    const blocked = await checkLogAccess(user, id);
+    if (blocked) return blocked;
+
     const body = await request.json();
     const descripcion = String(body.descripcion ?? '').trim();
     if (!descripcion) return NextResponse.json({ error: 'descripcion es requerida' }, { status: 400 });
+
+    if (body.id !== undefined) {
+      if (!isUuid(body.id)) return NextResponse.json({ error: 'id inválido' }, { status: 400 });
+      const { data: existing } = await supabaseAdmin
+        .from('construction_log_entries')
+        .select('*')
+        .eq('id', body.id)
+        .maybeSingle();
+      if (existing) {
+        if (existing.log_id !== id) return NextResponse.json({ error: 'id ya usado en otra bitácora' }, { status: 409 });
+        return NextResponse.json({ entry: { ...existing, photos: [] }, existing: true });
+      }
+    }
 
     const { data: log, error: logErr } = await supabaseAdmin
       .from('construction_logs')
@@ -28,16 +53,10 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Esta bitácora está cerrada — reábrela para agregar entradas.' }, { status: 409 });
     }
 
-    let createdBy: string | null = null;
-    try {
-      const supa = await createSupabaseServer();
-      const { data } = await supa.auth.getUser();
-      createdBy = data.user?.email?.toLowerCase() ?? null;
-    } catch { /* sin sesión disponible */ }
-
     const { data: entry, error } = await supabaseAdmin
       .from('construction_log_entries')
       .insert({
+        ...(isUuid(body.id) ? { id: body.id } : {}),
         log_id: id,
         entry_date: body.entry_date ?? new Date().toISOString().slice(0, 10),
         etapa: body.etapa ?? null,
@@ -46,7 +65,7 @@ export async function POST(request: Request, context: RouteContext) {
         observaciones: body.observaciones ?? null,
         lat: body.lat ?? null,
         lng: body.lng ?? null,
-        created_by: createdBy,
+        created_by: user?.email ?? null,
       })
       .select('*')
       .single();

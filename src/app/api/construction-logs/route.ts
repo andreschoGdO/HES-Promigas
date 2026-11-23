@@ -1,30 +1,24 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { createSupabaseServer } from '@/lib/supabase-server';
-import { getRoleFromEmail } from '@/lib/user-role';
+import { requireUser, restrictedEmail, isUuid } from '@/lib/api-auth';
 
 /**
  * GET /api/construction-logs?casa=&status=
- * Lista bitácoras de construcción, más recientes primero.
+ * Lista bitácoras de construcción, más recientes primero. Requiere sesión
+ * (cookie web o Bearer de la app móvil).
  *
  * Autorización por rol — mismo patrón que /api/visits:
  *   - admin/operativo: ve todas.
  *   - user (contratista): solo las que él mismo abrió (opened_by = su email).
  */
 export async function GET(request: Request) {
+  const auth = await requireUser(request);
+  if ('response' in auth) return auth.response;
+  const restrictToEmail = restrictedEmail(auth.user);
+
   const url = new URL(request.url);
   const casa = url.searchParams.get('casa');
   const status = url.searchParams.get('status');
-
-  let restrictToEmail: string | null = null;
-  try {
-    const supa = await createSupabaseServer();
-    const { data } = await supa.auth.getUser();
-    const email = data.user?.email ?? null;
-    if (email && getRoleFromEmail(email) === 'user') restrictToEmail = email.toLowerCase();
-  } catch {
-    // Sin sesión disponible: el middleware ya bloqueó el acceso sin login.
-  }
 
   let q = supabaseAdmin
     .from('construction_logs')
@@ -41,38 +35,58 @@ export async function GET(request: Request) {
 
 /**
  * POST /api/construction-logs
- * Body: { casa, contratista?, house_id? }
+ * Body: { casa, contratista?, house_id?, id? }
  *
  * Si ya existe una bitácora "abierta" para esa casa, la reutiliza en vez de
  * crear una duplicada (una casa no debería tener 2 bitácoras abiertas a la
  * vez). Si la única que existe está "cerrada", crea una nueva.
+ *
+ * Para un contratista (rol 'user') esa reutilización solo mira las
+ * bitácoras que él mismo abrió: nunca se le devuelve una ajena, a la que
+ * después no podría entrar (ver checkLogAccess).
+ *
+ * `id` opcional (UUID generado por la app móvil): creación idempotente —
+ * si ya existe una bitácora con ese id se devuelve esa (`existing: true`).
  */
 export async function POST(request: Request) {
   try {
+    const auth = await requireUser(request);
+    if ('response' in auth) return auth.response;
+    const { user } = auth;
+    const mine = restrictedEmail(user);
+
     const body = await request.json();
     const casa = String(body.casa ?? '').trim();
     if (!casa) return NextResponse.json({ error: 'casa es requerida' }, { status: 400 });
 
-    let createdBy: string | null = null;
-    try {
-      const supa = await createSupabaseServer();
-      const { data } = await supa.auth.getUser();
-      createdBy = data.user?.email?.toLowerCase() ?? null;
-    } catch { /* sin sesión disponible */ }
-    if (!createdBy) createdBy = body.opened_by ?? null;
+    if (body.id !== undefined) {
+      if (!isUuid(body.id)) return NextResponse.json({ error: 'id inválido' }, { status: 400 });
+      const { data: byId } = await supabaseAdmin.from('construction_logs').select('*').eq('id', body.id).maybeSingle();
+      if (byId) {
+        if (mine && (byId.opened_by ?? '').toLowerCase() !== mine) {
+          return NextResponse.json({ error: 'no autorizado' }, { status: 403 });
+        }
+        return NextResponse.json({ log: byId, reused: false, existing: true });
+      }
+    }
 
-    const { data: existing, error: findErr } = await supabaseAdmin
+    // opened_by sale de la sesión; solo sin sesión (dev con DISABLE_AUTH) se acepta el body.
+    const createdBy: string | null = user?.email ?? body.opened_by ?? null;
+
+    let openQ = supabaseAdmin
       .from('construction_logs')
       .select('*')
       .eq('casa', casa)
-      .eq('status', 'abierta')
-      .maybeSingle();
+      .eq('status', 'abierta');
+    if (mine) openQ = openQ.eq('opened_by', mine);
+    const { data: existing, error: findErr } = await openQ.order('opened_at', { ascending: false }).limit(1).maybeSingle();
     if (findErr) throw findErr;
     if (existing) return NextResponse.json({ log: existing, reused: true });
 
     const { data: created, error } = await supabaseAdmin
       .from('construction_logs')
       .insert({
+        ...(isUuid(body.id) ? { id: body.id } : {}),
         casa,
         house_id: body.house_id ?? null,
         contratista: body.contratista ?? null,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { createSupabaseServer } from '@/lib/supabase-server';
+import { requireUser } from '@/lib/api-auth';
+import { checkLogAccess } from '@/lib/api-access';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -11,8 +12,12 @@ interface RouteContext {
  * Devuelve la bitácora + sus entradas (con fotos) ordenadas por fecha de
  * entrada descendente (la más reciente primero, como un feed).
  */
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
+  const auth = await requireUser(request);
+  if ('response' in auth) return auth.response;
   const { id } = await context.params;
+  const blocked = await checkLogAccess(auth.user, id);
+  if (blocked) return blocked;
 
   const { data: log, error: logErr } = await supabaseAdmin
     .from('construction_logs')
@@ -70,15 +75,14 @@ export async function GET(_request: Request, context: RouteContext) {
  */
 export async function PATCH(request: Request, context: RouteContext) {
   try {
+    const auth = await requireUser(request);
+    if ('response' in auth) return auth.response;
     const { id } = await context.params;
+    const blocked = await checkLogAccess(auth.user, id);
+    if (blocked) return blocked;
     const body = await request.json();
 
-    let actor: string | null = null;
-    try {
-      const supa = await createSupabaseServer();
-      const { data } = await supa.auth.getUser();
-      actor = data.user?.email?.toLowerCase() ?? null;
-    } catch { /* sin sesión disponible */ }
+    const actor: string | null = auth.user?.email ?? null;
 
     const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.contratista !== undefined) payload.contratista = body.contratista;
@@ -110,9 +114,13 @@ export async function PATCH(request: Request, context: RouteContext) {
  * Borra la bitácora completa (entradas y fotos en cascade a nivel de BD;
  * los archivos en Storage se limpian aparte, la BD no los toca).
  */
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   try {
+    const auth = await requireUser(request);
+    if ('response' in auth) return auth.response;
     const { id } = await context.params;
+    const blocked = await checkLogAccess(auth.user, id);
+    if (blocked) return blocked;
     const { data: entries } = await supabaseAdmin.from('construction_log_entries').select('id').eq('log_id', id);
     const entryIds = (entries ?? []).map((e) => e.id);
     if (entryIds.length > 0) {

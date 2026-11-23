@@ -1,49 +1,26 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { createSupabaseServer } from '@/lib/supabase-server';
 import { linkVisitToInventory } from '@/lib/inventory-visit-link';
-import { getRoleFromEmail } from '@/lib/user-role';
+import { requireUser, isStale } from '@/lib/api-auth';
+import { checkVisitAccess } from '@/lib/api-access';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-/**
- * Si el usuario es contratista (rol 'user'), solo puede ver/editar/borrar
- * sus propias visitas (created_by = su email). Devuelve null si está OK,
- * o un NextResponse con 403/404 si debe bloquearse.
- */
-async function enforceOwnership(visitId: string): Promise<NextResponse | null> {
-  try {
-    const supa = await createSupabaseServer();
-    const { data } = await supa.auth.getUser();
-    const email = data.user?.email?.toLowerCase() ?? null;
-    if (!email) return null; // sin sesión, deja que la regla normal de upstream maneje
-    if (getRoleFromEmail(email) === 'admin') return null; // admins pasan
-    // user: validar que la visita le pertenezca
-    const { data: visit } = await supabaseAdmin
-      .from('field_visits')
-      .select('created_by')
-      .eq('id', visitId)
-      .maybeSingle();
-    if (!visit) return NextResponse.json({ error: 'no encontrado' }, { status: 404 });
-    const owner = (visit.created_by ?? '').toLowerCase();
-    if (owner !== email) {
-      return NextResponse.json({ error: 'no autorizado' }, { status: 403 });
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
+// Todas las operaciones requieren sesión (cookie web o Bearer de la app
+// móvil). Un contratista (rol 'user') solo puede ver/editar/borrar sus
+// propias visitas — ver checkVisitAccess.
 
 /**
  * GET /api/visits/[id]
  * Trae una visita + sus fotos asociadas con signed URLs.
  */
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
+  const auth = await requireUser(request);
+  if ('response' in auth) return auth.response;
   const { id } = await context.params;
-  const blocked = await enforceOwnership(id);
+  const blocked = await checkVisitAccess(auth.user, id);
   if (blocked) return blocked;
 
   const { data: visit, error } = await supabaseAdmin
@@ -73,11 +50,18 @@ export async function GET(_request: Request, context: RouteContext) {
 /**
  * PATCH /api/visits/[id]
  * Actualiza una visita (form_data, status, notas, etc.)
+ *
+ * `base_updated_at` opcional (lo envía la app móvil): el `updated_at` de la
+ * versión sobre la que el cliente editó. Si el servidor ya tiene otra,
+ * responde 409 `{ error: 'conflict', visit }` con la versión actual en vez de
+ * pisarla. La web no lo envía y conserva el comportamiento de siempre.
  */
 export async function PATCH(request: Request, context: RouteContext) {
   try {
+    const auth = await requireUser(request);
+    if ('response' in auth) return auth.response;
     const { id } = await context.params;
-    const blocked = await enforceOwnership(id);
+    const blocked = await checkVisitAccess(auth.user, id);
     if (blocked) return blocked;
 
     const body = await request.json();
@@ -86,9 +70,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     for (const k of allowed) {
       if (k in body) updates[k] = body[k];
     }
+
+    const { data: prev } = await supabaseAdmin.from('field_visits').select('status, updated_at').eq('id', id).maybeSingle();
+    if (!prev) return NextResponse.json({ error: 'no encontrado' }, { status: 404 });
+    if (isStale(body.base_updated_at, prev.updated_at)) {
+      // Solo en conflicto se trae la fila completa (form_data puede pesar por las firmas).
+      const { data: current } = await supabaseAdmin.from('field_visits').select('*').eq('id', id).maybeSingle();
+      return NextResponse.json({ error: 'conflict', visit: current }, { status: 409 });
+    }
+
     // Detectar transición a completed para disparar el enlace de inventario una sola vez
-    const { data: prev } = await supabaseAdmin.from('field_visits').select('status').eq('id', id).single();
-    const transitioningToCompleted = body.status === 'completed' && prev?.status !== 'completed';
+    const transitioningToCompleted = body.status === 'completed' && prev.status !== 'completed';
     if (body.status === 'completed') updates.completed_at = new Date().toISOString();
 
     const { data, error } = await supabaseAdmin.from('field_visits').update(updates).eq('id', id).select('*').single();
@@ -119,10 +111,12 @@ export async function PATCH(request: Request, context: RouteContext) {
  * DELETE /api/visits/[id]
  * Borra una visita y sus fotos (cascade).
  */
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   try {
+    const auth = await requireUser(request);
+    if ('response' in auth) return auth.response;
     const { id } = await context.params;
-    const blocked = await enforceOwnership(id);
+    const blocked = await checkVisitAccess(auth.user, id);
     if (blocked) return blocked;
 
     // Primero borrar fotos del storage

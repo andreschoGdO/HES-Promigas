@@ -175,9 +175,16 @@ def verificar(longitudes: list[int], m: Modulo, inv: Inversor, tmin: float) -> O
     return Opcion(longitudes, round(voc, 1), round(vmp_min, 1), round(vmp_max, 1), adv)
 
 
+# Más de este número de módulos se reparten en varios strings aunque la tensión lo permita
+# (usuario: los strings de 14 y 16 módulos de Livoltek se dividen en dos).
+MAX_SERIE_PREFERIDA = 10
+
+
 def proponer_strings(n: int, m: Modulo, inv: Inversor, tmin: float) -> Opcion | None:
-    """Menor número de strings (uno por MPPT) que cumple, con longitudes lo más parejas posible."""
-    for k in range(1, inv.n_mppt + 1):
+    """Menor número de strings (uno por MPPT) que cumple, con longitudes lo más parejas posible
+    y sin pasar de MAX_SERIE_PREFERIDA módulos por string cuando hay MPPT libres."""
+    k_min = min(inv.n_mppt, -(-n // MAX_SERIE_PREFERIDA))
+    for k in range(k_min, inv.n_mppt + 1):
         op = proponer_strings_k(n, k, m, inv, tmin)
         if op:
             return op

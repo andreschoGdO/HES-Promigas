@@ -69,8 +69,8 @@ FAMILIAS: dict[str, dict[str, Any]] = {
             "1N° 8 AWG (T) Cu - THHN/THWN-2 @90°C - 0.6 kV - SR",
         ],
         "alim_principal": [
-            "3N° 4 AWG (F) Cu - THHN/THWN-2 @90°C - 0.6 kV - SR",
-            "1N° 4 AWG (N) Cu - THHN/THWN-2 @90°C - 0.6 kV - SR",
+            "3N° 6 AWG (F) Cu - THHN/THWN-2 @90°C - 0.6 kV - SR",
+            "1N° 6 AWG (N) Cu - THHN/THWN-2 @90°C - 0.6 kV - SR",
             "1N° 8 AWG (T) Cu - THHN/THWN-2 @90°C - 0.6 kV - SR verde",
             'Tubería IMC, Coraza ó SCH40 de 2"   L=10 metros',
         ],
@@ -140,8 +140,13 @@ def torres_bateria(familia: str, n: int, bms: int) -> tuple[list[int], list[str]
         k = max(bms, -(-n // maximo))
         base, resto = divmod(n, k)
         t = [base + 1] * resto + [base] * (k - resto)
-    if len(t) != bms:
-        avisos.append(f"el Excel indica {bms} BMS y el reparto da {len(t)} torre(s) {t}")
+    # Livoltek: 1 BMS en la torre 1 y top cover en la 2; DEYE y Huawei: un BMS (o módulo de
+    # potencia) por torre (usuario).
+    bms_esperados = 1 if familia.startswith("livoltek") else len(t)
+    if bms != bms_esperados:
+        avisos.append(
+            f"el Excel indica {bms} BMS; con {len(t)} torre(s) {t} corresponde(n) {bms_esperados}"
+        )
     return t, avisos
 
 
@@ -149,6 +154,13 @@ def torres_bateria(familia: str, n: int, bms: int) -> tuple[list[int], list[str]
 def _slug(s: str) -> str:
     s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
     return re.sub(r"[^A-Za-z0-9]", "", s).upper()
+
+
+def _codigo_proyecto(nombre: str) -> str:
+    """Código corto del proyecto sin palabras genéricas (CONDOMINIO DORAL → DORAL)."""
+    genericas = {"CONDOMINIO", "CONJUNTO", "CAMPESTRE", "DE", "LA", "EL", "DEL", "LOS", "LAS"}
+    palabras = [_slug(w) for w in nombre.split() if _slug(w) not in genericas] or [_slug(nombre)]
+    return "".join(palabras)[:14]
 
 
 def datos_casa(casa: dict[str, Any], fila_plan: dict[str, Any], biblioteca) -> dict[str, Any]:
@@ -180,7 +192,11 @@ def datos_casa(casa: dict[str, Any], fila_plan: dict[str, Any], biblioteca) -> d
             ("Energía por módulo (kWh)", _f(mb["energia_kwh"])),
             ("Voltaje nominal módulo (V)", _f(mb["tension_nominal_v"], 1)),
             ("Módulos por torre", " + ".join(map(str, torres))),
-            ("Torres en paralelo (BMS)", len(torres)),
+            ("Torres en paralelo", len(torres)),
+            (
+                "BMS / top cover",
+                f"1 / {len(torres) - 1}" if familia.startswith("livoltek") else len(torres),
+            ),
             ("Voltaje por torre (V)", " / ".join(_f(v, 1) for v in b["v_torres"])),
             ("Energía total instalada (kWh)", _f(n_bat * mb["energia_kwh"])),
             (f"Energía útil ({dod} % DOD) (kWh)", _f(b["kwh_util"])),
@@ -868,7 +884,12 @@ def _baterias(lam: Lamina, d: dict[str, Any], centros: dict[str, float], iy: flo
         lam.texto(
             (x + tw / 2, y0 + alto - 2.2), f"TORRE {i + 1}", 1.35, "TEXTO", "centro", negrita=True
         )
-        sub = "Mód. potencia" if huawei else "BMS"
+        if huawei:
+            sub = "Mód. potencia"
+        elif d["familia"].startswith("livoltek") and i > 0:
+            sub = "Top cover"
+        else:
+            sub = "BMS"
         lam.texto((x + tw / 2, y0 + alto - 4.6), f"{sub} + {n} mód.", 1.1, "TEXTO", "centro")
         v = b["v_torres"][i]
         if v:
@@ -1070,7 +1091,11 @@ def materiales(d: dict[str, Any]) -> list[dict[str, Any]]:
             (f"Módulo FV {d['modulo']['modelo']} 595 Wp", d["modulos"], "und"),
             (f"Inversor híbrido {d['inversor_modelo']}", 1, "und"),
             (f"Batería {b['texto']} módulo {b['modulo']}", b["n"], "und"),
-            ("BMS / caja de control de batería", len(b["torres"]), "und"),
+            *(
+                [("BMS (torre 1) / top cover (torre 2)", f"1 / {len(b['torres']) - 1}", "und")]
+                if d["familia"].startswith("livoltek") and len(b["torres"]) > 1
+                else [("BMS / caja de control de batería", len(b["torres"]), "und")]
+            ),
             ("Tablero FV con transferencia (K1)", 1, "und"),
             ("Medidor DTSY23S (red / solar)", 2, "und"),
             ("Modem Pulsar IN1043-INELCA", 1, "und"),
@@ -1098,7 +1123,7 @@ def notas(d: dict[str, Any]) -> list[str]:
 
 def lamina_casa(d: dict[str, Any], fecha: str, disenador: str = "") -> Lamina:
     plantilla = validar.cargar_json(validar.RAIZ / "templates" / "cajetin.json")
-    codigo = f"PRO-ELE-{_slug(d['proyecto'])[:10]}-C{_slug(str(d['casa']))}-UNI-001"
+    codigo = f"PRO-ELE-{_codigo_proyecto(d['proyecto'])}-C{_slug(str(d['casa']))}-UNI-001"
     lam = Lamina(
         1, codigo, "Diagrama unifilar", disciplina="ELE", tipo="UNI", escala="N/A", unidad="N/A"
     )

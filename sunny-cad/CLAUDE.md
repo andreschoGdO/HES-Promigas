@@ -93,5 +93,8 @@ Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y f
   con transferencia K1, red aguas arriba del medidor 1, módem alimentado desde la salida de K1); Livoltek
   usa el mismo esquema que DEYE; Huawei bifásico según la guía SSFV_CASA_BIFASICA (SmartGuard,
   autotransformador, DTSY23S en la salida del inversor, Smart Dongle).
-- Torres Livoltek BHF: hasta 4 módulos en una torre; más de 4, dos torres de 3 + 3 o 3 + 2.
+- Torres Livoltek BHF: hasta 4 módulos en una torre; más de 4, dos torres de 3 + 3 o 3 + 2, con 1 BMS
+  y 1 top cover. DEYE: un BMS por torre. Huawei: LUNA2000-7-E1 (bifásicas a 240 V).
+- Strings de más de 10 módulos se dividen en dos (un string por MPPT).
+- Trifásicos: alimentador hasta el punto final del tablero de conexión en 6 AWG Cu.
 

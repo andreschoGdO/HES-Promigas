@@ -20,3 +20,6 @@ projects/*/propuestas/
 
 # Excel de seguimiento con coordenadas exactas (simulaciones)
 simulaciones/**/privado/
+
+# Unifilares de casas (llevan el nombre del diseñador)
+unifilares/privado/

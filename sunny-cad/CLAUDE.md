@@ -96,5 +96,8 @@ Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y f
 - Torres Livoltek BHF: hasta 4 módulos en una torre; más de 4, dos torres de 3 + 3 o 3 + 2, con 1 BMS
   y 1 top cover. DEYE: un BMS por torre. Huawei: LUNA2000-7-E1 (bifásicas a 240 V).
 - Strings de más de 10 módulos se dividen en dos (un string por MPPT).
+- Bifásicos Huawei: hoja 2 con el plano de comunicaciones (SmartGuard ↔ inversor ↔ torre 1 ↔ torre 2,
+  según la guía SSFV_..._COMUNICACIÓN); solo cambia con una o dos torres. Autotransformador con toma
+  central (N) hacia el tablero existente; sin línea separada de bypass del neutro.
 - Trifásicos: alimentador hasta el punto final del tablero de conexión en 6 AWG Cu.
 

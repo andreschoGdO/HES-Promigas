@@ -82,3 +82,23 @@ def test_lamina_pdf(tmp_path: Path) -> None:
     assert "N° 4 AWG" not in textos
     assert "Alimentación adaptador 110 VAC (F+N)" in textos  # el módem tiene alimentación
     assert a_pdf([lam], tmp_path / "u.pdf").read_bytes()[:4] == b"%PDF"
+
+
+def test_bifasico_lleva_hoja_de_comunicaciones() -> None:
+    from engine.planos import comunicaciones_huawei as ch
+
+    for bms, n, enlaces in ((2, 4, True), (1, 1, False)):
+        d = _datos(inversor="Huawei 10kW", tipo="Bifasico", modulos=7, baterias=n, bms=bms)
+        lams = uc.laminas_casa(d, "2026-11-24")
+        assert [x.codigo.split("-")[-2] for x in lams] == ["UNI", "COM"]
+        textos = " ".join(p["s"] for p in lams[1].primitivas if p["t"] == "texto")
+        assert "485A1" in textos and "D12+" in textos and "EN+" in textos
+        assert ("CAN H" in textos) == enlaces  # el enlace entre torres solo con dos torres
+    # El unifilar bifásico ya no lleva la línea punteada del bypass del neutro
+    textos = " ".join(p["s"] for p in lams[0].primitivas if p["t"] == "texto")
+    assert "AUTOTRANSFORMADOR" in textos and "bypass del neutro existente (medidor" not in textos
+    assert len(ch.BATERIA_BATERIA) == 7
+
+
+def test_trifasico_una_sola_hoja() -> None:
+    assert len(uc.laminas_casa(_datos(), "2026-11-24")) == 1

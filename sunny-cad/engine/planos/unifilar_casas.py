@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import re
 import unicodedata
 from pathlib import Path
@@ -988,14 +989,28 @@ def _lado_ac_huawei(lam: Lamina, d, ix, iy, iw, ih, centros, y_red) -> None:
         lam, rx + 3, 242.5, ["2x6 AWG Cu. THHN/THWN-2 (F)", "1x6 AWG Cu. THHN/THWN-2 (N)"], 1.0
     )
     lam.texto((310, y_g + 1.5), "2x6 AWG Cu. THHN/THWN-2 (F)", 1.1, "TEXTO")
-    # Carga de respaldo → autotransformador → tablero existente
-    ax, ay = 300, 186
-    lam.linea((278, y_c), (ax, y_c), "UNIFILAR")
+    # Carga de respaldo → autotransformador (devanado único con toma central N) → tablero
+    xa, y_top, paso = 306.0, 194.0, 4.0
+    lam.linea((278, y_c), (xa, y_c), "UNIFILAR")
+    lam.linea((xa, y_c), (xa, y_top), "UNIFILAR")
     lam.texto((282, y_c - 3), "2x6 AWG (F)", 1.1, "TEXTO")
-    lam.rect(ax, ay, 12, 18, "UNIFILAR")
-    for k in range(4):
-        lam.circulo((ax + 4, ay + 3 + k * 4), 1.8, "UNIFILAR")
-    lam.texto((ax + 6, ay - 2.5), "Autotransformador", 1.3, "TEXTO", "centro", negrita=True)
+    for k in range(4):  # cuatro semiespiras hacia la derecha
+        yc = y_top - paso / 2 - k * paso
+        pts = [
+            (xa + paso / 2 * math.cos(t), yc + paso / 2 * math.sin(t))
+            for t in [math.pi / 2 - math.pi * q / 12 for q in range(13)]
+        ]
+        lam.polilinea(pts, "UNIFILAR")
+    y_bot = y_top - 4 * paso
+    y_tap = (y_top + y_bot) / 2
+    lam.linea((xa + paso / 2, y_tap), (xa + 7, y_tap), "UNIFILAR")
+    lam.circulo((xa + 7, y_tap), 0.7, "UNIFILAR")
+    lam.texto((xa - 1.5, y_top - 1), "L1", 1.2, "TEXTO", "der")
+    lam.texto((xa - 1.5, y_bot), "L2", 1.2, "TEXTO", "der")
+    lam.texto((xa + 8.2, y_tap + 1.2), "N", 1.2, "TEXTO")
+    lam.texto((xa - 4, y_tap + 1), "AUTOTRANSFORMADOR", 1.3, "TEXTO", "der", negrita=True)
+    lam.texto((xa - 4, y_tap - 1.4), "240 V / 120-120 V (toma central)", 1.05, "TEXTO", "der")
+    lam.rect(xa - 3, y_bot - 2, 13, y_top - y_bot + 4, "NOTA", trazo="discontinuo")
     ex, y_barra = _tablero_existente(
         lam,
         "Tablero de distribución existente - 240 V - 2F+N+T",
@@ -1004,33 +1019,25 @@ def _lado_ac_huawei(lam: Lamina, d, ix, iy, iw, ih, centros, y_red) -> None:
             "2X30 A", "1X50 A", "1X20 A", "1X20 A", "2X30 A", "1X20 A",
         ],
     )  # fmt: skip
-    xa = ax + 6
-    lam.linea((xa, ay), (xa, y_barra), "UNIFILAR")
+    lam.linea((xa, y_bot), (xa, y_barra), "UNIFILAR")  # L1-L2
+    lam.linea((xa + 7, y_tap - 0.7), (xa + 7, y_barra), "UNIFILAR")  # N de la toma central
     _marcas_fases(lam, xa - 1.4, 150, 2)
     _alimentador(
-        lam, xa + 2, 160, ["2x6 AWG Cu. THHN/THWN-2 (F)", "1x6 AWG Cu. THHN/THWN-2 (N)"], 1.05
+        lam, xa + 9, 160, ["2x6 AWG Cu. THHN/THWN-2 (F)", "1x6 AWG Cu. THHN/THWN-2 (N)"], 1.05
     )
     cajetin._envolver(
         lam,
-        316,
+        318,
         204,
         "Nota: en modo isla el inversor entrega 240 V entre L1-L2 sin punto neutro. Este "
         "autotransformador crea y estabiliza el neutro (center-tap) para dar referencia a las "
         "cargas de 120 V (L-N) existentes; sin él, el desbalance entre L1-N y L2-N causaría "
         "sobre/subtensión en dichas cargas.",
-        42,
+        40,
         1.15,
         1.8,
         8,
     )
-    # Bypass del neutro existente: del medidor del OR al tablero existente
-    lam.linea((rx + 3, 229), (rx + 3, 104), "AC", trazo="discontinuo")
-    lam.linea((rx + 3, 104), (ex + 92, 104), "AC", trazo="discontinuo")
-    lam.linea((ex + 92, 104), (ex + 92, y_barra), "AC", trazo="discontinuo")
-    lam.texto(
-        (rx + 5, 118), "N: bypass del neutro existente (medidor OR → tablero)", 1.1, "AC",
-        rotacion=90,
-    )  # fmt: skip
     # Módem Pulsar: RS485 al DTSY23S y alimentación desde el tablero existente
     mx, my = 186, 124
     lam.rect(mx, my, 10, 12, "PROTECCION")
@@ -1121,14 +1128,14 @@ def notas(d: dict[str, Any]) -> list[str]:
     ]
 
 
-def lamina_casa(d: dict[str, Any], fecha: str, disenador: str = "") -> Lamina:
-    plantilla = validar.cargar_json(validar.RAIZ / "templates" / "cajetin.json")
-    codigo = f"PRO-ELE-{_codigo_proyecto(d['proyecto'])}-C{_slug(str(d['casa']))}-UNI-001"
-    lam = Lamina(
-        1, codigo, "Diagrama unifilar", disciplina="ELE", tipo="UNI", escala="N/A", unidad="N/A"
-    )
-    lam.notas = notas(d)
-    datos = {
+def codigo_plano(d: dict[str, Any], tipo: str, numero: int) -> str:
+    return f"PRO-ELE-{_codigo_proyecto(d['proyecto'])}-C{_slug(str(d['casa']))}-{tipo}-{numero:03d}"
+
+
+def datos_cajetin(
+    d: dict[str, Any], lam: Lamina, fecha: str, disenador: str, hoja: str, plantilla
+) -> dict[str, Any]:
+    return {
         "revisiones": [
             {
                 "revision": "A",
@@ -1145,22 +1152,54 @@ def lamina_casa(d: dict[str, Any], fecha: str, disenador: str = "") -> Lamina:
         "disenado_por": disenador,
         "localizacion": f"{d['ciudad'].title()}, {DEPARTAMENTO.get(d['ciudad'], '')} "
         f"({d['lat']:.2f}, {d['lon']:.2f})",
-        "archivo": f"{codigo}.pdf",
+        "archivo": f"{codigo_plano(d, 'UNI', 1)}.pdf",
         "tolerancia": "N/A",
         "proyecto": (
             f"Solar FV + BESS {d['proyecto'].title()} – Casa {d['casa']} – {_f(d['kwp'])} kWp"
         ),
-        "contenido": "Diagrama unifilar",
+        "contenido": lam.titulo,
         "tamano": lam.formato,
-        "codigo": codigo,
+        "codigo": lam.codigo,
         "rev": "A",
         "escala": "N/A",
         "unidad": "N/A",
-        "hoja": "1/1",
+        "hoja": hoja,
     }
-    cajetin.dibujar(lam, plantilla, datos, validar.RAIZ)
+
+
+def laminas_casa(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
+    """Unifilar (hoja 1) y, en las bifásicas Huawei, plano de comunicaciones (hoja 2)."""
+    plantilla = validar.cargar_json(validar.RAIZ / "templates" / "cajetin.json")
+    huawei = d["familia"] == "huawei10kw"
+    total = 2 if huawei else 1
+    lam = Lamina(
+        1, codigo_plano(d, "UNI", 1), "Diagrama unifilar", disciplina="ELE", tipo="UNI",
+        escala="N/A", unidad="N/A",
+    )  # fmt: skip
+    lam.notas = notas(d)
+    cajetin.dibujar(
+        lam,
+        plantilla,
+        datos_cajetin(d, lam, fecha, disenador, f"1/{total}", plantilla),
+        validar.RAIZ,
+    )
     dibujar(lam, d)
-    return lam
+    out = [lam]
+    if huawei:
+        from engine.planos import comunicaciones_huawei
+
+        com = comunicaciones_huawei.lamina(d)
+        cajetin.dibujar(
+            com, plantilla, datos_cajetin(d, com, fecha, disenador, "2/2", plantilla), validar.RAIZ
+        )
+        comunicaciones_huawei.dibujar(com, d)
+        out.append(com)
+    return out
+
+
+def lamina_casa(d: dict[str, Any], fecha: str, disenador: str = "") -> Lamina:
+    """Solo la hoja del unifilar (compatibilidad)."""
+    return laminas_casa(d, fecha, disenador)[0]
 
 
 def _disenador() -> str:
@@ -1203,8 +1242,8 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as e:
             print(f"OMITIDA {c['proyecto']} {c['casa']}: {e}")
             continue
-        lam = lamina_casa(d, args.fecha, _disenador())
-        ruta = a_pdf([lam], args.salida / f"{lam.codigo}.pdf")
+        lams = laminas_casa(d, args.fecha, _disenador())
+        ruta = a_pdf(lams, args.salida / f"{lams[0].codigo}.pdf")
         print(
             f"{c['proyecto']} {c['casa']}: {ruta}"
             + (f"  AVISOS: {'; '.join(d['avisos'])}" if d["avisos"] else "")

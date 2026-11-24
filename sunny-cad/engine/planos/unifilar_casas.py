@@ -420,9 +420,11 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
             lam.rect(ix - 1, yy - 0.8, 1.6, 1.6, "PROTECCION")
             lam.linea((ix + 0.6, yy), (ds_x + 3, yy), "UNIFILAR")
             lam.linea((ds_x + 3, yy), (ds_x + 5.5, yy + 1.5), "PROTECCION")
-            lam.linea((ds_x + 6, yy), (bx, yy if k == 0 else by + 1.5), "UNIFILAR")
-            if k:
-                lam.linea((bx - 1.5, yy), (bx - 1.5, by + 1.5), "UNIFILAR")
+            y_in = by + alto_m * 0.45 * (0.75 if k == 0 else 0.25)
+            x_q = bx - 3 + k * 1.5
+            lam.linea((ds_x + 6, yy), (x_q, yy), "UNIFILAR")
+            lam.linea((x_q, yy), (x_q, y_in), "UNIFILAR")
+            lam.linea((x_q, y_in), (bx, y_in), "UNIFILAR")
             ys.append(yy)
         entradas_y.append(ys)
         lam.linea((bx + 13, by + alto_m * 0.3), (ix + 36, by + alto_m * 0.3), "UNIFILAR")
@@ -584,11 +586,12 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
     # Medidores 1 (red) y 2 (solar), contactor K1
     m1x, m2x = tx + 78, tx + 78
     kx = tx + tw - 18
-    lam.linea((b1x + 1, y_carga1), (m1x, y_carga1 + 3), "UNIFILAR")
+    lam.linea((b1x + 1, y_carga1 + 3), (m1x, y_carga1 + 3), "UNIFILAR")
     _kwh(lam, m1x, y_carga1, capa="PROTECCION")
     lam.texto((m1x + 4.5, y_carga1 + 10), "MEDIDOR INELCA 1", 1.4, "TEXTO", "centro")
     lam.texto((m1x + 4.5, y_carga1 + 8), "DTSY23S", 1.4, "TEXTO", "centro")
     lam.texto((m1x - 9, y_carga1 + 4.5), "CARGA", 1.6, "TEXTO", "centro")
+    lam.texto((m1x + 16, y_carga1 + 4.5), "FUENTE", 1.6, "TEXTO", "centro")
     _kwh(lam, m2x, y_carga2 - 3, capa="PROTECCION")
     lam.linea((b1x + 1, y_carga2), (m2x, y_carga2), "UNIFILAR")
     lam.texto((m2x + 4.5, y_carga2 + 7), "MEDIDOR INELCA 2", 1.4, "TEXTO", "centro")
@@ -652,7 +655,12 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
     lam.texto((rx + 2, 218), "ALIMENTADOR PRINCIPAL", 1.15, "TEXTO")
     lam.texto((rx + 2, 216), "EXISTENTE", 1.15, "TEXTO")
     # Entra al barraje 1 del tablero FV (se interrumpe el alimentador de la vivienda)
-    lam.linea((rx, y_ent), (b1x + 1, y_ent), "UNIFILAR")
+    x_n = m1x + 24  # nodo aguas arriba del medidor 1 (lado fuente)
+    lam.linea((rx, y_ent), (x_n, y_ent), "UNIFILAR")
+    lam.linea((x_n, y_ent), (x_n, y_carga1 + 3), "UNIFILAR")
+    lam.circulo((x_n, y_carga1 + 3), 0.6, "UNIFILAR", relleno="#000000")
+    lam.texto((x_n + 1.5, y_ent - 3), "Alimentación desde la red", 1.15, "TEXTO")
+    lam.texto((x_n + 1.5, y_ent - 5), "(aguas arriba del medidor 1)", 1.15, "TEXTO")
     _alimentador(
         lam,
         tx + tw + 3,
@@ -673,7 +681,7 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
         lam.texto((tx + tw + 3, y_ent - 18 - k * 2.2), t, 1.35, "ROJO", negrita=True)
 
     # ---------------------------------------------------------------- tablero existente del cliente
-    ex, ey, ew, eh = 262, 56, 143, 38
+    ex, ey, ew, eh = 262, 56, 96, 38
     lam.rect(ex, ey, ew, eh, "PROTECCION", trazo="discontinuo")
     lam.texto(
         (ex + ew / 2, ey + eh + 1.5),
@@ -688,7 +696,7 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
     lam.linea((kx + 3.5, k_bot), (kx + 3.5, ey + eh - 6.8), "UNIFILAR")
     lam.texto((kx + 5, ty - 4), "Alimentador de la vivienda (cargas)", 1.15, "TEXTO")
     for k in range(12):
-        x = ex + 12 + k * 10.6
+        x = ex + 7 + k * 7.5
         lam.linea((x, ey + eh - 8), (x, ey + eh - 12), "PROTECCION")
         lam.linea((x, ey + eh - 12), (x + 1.2, ey + eh - 16), "PROTECCION")
         lam.linea((x, ey + eh - 16.5), (x, ey + 8), "PROTECCION")
@@ -698,7 +706,7 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
             cerrada=True,
             relleno="#e67e22",
         )
-        lam.texto((x + 1.4, ey + eh - 11), "2x20A" if k % 3 != 2 else "1x20A", 1.0, "TEXTO")
+        lam.texto((x + 1.2, ey + eh - 11), "2x20A" if k % 3 != 2 else "1x20A", 0.9, "TEXTO")
     lam.texto((ex + ew / 2, ey + 3), "CARGAS GENERALES DE LA CASA", 1.4, "TEXTO", "centro")
 
     # ---------------------------------------------------------------- circuito de control
@@ -745,8 +753,11 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
             lam.linea((x, cy0 + 15), (x, cy0 + 14.2), "ROJO")
             lam.linea((x, cy0 + 9.8), (x, cy0 + 4.5), "AC")
 
-    # ---------------------------------------------------------------- convenciones
-    lam.texto((340, 166), "CONVENCIONES", 1.6, "TEXTO", negrita=True)
+    # ---------------------------------------------------------------- convenciones (esquina)
+    vx, vy, vw, vh = 361, 56, 44, 38
+    lam.rect(vx, vy, vw, vh, "CAJETIN")
+    lam.texto((vx + vw / 2, vy + vh - 2.6), "CONVENCIONES", 1.6, "TEXTO", "centro", negrita=True)
+    lam.linea((vx, vy + vh - 4.6), (vx + vw, vy + vh - 4.6), "CAJETIN")
     conv = [
         ("UNIFILAR", "Cableado de potencia"),
         ("DC", "Cableado DC (strings / batería)"),
@@ -755,11 +766,18 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
         ("COMUNIC", "Cableado de comunicaciones"),
     ]
     for k, (capa, t) in enumerate(conv):
-        yv = 162 - k * 2.6
-        lam.linea(
-            (338, yv), (345, yv), capa, trazo="discontinuo" if capa == "COMUNIC" else "continuo"
-        )
-        lam.texto((349, yv - 0.6), t, 1.15, "TEXTO")
+        yv = vy + vh - 7.5 - k * 3
+        trazo = "discontinuo" if capa == "COMUNIC" else "continuo"
+        lam.linea((vx + 2, yv), (vx + 9, yv), capa, trazo=trazo)
+        lam.texto((vx + 11, yv - 0.5), t, 1.1, "TEXTO")
+    yv = vy + vh - 7.5 - len(conv) * 3
+    _breaker(lam, vx + 0.5, yv - 0.5, "")
+    lam.texto((vx + 14, yv - 1), "Protección termomagnética", 1.1, "TEXTO")
+    _kwh(lam, vx + 3, yv - 9, 6, 4.5)
+    lam.texto((vx + 11, yv - 7.3), "Medidor de energía", 1.1, "TEXTO")
+    for k in range(2):
+        lam.rect(vx + 2.5 + k * 3.2, yv - 14.5, 2.8, 2.2, "MODULO", relleno="#a8ecd8")
+    lam.texto((vx + 11, yv - 14), "String de paneles", 1.1, "TEXTO")
 
 
 def materiales(d: dict[str, Any]) -> list[dict[str, Any]]:

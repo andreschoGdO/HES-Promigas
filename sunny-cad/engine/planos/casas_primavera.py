@@ -566,7 +566,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
         *SUPUESTOS,
     ]
     out: list[Lamina] = []
-    total = 5
+    total = 3
 
     def cerrar(lam, notas):
         lam.notas = notas
@@ -581,13 +581,12 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     L, ruta_dc, ruta_ac = rutas(g, mods)
     todo = g["lote"]
 
-    # --- Hoja 1: localización y distribución de módulos ------------------------------------
-    lam = _nueva(
-        d, 1, "DIS", "Localización y distribución de módulos", fecha, disenador, total, plantilla
-    )
+    # --- Hoja 1: localización, distribución de módulos, estructura y materiales -------------
+    lam = _nueva(d, 1, "DIS", "Localización, distribución de módulos y materiales", fecha,
+                 disenador, total, plantilla)  # fmt: skip
     lam.texto((14, 258), f"DISTRIBUCIÓN DE MÓDULOS · {titulo_casa}", 3.0, "TEXTO", negrita=True)
     mapa = INSUMOS / "primavera_mapa.png"
-    mx, my, mw, mh = 14, 120, 100, 132
+    mx, my, mw, mh = 14, 136, 84, 112
     lam.imagen(mapa, mx, my, mw, mh)
     lam.rect(mx, my, mw, mh, "CAJETIN")
     px, py = info["mapa"]
@@ -595,28 +594,30 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     lam.circulo((cx, cy), 3.2, "ROJO")
     lam.circulo((cx, cy), 0.8, "ROJO", relleno="#c00000")
     lam.texto((cx + 4, cy + 2), f"CASA {d['casa']}", 1.6, "ROJO", negrita=True)
-    _titulo_vista(lam, mx, my - 6, 1, "Localización en el conjunto")
-    lam.texto((mx + 8, my - 10.5), f"Conjunto: {conj['lat']:.5f}, {conj['lon']:.5f}", 1.5, "NOTA")
-    m = Marco(todo, (122, 118, 200, 132))
+    _titulo_vista(lam, mx, my - 5, 1, "Localización en el conjunto")
+    lam.texto((mx + 8, my - 9.5), f"Conjunto: {conj['lat']:.5f}, {conj['lon']:.5f}", 1.4, "NOTA")
+    _resumen(lam, 14, 118, d, mods, ancho=84)
+    m = Marco(todo, (100, 128, 150, 122), n_opciones=(75, 100, 125, 150))
     _casa_base(lam, m, g)
     _modulos(lam, m, mods)
     _equipos(lam, m, g)
-    _norte(lam, 318, 248)
-    _escala(lam, 124, 112, m.n)
-    _titulo_vista(lam, 124, 106, 2, "Distribución de módulos", f"ESC 1:{m.n}")
-    _resumen(lam, 330, 245, d, mods)
-    detalle_estructura(lam, 120, 62, d["modulos"])
-    _titulo_vista(lam, 124, 86, 3, "Detalle estructura lastrada", "ESC 1:40 (cotas en mm)")
-    cerrar(lam, notas_base)
+    _norte(lam, 244, 248)
+    _escala(lam, 104, 124, m.n)
+    _titulo_vista(lam, 104, 118, 2, "Distribución de módulos", f"ESC 1:{m.n}")
+    detalle_estructura(lam, 96, 62, d["modulos"])
+    _titulo_vista(lam, 104, 100, 3, "Detalle estructura lastrada", "ESC 1:40 (cotas en mm)")
+    tabla_materiales_compacta(lam, 256, 250, materiales_obra(d, L))
+    cerrar(lam, notas_base + [
+        "Materiales: cableado y canalización sobre la ruta del plano + 10 % de reserva.",
+    ])  # fmt: skip
 
-    # --- Hoja 2: ruta DC y detalle --------------------------------------------------------
-    lam = _nueva(d, 2, "RDC", "Ruta de cableado DC y detalle", fecha, disenador, total, plantilla)
-    lam.texto((14, 258), f"RUTA DE CABLEADO DC · {titulo_casa}", 3.0, "TEXTO", negrita=True)
-    m = Marco(todo, (14, 100, 250, 150))
+    # --- Hoja 2: rutas DC y AC en planta y detalle DC ---------------------------------------
+    lam = _nueva(d, 2, "RUT", "Rutas de cableado DC y AC", fecha, disenador, total, plantilla)
+    lam.texto((14, 258), f"RUTAS DE CABLEADO DC Y AC · {titulo_casa}", 3.0, "TEXTO", negrita=True)
+    m = Marco(todo, (14, 70, 256, 176))
     _casa_base(lam, m, g)
     _modulos(lam, m, mods)
     _equipos(lam, m, g)
-    # Conexión en serie (salto entre módulos) y ruta al inversor como tubería rotulada
     cs = [md.centroid for md in mods]
     for a_, b_ in zip(cs[:-1], cs[1:], strict=True):
         lam.linea(m((a_.x + 300, a_.y - 500)), m((b_.x - 300, b_.y - 500)), "CONTROL")
@@ -625,106 +626,46 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     caja_paso(lam, m(ruta_dc[0]), 2.4)
     lam.circulo(m(g["bajante_dc"]), 1.6, "DC")
     lam.texto(m(g["bajante_dc"]), "↑", 1.6, "DC", "centro", negrita=True)
-    _caja_texto(lam, (14, 250), [
-        'Tubería DC: coraza 1" adosada a la cubierta (soportes c/ 1,5 m)',
-        "Cable FV 2x4 mm² (+/-) + 1N° 8 AWG Cu verde",
-        f"Sube {L['dc_vertical']:.1f} m por la fachada hasta el balcón 2° piso (↑)",
-        f"Longitud total DC: {L['dc_total']:.1f} m",
-        "Caja de paso 10x10 cm IP66 a la salida del arreglo",
-    ], h=1.25)  # fmt: skip
-    _norte(lam, 258, 248)
-    _escala(lam, 16, 94, m.n)
-    _titulo_vista(lam, 16, 88, 1, "Ruta de cableado DC", f"ESC 1:{m.n}")
-    _detalle_dc(lam, 272, 112, d)
-    cerrar(
-        lam,
-        notas_base + ["Cable tipo PV-PVC-SR-DB-FR-90°C-Cu-TC-AD7, 1.8 kVdc para conductores DC."],
-    )
-
-    # --- Hoja 3: ubicación de equipos, ruta AC y punto de conexión -------------------------
-    lam = _nueva(
-        d,
-        3,
-        "RAC",
-        "Ubicación de equipos, ruta AC y punto de conexión",
-        fecha,
-        disenador,
-        total,
-        plantilla,
-    )
-    lam.texto(
-        (14, 258), f"UBICACIÓN DE EQUIPOS Y RUTA AC · {titulo_casa}", 3.0, "TEXTO", negrita=True
-    )
-    m = Marco(todo, (14, 128, 190, 122))
-    _casa_base(lam, m, g)
-    _modulos(lam, m, mods, etiquetas=False)
-    _equipos(lam, m, g)
     pc = g["bajante_ac"]
     ruta_planta(lam, m, ruta_ac, "AC", "#cfe0f5", "AC-")
     lam.circulo(m(pc), 1.6, "ROJO")
     lam.texto(m(pc), "↓", 1.6, "ROJO", "centro", negrita=True)
-    for k, (geo, txt) in enumerate(
-        (
-            (
-                g["baterias"],
-                [
-                    f"BATERÍAS {d['bat']['texto']}",
-                    f"{d['bat']['n']} MÓD. - {_f(d['bat']['kwh'])} kWh",
-                ],
-            ),
-            (g["inversor"], ["INVERSOR", d["inversor_modelo"]]),
-            (g["tablero"], ["TABLERO FV", "15 KVA - 220 V - 60 HZ - IP65"]),
-        )
-    ):
-        c = geo.centroid
-        p = (m((c.x, c.y))[0] - 60 + k * 2, m((c.x, c.y))[1] + 12 - k * 9)
-        _caja_texto(lam, p, txt, capa="EQUIPO", h=1.2)
-        _guia(lam, m((c.x, c.y)), (p[0] + 30, p[1] - 3))
-    _caja_texto(
-        lam,
-        (m(pc)[0] + 4, m(pc)[1] - 6),
-        [
-            "Bajante por fachada hacia 1° piso",
-            'Tubería IMC, coraza o SCH40 2"',
-            "→ Punto de conexión (P.C.)",
-        ],
-        h=1.2,
-    )
-    _norte(lam, 198, 248)
-    _escala(lam, 16, 122, m.n)
-    _titulo_vista(lam, 16, 116, 1, "Ubicación de equipos y ruta AC", f"ESC 1:{m.n}")
-    detalle_equipos(lam, 232, 175, d, fam_txt)
-    _titulo_vista(lam, 232, 248, 2, "Detalle ubicación de equipos (balcón 2° piso)", "SIN ESCALA")
-    detalle_punto_conexion(lam, 300, 62)
-    _titulo_vista(lam, 232, 150, 3, "Detalle hasta el punto de conexión", "SIN ESCALA")
+    _norte(lam, 258, 248)
+    _escala(lam, 16, 70, m.n)
+    _titulo_vista(lam, 16, 64, 1, "Rutas de cableado DC y AC", f"ESC 1:{m.n}")
+    _caja_texto(lam, (278, 104), [
+        "RUTA DC (rojo)",
+        'Coraza 1" adosada a la cubierta, soportes c/ 1,5 m',
+        "Cable FV 2x4 mm² (+/-) + 1N° 8 AWG Cu verde",
+        f"Sube {L['dc_vertical']:.1f} m por fachada al balcón (↑)",
+        f"Longitud total DC: {L['dc_total']:.1f} m",
+    ], h=1.25)  # fmt: skip
+    _caja_texto(lam, (278, 82), [
+        "RUTA AC (azul)",
+        'Tubería IMC 2", abrazaderas c/ 1,5 m',
+        "2 x [3N° 6 AWG (F) + 1N° 6 (N) + 1N° 6 (T)] Cu",
+        f"Baja {L['ac_bajante']:.1f} m por fachada al 1° piso (↓)",
+        f"Longitud total AC: {L['ac_total']:.1f} m",
+    ], h=1.25)  # fmt: skip
+    _detalle_dc(lam, 278, 112, d)
+    cerrar(lam, notas_base + [
+        "Cable tipo PV-PVC-SR-DB-FR-90°C-Cu-TC-AD7, 1.8 kVdc para conductores DC.",
+    ])  # fmt: skip
+
+    # --- Hoja 3: esquema 3D, ubicación de equipos y punto de conexión -----------------------
+    lam = _nueva(d, 3, "EQP", "Esquema 3D, ubicación de equipos y punto de conexión", fecha,
+                 disenador, total, plantilla)  # fmt: skip
+    lam.texto((14, 258), f"UBICACIÓN DE EQUIPOS Y PUNTO DE CONEXIÓN · {titulo_casa}", 3.0, "TEXTO",
+              negrita=True)  # fmt: skip
+    isometrico(lam, (14, 58, 196, 186), g, mods, d)
+    _titulo_vista(lam, 16, 248, 1, "Esquema 3D de rutas DC (rojo) y AC (azul)", "SIN ESCALA")
+    detalle_equipos(lam, 240, 178, d, fam_txt)
+    _titulo_vista(lam, 214, 248, 2, "Detalle ubicación de equipos (balcón 2° piso)", "SIN ESCALA")
+    detalle_punto_conexion(lam, 304, 62)
+    _titulo_vista(lam, 214, 154, 3, "Detalle hasta el punto de conexión", "SIN ESCALA")
     cerrar(lam, notas_base + [
         "El cable AC se dimensiona con base al alimentador existente en calibre 6 AWG.",
-        "Interruptores del inversor: corriente máx. de salida AC × 1,25.",
-    ])  # fmt: skip
-    # --- Hoja 4: esquema isométrico de rutas -----------------------------------------------
-    lam = _nueva(d, 4, "ISO", "Esquema isométrico de rutas DC y AC", fecha, disenador, total,
-                 plantilla)  # fmt: skip
-    lam.texto((14, 258), f"ESQUEMA 3D DE RUTAS DC Y AC · {titulo_casa}", 3.0, "TEXTO", negrita=True)
-    isometrico(lam, (14, 56, 300, 196), g, mods, d)
-    _caja_texto(lam, (322, 245), [
-        "CONVENCIONES",
-        'Rojo: ruta DC (coraza 1", cable FV 2x4 mm²)',
-        'Azul: ruta AC (IMC 2", 2 alimentadores 6 AWG)',
-        "Punto rojo: pase en cubierta del patio",
-        "",
-        "LONGITUDES",
-        f"DC total: {L['dc_total']:.1f} m",
-        f"AC total: {L['ac_total']:.1f} m",
-    ], h=1.4)  # fmt: skip
-    cerrar(lam, notas_base)
-
-    # --- Hoja 5: listado de materiales --------------------------------------------------
-    lam = _nueva(d, 5, "MAT", "Listado de materiales", fecha, disenador, total, plantilla)
-    lam.texto((14, 258), f"LISTADO DE MATERIALES · {titulo_casa}", 3.0, "TEXTO", negrita=True)
-    tabla_materiales(lam, 14, 250, materiales_obra(d, L))
-    cerrar(lam, notas_base + [
-        "Cantidades de cableado y canalización sobre la ruta del plano + 10 % de reserva.",
-        "Alturas de bajante y recorrido en el 1° piso: supuestos a verificar en obra.",
+        "Alturas supuestas: piso 2,8 m, cubierta 5,6 m, cubierta del patio 2,6 m.",
     ])  # fmt: skip
     return out
 
@@ -833,7 +774,37 @@ def tabla_materiales(lam, x, y, filas) -> None:
         yy -= h
 
 
-def _resumen(lam, x, y, d, mods) -> None:
+def tabla_materiales_compacta(lam, x, y, filas) -> None:
+    """Listado de materiales con los grupos como filas de título (para la hoja 1)."""
+    cols = [("ITEM", 7), ("DESCRIPCIÓN", 96), ("UND", 9), ("CANT.", 10), ("OBS.", 28)]
+    h = 3.3
+    lam.texto((x, y + 2), "LISTADO DE MATERIALES", 2.0, "TEXTO", negrita=True)
+    xx = x
+    for t, w in cols:
+        lam.rect(xx, y - h, w, h, "CAJETIN", relleno="#d9d9d9")
+        lam.texto((xx + w / 2, y - h / 2), t, 1.3, "TEXTO", "centro", negrita=True)
+        xx += w
+    ancho = sum(w for _, w in cols)
+    yy = y - h
+    for i, (grupo, desc, und, cant, obs) in enumerate(filas, 1):
+        if grupo:
+            lam.rect(x, yy - h, ancho, h, "CAJETIN", relleno="#eeeeee")
+            lam.texto((x + 1.2, yy - h / 2), grupo, 1.3, "TEXTO", "izq_medio", negrita=True)
+            yy -= h
+        xx = x
+        for (_, w), v in zip(cols, (i, desc, und, cant, obs), strict=True):
+            lam.rect(xx, yy - h, w, h, "CAJETIN")
+            centro = w < 12
+            tam = 1.2 if w > 30 else (0.95 if w == 28 else 1.2)
+            lam.texto(
+                (xx + (w / 2 if centro else 0.8), yy - h / 2), str(v)[: int(w / (tam * 0.6))],
+                tam, "TEXTO", "centro" if centro else "izq_medio",
+            )  # fmt: skip
+            xx += w
+        yy -= h
+
+
+def _resumen(lam, x, y, d, mods, ancho=74) -> None:
     filas = [
         ("Módulos", f"{len(mods)} × JAM72D40-595/MB"),
         ("Potencia DC", f"{_f(d['kwp'])} kWp"),
@@ -843,8 +814,8 @@ def _resumen(lam, x, y, d, mods) -> None:
         ("Orientación", "Sur (180°), 10°"),
         ("Estructura", "Lastrada, bloques"),
     ]
-    lam.rect(x, y - 4 - len(filas) * 3.6, 74, 4 + len(filas) * 3.6, "CAJETIN")
-    lam.texto((x + 37, y - 2), "RESUMEN DEL SISTEMA", 1.7, "TEXTO", "centro", negrita=True)
+    lam.rect(x, y - 4 - len(filas) * 3.6, ancho, 4 + len(filas) * 3.6, "CAJETIN")
+    lam.texto((x + ancho / 2, y - 2), "RESUMEN DEL SISTEMA", 1.7, "TEXTO", "centro", negrita=True)
     for i, (k, v) in enumerate(filas):
         yy = y - 6 - i * 3.6
         lam.texto((x + 2, yy), k, 1.4, "NOTA")

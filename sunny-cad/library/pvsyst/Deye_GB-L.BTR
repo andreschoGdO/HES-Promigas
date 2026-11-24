@@ -1,0 +1,88 @@
+﻿PVObject_=pvBattery
+  Comment=Deye	GB-L	Datasheet 2023
+  Version=7.4.8
+  ParObj1=2023
+  Flags=$00
+
+  PVObject_Commercial=pvCommercial
+    Comment=www.deyeess.com  (China)
+    Flags=$0041
+    Manufacturer=Deye
+    Model=GB-L
+    DataSource=Datasheet 2023
+    YearBeg=2023
+    Width=0.540
+    Height=0.220
+    Depth=0.385
+    Weight=39.000
+    NPieces=100
+    PriceDate=14/03/25 18:26
+  End of PVObject pvCommercial
+  BattModeAff=ByElement
+  BattTechnol=Li_LFP
+  Category=BatteryModule
+  NCellSerie=16
+  NCellParall=3
+  NBlockSerie=1
+  NBlockParall=1
+  CapNomC10=40.00
+  DataShDishHours=10.00
+  PeukertCoeff=1.020
+  VNomCell=3.2
+  VHalfSOC_TRef=3.270
+  AlphaSOC=0.1200
+  BattTempRef=20.0
+  BattCoeffTemp=-5.0
+  ResInterne=0.0040
+  EfficI=0.960
+  SOCLD=0.100
+  DVDech=0.500
+  SOCLG=0.900
+  CVGass=11.700
+  ResCorrAmpl=16.667
+  VMax_Charge=3.6
+  VMinDischarge=2.7
+  IMaxCharge=40.000
+  IMaxDischarge=40.000
+  TempMinCharge=0.0
+  TempMinDisch=-20.0
+  ActivE_ResInt=35.0
+  IAutoDech=0.00190
+  DureeVie20=10.00
+
+  CapaTemper=TCubicProfile
+    NPtsMax=5
+    NPtsEff=5
+    LastCompile=$0089
+    Mode=3
+    Point_1=-20.00,0.57
+    Point_2=-10.00,0.75
+    Point_3=0.00,0.90
+    Point_4=20.00,1.00
+    Point_5=45.00,1.02
+  End of TCubicProfile
+
+  IAutoShape=TCubicProfile
+    NPtsMax=5
+    NPtsEff=5
+    LastCompile=$0089
+    Mode=3
+    Point_1=-5.00,0.80
+    Point_2=15.00,0.84
+    Point_3=25.00,1.00
+    Point_4=35.00,2.00
+    Point_5=45.00,4.00
+  End of TCubicProfile
+
+  NbCycleMax=TCubicProfile
+    NPtsMax=5
+    NPtsEff=5
+    LastCompile=$0089
+    Mode=3
+    Point_1=0.20,4400.00
+    Point_2=0.40,2000.00
+    Point_3=0.60,1200.00
+    Point_4=0.80,800.00
+    Point_5=1.00,500.00
+  End of TCubicProfile
+End of PVObject pvBattery

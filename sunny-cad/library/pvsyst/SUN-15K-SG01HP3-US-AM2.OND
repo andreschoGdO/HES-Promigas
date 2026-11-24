@@ -1,0 +1,83 @@
+﻿PVObject_=pvGInverter
+  Comment=deye	SUN-15K-SG01HP3-US-AM2	Manufacturer
+  Version=7.2.16
+  Flags=$00380571
+
+  PVObject_Commercial=pvCommercial
+    Flags=$0041
+    Manufacturer=deye
+    Model=SUN-15K-SG01HP3-US-AM2
+    DataSource=Manufacturer
+    Width=0.408
+    Height=0.638
+    Depth=0.237
+    Weight=30.500
+    NPieces=100
+    PriceDate=02/07/24 15:21
+  End of PVObject pvCommercial
+  Transfo=Without
+
+  Converter=TConverter
+    PNomConv=15.000
+    PMaxOUT=15.000
+    VOutConv=120.0
+    VMppMin=150
+    VMPPMax=500
+    VAbsMax=550
+    PSeuil=123.8
+    EfficMax=97.60
+    EfficEuro=97.00
+    FResNorm=3.00
+    ModeOper=MPPT
+    CompPMax=Lim
+    CompVMax=Cut
+    MonoTri=Tri
+    ModeAffEnum=Efficf_POut
+    UnitAffEnum=kW
+    PNomDC=15.000
+    PMaxDC=19.500
+    IDCMax=0.0
+    IMaxDC=52.0
+    INomAC=41.7
+    IMaxAC=41.7
+    TPNom=50.0
+    TPMax=25.0
+    TPLim1=55.0
+    TPLimAbs=60.0
+    PLim1=7.500
+    PInEffMax =6000.000
+    PThreshEff=47.2
+    HasdefaultPThresh=False
+
+    ProfilPIO=TCubicProfile
+      NPtsMax=11
+      NPtsEff=8
+      LastCompile=$008D
+      Mode=1
+      Point_1=124,0
+      Point_2=389,326
+      Point_3=690,621
+      Point_4=1444,1365
+      Point_5=2950,2854
+      Point_6=4456,4338
+      Point_7=8975,8760
+      Point_8=15000,14579
+      Point_9=0,0
+      Point_10=0,0
+      Point_11=0,0
+    End of TCubicProfile
+  End of TConverter
+  NbInputs=2
+  NbMPPT=2
+  TanPhiMin=-0.750
+  TanPhiMax=0.750
+  NbMSInterne=10
+  MasterSlave=InternalMS
+  IsolSurvey =No
+  DC_Switch=No
+  AC_Switch=Yes
+  DiscAdjust=No
+  ENS_Protec=Yes
+  MS_Thresh=0.8
+  Night_Loss=150.00
+End of PVObject pvGInverter

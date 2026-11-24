@@ -1,0 +1,79 @@
+﻿PVObject_=pvGInverter
+  Comment=Livoltek	HP3-15KD1	Manufacturer
+  Version=7.4.8
+  Flags=$00380571
+
+  PVObject_Commercial=pvCommercial
+    Comment=Livoltek
+    Flags=$0041
+    Manufacturer=Livoltek
+    Model=HP3-15KD1
+    DataSource=Manufacturer
+    Width=0.560
+    Height=0.430
+    Depth=0.250
+    Weight=29.000
+    NPieces=100
+    PriceDate=28/05/24 10:17
+  End of PVObject pvCommercial
+  Transfo=Transfo
+
+  Converter=TConverter
+    PNomConv=15.000
+    PMaxOUT=22.500
+    VOutConv=230.0
+    VMppMin=150
+    VMPPMax=1000
+    VAbsMax=1000
+    PSeuil=75.00
+    EfficMax=97.80
+    EfficEuro=97.40
+    FResNorm=3.00
+    ModeOper=MPPT
+    CompPMax=Lim
+    CompVMax=Lim
+    MonoTri=Tri
+    ModeAffEnum=Efficf_PIn
+    UnitAffEnum=kW
+    PNomDC=15.000
+    PMaxDC=22.500
+    IDCMax=0.000
+    IMaxDC=52.000
+    INomAC=21.800
+    IMaxAC=27.000
+    TPNom=50.0
+    TPMax=25.0
+    TPLim1=55.0
+    TPLimAbs=65.0
+    PLim1=2.973
+    PInEffMax =3600.000
+    PThreshEff=18.67
+    HasdefaultPThresh=False
+
+    ProfilPIO=TCubicProfile
+      NPtsMax=11
+      NPtsEff=8
+      LastCompile=$008D
+      Mode=1
+      Point_1=50,0
+      Point_2=300,266
+      Point_3=500,464
+      Point_4=1000,958
+      Point_5=2000,1945
+      Point_6=3000,2929
+      Point_7=6000,5868
+      Point_8=10000,9753
+      Point_9=0,0
+      Point_10=0,0
+      Point_11=0,0
+    End of TCubicProfile
+  End of TConverter
+  NbInputs=2
+  NbMPPT=2
+  NbMSInterne=2
+  MasterSlave=InternalMS
+  IsolSurvey =Yes
+  DC_Switch=Yes
+  AC_Switch=Yes
+  MS_Thresh=0.8
+End of PVObject pvGInverter

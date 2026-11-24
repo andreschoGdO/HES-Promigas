@@ -92,12 +92,16 @@ def test_bifasico_lleva_hoja_de_comunicaciones() -> None:
         lams = uc.laminas_casa(d, "2026-11-24")
         assert [x.codigo.split("-")[-2] for x in lams] == ["UNI", "COM"]
         textos = " ".join(p["s"] for p in lams[1].primitivas if p["t"] == "texto")
-        assert "485A1" in textos and "D12+" in textos and "EN+" in textos
-        assert ("CAN H" in textos) == enlaces  # el enlace entre torres solo con dos torres
+        assert "485A1" in textos and "D12+" in textos and "EN (enable)" in textos
+        assert ("Torre 2 borne 10" in textos) == enlaces  # enlace entre torres solo con dos
+        assert "CAN H" not in textos and "Torre 1 borne 5" not in textos
     # El unifilar bifásico ya no lleva la línea punteada del bypass del neutro
     textos = " ".join(p["s"] for p in lams[0].primitivas if p["t"] == "texto")
     assert "AUTOTRANSFORMADOR" in textos and "bypass del neutro existente (medidor" not in textos
-    assert len(ch.BATERIA_BATERIA) == 7
+    assert [(o, t) for o, t, _, _ in ch.INVERSOR_BATERIA] == [
+        ("4", "2"), ("3", "3"), ("6", "4"), ("10", "1"),
+    ]  # fmt: skip
+    assert [o for o, _, _, _ in ch.BATERIA_BATERIA] == ["7", "8", "9", "10"]
 
 
 def test_trifasico_una_sola_hoja() -> None:

@@ -19,21 +19,19 @@ SMARTGUARD_INVERSOR = [
     ("4", "9", "GND", "AC"),
     ("PE", "10", "PE", "NOTA"),
 ]
+# Confirmado por el usuario: inversor 4/3/10/6 → batería 2/3/1/4 (el borne 5 no se usa).
 INVERSOR_BATERIA = [
     ("4", "2", "485A2", "ROJO"),
     ("3", "3", "485B2", "ROJO"),
-    ("6", "4", "EN+", "COMUNIC"),
-    ("5", "5", "GND", "COMUNIC"),
+    ("6", "4", "EN (enable)", "COMUNIC"),
     ("10", "1", "PE", "NOTA"),
 ]
+# Confirmado por el usuario: entre torres solo 7, 8, 9 y 10.
 BATERIA_BATERIA = [
-    ("6", "6", "PE", "NOTA"),
     ("7", "7", "485A2", "PROTECCION"),
     ("8", "8", "485B2", "PROTECCION"),
-    ("9", "9", "EN", "COMUNIC"),
+    ("9", "9", "EN (enable)", "COMUNIC"),
     ("10", "10", "GND", "COMUNIC"),
-    ("11", "11", "CAN H", "TIERRA"),
-    ("12", "12", "CAN L", "TIERRA"),
 ]
 
 SG_BORNES = ["1", "2", "3", "4", "5", "6", "PE", "PE", "PE", "PE", "PE", "PE"]
@@ -57,9 +55,9 @@ def lamina(d: dict[str, Any]) -> Lamina:
     lam.notas = [
         "Conexiones de comunicación según el plano de referencia y el manual de Huawei.",
         "SmartGuard ↔ inversor por RS485 (485A1/485B1), D12+ y GND; inversor ↔ batería "
-        "por RS485 (485A2/485B2), EN+ y GND.",
+        "por RS485 (485A2/485B2), enable y PE.",
         (
-            "La torre 2 se enlaza a la torre 1 con CAN H/L, RS485, EN, GND y PE."
+            "La torre 2 se enlaza a la torre 1 con RS485 (485A2/485B2), enable y GND."
             if len(torres) > 1
             else "Una sola torre de baterías: sin enlace entre torres."
         ),
@@ -233,11 +231,9 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
         ("PROTECCION", "RS485 (485A / 485B)"),
         ("ROJO", "RS485 inversor → batería"),
         ("AC", "D12+ / GND (SmartGuard)"),
-        ("COMUNIC", "EN / GND (batería)"),
+        ("COMUNIC", "Enable / GND (batería)"),
         ("NOTA", "PE (tierra de comunicaciones)"),
     ]
-    if len(torres) > 1:
-        conv.insert(4, ("TIERRA", "CAN H / CAN L (entre torres)"))
     for k, (capa, t) in enumerate(conv):
         yy = y - 4 - k * 3
         lam.linea((x0, yy), (x0 + 8, yy), capa)

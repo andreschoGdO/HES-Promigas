@@ -89,4 +89,9 @@ Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y f
 - Diseñador en los planos: Santiago Osorio, sin número de tarjeta profesional (guardado en `privado/`).
 - El proceso completo para viviendas nuevas está en `PROCESO.md` (y en el skill `.claude/skills/nueva-vivienda`).
 - Piso de la terraza continuo; ductería siempre adosada a muros, losas o estructura, nunca en el aire.
+- Unifilares por casa (`engine/planos/unifilar_casas.py`): esquema trifásico de la guía DEYE (tablero FV
+  con transferencia K1, red aguas arriba del medidor 1, módem alimentado desde la salida de K1); Livoltek
+  usa el mismo esquema que DEYE; Huawei bifásico según la guía SSFV_CASA_BIFASICA (SmartGuard,
+  autotransformador, DTSY23S en la salida del inversor, Smart Dongle).
+- Torres Livoltek BHF: hasta 4 módulos en una torre; más de 4, dos torres de 3 + 3 o 3 + 2.
 

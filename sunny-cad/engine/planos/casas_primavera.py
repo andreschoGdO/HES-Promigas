@@ -794,7 +794,8 @@ def materiales_obra(d, L) -> list[tuple]:
         ("ALMACENAMIENTO", f"Batería {b['texto']} módulo {b['modulo']}", "und", b["n"], ""),
         ("", "BMS (torre 1) / top cover (torre 2)" if len(b["torres"]) > 1 else "BMS de la torre",
          "und", 1, ""),
-        ("", "Estructura soporte para baterías", "und", 1, "En el balcón, sobre el piso"),
+        ("", "Estructura soporte para baterías", "und", 1,
+         L.get("ubic_bat", "En el balcón, sobre el piso")),
         ("ESTRUCTURA LASTRADA", "Kit de estructura lastrada 10° (por módulo)", "und", n,
          "Según detalle de la hoja 1"),
         ("", "Riel de aluminio para módulos", "m", math.ceil(2 * fila_m), "2 rieles por fila"),
@@ -813,7 +814,7 @@ def materiales_obra(d, L) -> list[tuple]:
          m_(8 * lac + 8 * 1.5), "2 alimentadores x (3F + N)"),
         ("", "Cable Cu 6 AWG THHN/THWN-2 verde (tierra)", "m", m_(2 * lac + 2 * 1.5), ""),
         ("", 'Tubería IMC 2" (tramos de 3 m)', "und", math.ceil(lac * r / 3),
-         f"{lac:.1f} m: balcón, bajante y 1° piso"),
+         L.get("obs_ac", f"{lac:.1f} m: balcón, bajante y 1° piso")),
         ("", 'Curva IMC 2" 90°', "und", 4, ""),
         ("", 'Unión IMC 2"', "und", math.ceil(lac * r / 3), ""),
         ("", 'Abrazadera IMC 2" (c/ 1,5 m)', "und", math.ceil(lac / 1.5) + 2, ""),
@@ -882,14 +883,14 @@ def tabla_materiales_compacta(lam, x, y, filas) -> None:
         yy -= h
 
 
-def _resumen(lam, x, y, d, mods, ancho=74) -> None:
+def _resumen(lam, x, y, d, mods, ancho=74, orientacion="Sur (180°), 10°") -> None:
     filas = [
         ("Módulos", f"{len(mods)} × JAM72D40-595/MB"),
         ("Potencia DC", f"{_f(d['kwp'])} kWp"),
         ("Inversor", d["inversor_modelo"]),
         ("Strings", " + ".join(f"1 × {n} mód." for n in d["strings"])),
         ("Baterías", f"{d['bat']['n']} × {d['bat']['modulo']}"),
-        ("Orientación", "Sur (180°), 10°"),
+        ("Orientación", orientacion),
         ("Estructura", "Lastrada, bloques"),
     ]
     lam.rect(x, y - 4 - len(filas) * 3.6, ancho, 4 + len(filas) * 3.6, "CAJETIN")
@@ -900,7 +901,7 @@ def _resumen(lam, x, y, d, mods, ancho=74) -> None:
         lam.texto((x + 26, yy), v, 1.4, "TEXTO")
 
 
-def _detalle_dc(lam, x, y, d) -> None:
+def _detalle_dc(lam, x, y, d, bajante="Bajante hacia balcón 2° piso") -> None:
     """Detalle DC: cadena de módulos en serie, coraza, bajante y llegada al inversor."""
     n = d["modulos"]
     lam.texto((x, y + 130), "DETALLE CABLEADO DC", 2.2, "TEXTO", negrita=True)
@@ -929,7 +930,7 @@ def _detalle_dc(lam, x, y, d) -> None:
         [
             'Coraza 1" adosada a cubierta y fachada',
             "Cable FV 2x4 mm² (+/-) + 1N° 8 AWG Cu verde",
-            "Bajante hacia balcón 2° piso",
+            bajante,
         ],
         h=1.2,
     )

@@ -25,7 +25,7 @@ from shapely.geometry import Point, Polygon, box
 
 from engine import validar
 from engine.planos import cajetin
-from engine.planos.lamina import Lamina, a_pdf
+from engine.planos.lamina import CAPAS, Lamina, a_pdf
 from engine.planos.unifilar_casas import (
     SALIDA,
     _disenador,
@@ -38,6 +38,7 @@ from engine.planos.unifilar_casas import (
 from engine.simulacion import pvsyst
 
 INSUMOS = SALIDA / "insumos"
+CAPAS.update({"BRILLO": (7, "#ffffff", 0.25), "SOMBRA": (8, "#333333", 0.35)})
 S = 7.4  # mm por píxel del plano tipo de la casa 60 (calibrado con el módulo)
 
 SUPUESTOS = [
@@ -370,44 +371,121 @@ def isometrico(lam, area, g, mods, d) -> None:
         a, b, c, dd = list(md.exterior.coords)[:4]
         lam.polilinea([P(*a, Z_CUB + 300), P(*b, Z_CUB + 300), P(*c, Z_CUB + 700),
                        P(*dd, Z_CUB + 700)], "MODULO", cerrada=True, relleno="#7fb3e6")  # fmt: skip
-    # Equipos en el balcón
-    for key, color, alto in (("inversor", "#bfe3f7", 700), ("tablero", "#555555", 800),
-                             ("baterias", "#d873d8", 900)):  # fmt: skip
-        c = _local(g[key]).centroid
-        z = Z_PISO + (0 if key == "baterias" else 1200)
-        lam.polilinea([P(c.x - 250, c.y, z), P(c.x + 250, c.y, z), P(c.x + 250, c.y, z + alto),
-                       P(c.x - 250, c.y, z + alto)],
-                      "EQUIPO", cerrada=True, relleno=color)  # fmt: skip
-    # Rutas 3D
+    # Equipos en el balcón como cajas 3D montadas en los muros
+    zp = Z_PISO
+    caja3d(lam, P, (9339, 9731, -800, -560, zp + 1100, zp + 1650), "#dbe9f6", "AC")  # inversor
+    caja3d(lam, P, (9894, 10745, -760, -560, zp, zp + 900), "#e9c4ea", "EQUIPO")  # baterías
+    caja3d(lam, P, (8975, 9175, -2150, -1750, zp + 800, zp + 1600), "#d9d9d9", "EQUIPO")  # tablero
+
+    # Rutas ortogonales adosadas a cubierta y muros, con curvas de radio constante
     lleg = _local(Point(g["bajante_dc"]))
-    inv = _local(g["inversor"]).centroid
     cerca = min(loc_mods, key=lambda m_: m_.distance(lleg))
-    cx_ = cerca.centroid
-    dc = [(cx_.x, cx_.y, Z_CUB + 300), (lleg.x, lleg.y, Z_CUB + 80),
-          (lleg.x, lleg.y, Z_PISO + 1500),
-          (inv.x, inv.y, Z_PISO + 1500), (inv.x, inv.y, Z_PISO + 1200)]  # fmt: skip
-    tab = _local(g["tablero"]).centroid
-    pc = _local(Point(g["bajante_ac"]))
-    ac = [(tab.x, tab.y, Z_PISO + 1200), (tab.x, tab.y, Z_PISO + 400), (pc.x, pc.y, Z_PISO + 400),
-          (pc.x, pc.y, Z_PATIO), (pc.x, pc.y, 1500)]  # fmt: skip
-    tubo(lam, [P(*q) for q in dc], 1.6, "DC", "#e74c3c")
-    tubo(lam, [P(*q) for q in ac], 1.8, "AC", "#2e86de")
-    lam.circulo(P(*ac[3]), 1.3, "ROJO", relleno="#c00000")
-    lam.rect(P(*ac[-1])[0] - 2.5, P(*ac[-1])[1] - 7, 5, 7, "EQUIPO", relleno="#ffffff")
+    bx0, by0, bx1, by1 = cerca.bounds
+    xs = min(max(lleg.x, bx0 + 200), bx1 - 200)  # salida alineada con la bajante si se puede
+    ys = by1 if abs(by1 - lleg.y) < abs(by0 - lleg.y) else by0
+    zr = Z_CUB + 80  # sobre la cubierta
+    xb = min(max(xs, 9300), 10500)  # bajante alineada con la salida del arreglo
+    dc = [
+        (xb, ys, Z_CUB + 330), (xb, ys, zr),
+        (xb, -2440, zr),  # por la cubierta y cruza el pretil hacia el balcón
+        (xb, -2440, zp + 2300), (9030, -2440, zp + 2300),  # baja por el muro frontal
+        (9030, -680, zp + 2300), (9535, -680, zp + 2300), (9535, -680, zp + 1650),
+    ]  # fmt: skip
+    ac = [
+        (9075, -1950, zp + 800), (9075, -1950, zp + 150), (9075, -2440, zp + 150),
+        (10700, -2440, zp + 150), (10930, -2440, zp + 150),  # sale del balcón a la fachada
+        (10930, -2440, Z_PATIO + 60), (10930, -2440, 1700),  # baja por fachada, pasa la cubierta
+    ]  # fmt: skip
+    tubo3d(lam, P, dc, 1.7, "#e74c3c", "DC")
+    tubo3d(lam, P, ac, 2.1, "#2e86de", "AC")
+    # Pase en la cubierta del patio y tablero P.C. del 1° piso (sobre la fachada)
+    pase = P(10930, -2440, Z_PATIO)
+    lam.circulo(pase, 1.5, "ROJO", relleno="#c00000")
+    caja3d(lam, P, (10860, 10960, -2700, -2180, 900, 1700), "#ffffff", "EQUIPO")
     rot = [
-        (P(*dc[0]), "Arreglo FV · salida string S1.1.1", (-4, 12)),
-        (P(*dc[2]), 'DC: coraza 1" baja por fachada al balcón', (-40, 6)),
-        (P(*dc[-1]), "Inversor (balcón 2° piso)", (-40, -4)),
-        (P(*ac[1]), 'AC: IMC 2" desde el tablero FV', (24, 10)),
-        (P(*ac[3]), "Pase en cubierta del patio", (26, 2)),
-        (P(*ac[-1]), "Tablero P.C. · 1° piso (punto de conexión)", (26, -8)),
+        (P(*dc[1]), "Arreglo FV · salida string S1.1.1", (-30, 14)),
+        (P(*dc[4]), 'DC: coraza 1" por cubierta y muro del balcón', (-34, 8)),
+        (P(9535, -680, zp + 1650), "Inversor (balcón 2° piso)", (-36, 6)),
+        (P(9075, -1950, zp + 1200), "Tablero FV", (-34, -6)),
+        (P(10300, -650, zp + 600), "Baterías", (16, 10)),
+        (P(*ac[3]), 'AC: IMC 2" adosada al piso del balcón', (20, 12)),
+        (pase, "Pase en cubierta del patio", (24, 4)),
+        (P(10960, -2440, 1300), "Tablero P.C. · 1° piso (punto de conexión)", (22, -6)),
     ]
-    for p_, t, (dx, dy) in rot:
-        q = (p_[0] + dx, p_[1] + dy)
-        _guia(lam, p_, q)
-        _caja_texto(lam, (q[0], q[1] + 1.5), [t], h=1.3, alinear="der" if dx < 0 else "izq")
+    # Rótulos en dos columnas laterales, ordenados por altura y sin solaparse
+    for lado, xcol in ((-1, x0 + 52), (1, x0 + w - 62)):
+        items = sorted(((p_, t) for p_, t, (dx, _dy) in rot if (dx < 0) == (lado < 0)),
+                       key=lambda it: -it[0][1])  # fmt: skip
+        y_prev = None
+        for p_, t in items:
+            yq = p_[1] + 4 if y_prev is None else min(p_[1] + 4, y_prev - 6.5)
+            y_prev = yq
+            q = (xcol, yq)
+            _guia(lam, p_, q)
+            _caja_texto(lam, (q[0], q[1] + 1.6), [t], h=1.3, alinear="der" if lado < 0 else "izq")
     lam.texto((x0 + 2, y0 + 2), "Alturas supuestas: piso 2,8 m; cubierta 5,6 m; cubierta del patio "
               "2,6 m. Esquema sin escala.", 1.3, "NOTA")  # fmt: skip
+
+
+def _suavizar(pts, radio=220.0, muestras=7):
+    """Polilínea 3D con las esquinas reemplazadas por curvas (Bézier cuadrática ≈ arco)."""
+    import numpy as np
+
+    pts = [np.array(q, float) for q in pts]
+    pts = [q for i, q in enumerate(pts) if i == 0 or np.linalg.norm(q - pts[i - 1]) > 1]
+    out = [pts[0]]
+    for a, b, c in zip(pts[:-2], pts[1:-1], pts[2:], strict=True):
+        d1, d2 = b - a, c - b
+        l1, l2 = np.linalg.norm(d1), np.linalg.norm(d2)
+        if l1 < 1 or l2 < 1:
+            continue
+        r = min(radio, 0.45 * l1, 0.45 * l2)
+        p0, p2 = b - d1 / l1 * r, b + d2 / l2 * r
+        for t in np.linspace(0, 1, muestras):
+            out.append((1 - t) ** 2 * p0 + 2 * (1 - t) * t * b + t**2 * p2)
+    out.append(pts[-1])
+    return [tuple(q) for q in out]
+
+
+def tubo3d(lam, P, pts3d, diam, color, capa, abrazadera_mm=1000.0) -> None:
+    """Tubería en el isométrico: curvas suaves, cuerpo con contorno, brillo y abrazaderas."""
+    import numpy as np
+    from shapely.geometry import LineString
+
+    suave = _suavizar(pts3d)
+    pts = [P(*q) for q in suave]
+    ls = LineString(pts)
+    cuerpo = ls.buffer(diam / 2, cap_style=2, join_style=1, quad_segs=8)
+    lam.polilinea(list(cuerpo.exterior.coords), capa, cerrada=True, relleno=color)
+    lam.polilinea([(x, y + diam * 0.18) for x, y in pts], "BRILLO")
+    # Abrazaderas sobre los tramos rectos (cada ~1 m en 3D)
+    for a, b in zip(pts3d[:-1], pts3d[1:], strict=True):
+        a_, b_ = np.array(a, float), np.array(b, float)
+        largo = np.linalg.norm(b_ - a_)
+        for t in np.arange(abrazadera_mm, largo - 300, abrazadera_mm):
+            q = a_ + (b_ - a_) * t / largo
+            c, e = P(*q), P(*(q + (b_ - a_) / largo * 10))
+            dx, dy = e[0] - c[0], e[1] - c[1]
+            n = math.hypot(dx, dy) or 1
+            nx, ny = -dy / n * diam * 0.75, dx / n * diam * 0.75
+            lam.linea((c[0] - nx, c[1] - ny), (c[0] + nx, c[1] + ny), "SOMBRA")
+
+
+def caja3d(lam, P, caja, color, capa) -> None:
+    """Caja (x0, x1, y0, y1, z0, z1) con sus tres caras visibles sombreadas."""
+    x0, x1, y0, y1, z0, z1 = caja
+
+    def tono(hexa, f):
+        r, g_, b = (int(hexa[i : i + 2], 16) for i in (1, 3, 5))
+        return "#{:02x}{:02x}{:02x}".format(*(min(255, int(v * f)) for v in (r, g_, b)))
+
+    caras = [
+        ([(x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1)], 0.85),  # cara +x
+        ([(x0, y1, z0), (x1, y1, z0), (x1, y1, z1), (x0, y1, z1)], 0.95),  # cara +y
+        ([(x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)], 1.08),  # tapa
+    ]
+    for pts, f in caras:
+        lam.polilinea([P(*q) for q in pts], capa, cerrada=True, relleno=tono(color, f))
 
 
 # ------------------------------------------------------------------------------- detalles

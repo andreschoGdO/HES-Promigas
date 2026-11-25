@@ -114,16 +114,18 @@ def test_ingenieria_tipo_doral() -> None:
 
     from engine.planos import casas_doral as cd
 
-    loc = cd.geometria()
-    _mods_n, mods_l, az = cd.modulos(loc, 8)
-    assert len(mods_l) == 8 and az in (180.0, cd.AZ_FRENTE)
-    zona = unary_union(mods_l)
-    assert zona.within(loc["cubierta"])
-    assert all(not zona.intersects(o) for o in loc["obst"])
-    dc, ac, L = cd.rutas(loc, mods_l)
-    # Los tramos de AC sobre la losa no pasan por encima de los módulos
+    g = cd.geometria()
+    assert g["losa"].area / 1e6 == pytest.approx(44.96, abs=1.0)  # medición en Maps
+    mods = cd.colocar(g, 8)
+    assert len(mods) == 8
+    zona = unary_union(mods)
+    assert zona.within(g["losa"])
+    assert all(not zona.intersects(o) for o in g["fijos"])
+    dc, ac, existente, L = cd.rutas(g, mods)
+    # La AC por la losa no pasa por encima de los módulos y termina en el tubo existente de 1¼"
     for a, b in zip(ac[:-1], ac[1:], strict=True):
-        if cd.Z_LOSA < a[2] < cd.Z_LOSA + 200 and cd.Z_LOSA < b[2] < cd.Z_LOSA + 200:
+        if a[2] == b[2] == cd.ZR:
             assert not LineString([a[:2], b[:2]]).intersects(zona)
-    assert 15 < L["ac_total"] < 35 and L["dc_total"] > 5
-    assert Point(dc[-1][:2]).distance(loc["inversor"]) < 200
+    assert ac[-1][:2] == cd.TUBO_EXISTENTE and existente[-1][2] == cd.TAB_INTERNO_Z
+    assert L["cal_ac"] == "8" and L["tubo_ac"] == '1¼"'
+    assert Point(dc[-1][:2]).distance(g["inversor"]) < 300

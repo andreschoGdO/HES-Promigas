@@ -787,6 +787,8 @@ def materiales_obra(d, L) -> list[tuple]:
         return math.ceil(x * r)
 
     ldc, lac = L["dc_total"], L["ac_total"]
+    cal, tub = L.get("cal_ac", "6"), L.get("tubo_ac", '2"')
+    lnu = L.get("ac_nuevo", lac)  # tubería nueva (sin la existente)
     fila_m = n * 1.139
     return [
         ("GENERACIÓN FV", f"Módulo FV {d['modulo']['modelo']} 595 Wp", "und", n, "Ficha JA Solar"),
@@ -810,14 +812,14 @@ def materiales_obra(d, L) -> list[tuple]:
         ("", "Conector MC4 (par macho/hembra)", "par", 2, ""),
         ("", 'Coraza americana 1" (DC)', "m", m_(ldc), "Adosada a cubierta y fachada"),
         ("", "Caja de paso 10x10 cm IP66 (DC)", "und", 1, "Salida del arreglo"),
-        ("CABLEADO AC", "Cable Cu 6 AWG THHN/THWN-2 (fases y neutro)", "m",
+        ("CABLEADO AC", f"Cable Cu {cal} AWG THHN/THWN-2 (fases y neutro)", "m",
          m_(8 * lac + 8 * 1.5), "2 alimentadores x (3F + N)"),
-        ("", "Cable Cu 6 AWG THHN/THWN-2 verde (tierra)", "m", m_(2 * lac + 2 * 1.5), ""),
-        ("", 'Tubería IMC 2" (tramos de 3 m)', "und", math.ceil(lac * r / 3),
+        ("", f"Cable Cu {cal} AWG THHN/THWN-2 verde (tierra)", "m", m_(2 * lac + 2 * 1.5), ""),
+        ("", f'Tubería IMC {tub} (tramos de 3 m)', "und", math.ceil(lnu * r / 3),
          L.get("obs_ac", f"{lac:.1f} m: balcón, bajante y 1° piso")),
-        ("", 'Curva IMC 2" 90°', "und", 4, ""),
-        ("", 'Unión IMC 2"', "und", math.ceil(lac * r / 3), ""),
-        ("", 'Abrazadera IMC 2" (c/ 1,5 m)', "und", math.ceil(lac / 1.5) + 2, ""),
+        ("", f'Curva IMC {tub} 90°', "und", L.get("curvas_ac", 4), ""),
+        ("", f'Unión IMC {tub}', "und", math.ceil(lnu * r / 3), ""),
+        ("", f'Abrazadera IMC {tub} (c/ 1,5 m)', "und", math.ceil(lnu / 1.5) + 2, ""),
         ("", "Caja de paso 10x10 cm IP66 (AC)", "und", 2, ""),
         ("", 'Tubería 1½" inversor - tablero FV', "m", 2, ""),
         ("", "Tablero FV 15 kVA 220 V IP65 con componentes", "und", 1, "Según diagrama unifilar"),

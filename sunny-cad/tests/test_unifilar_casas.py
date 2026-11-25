@@ -106,3 +106,24 @@ def test_bifasico_lleva_hoja_de_comunicaciones() -> None:
 
 def test_trifasico_una_sola_hoja() -> None:
     assert len(uc.laminas_casa(_datos(), "2026-11-24")) == 1
+
+
+def test_ingenieria_tipo_doral() -> None:
+    from shapely.geometry import LineString, Point
+    from shapely.ops import unary_union
+
+    from engine.planos import casas_doral as cd
+
+    loc = cd.geometria()
+    _mods_n, mods_l, az = cd.modulos(loc, 8)
+    assert len(mods_l) == 8 and az in (180.0, cd.AZ_FRENTE)
+    zona = unary_union(mods_l)
+    assert zona.within(loc["cubierta"])
+    assert all(not zona.intersects(o) for o in loc["obst"])
+    dc, ac, L = cd.rutas(loc, mods_l)
+    # Los tramos de AC sobre la losa no pasan por encima de los módulos
+    for a, b in zip(ac[:-1], ac[1:], strict=True):
+        if cd.Z_LOSA < a[2] < cd.Z_LOSA + 200 and cd.Z_LOSA < b[2] < cd.Z_LOSA + 200:
+            assert not LineString([a[:2], b[:2]]).intersects(zona)
+    assert 15 < L["ac_total"] < 35 and L["dc_total"] > 5
+    assert Point(dc[-1][:2]).distance(loc["inversor"]) < 200

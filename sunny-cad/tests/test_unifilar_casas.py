@@ -115,7 +115,8 @@ def test_ingenieria_tipo_doral() -> None:
     from engine.planos import casas_doral as cd
 
     g = cd.geometria()
-    assert g["losa"].area / 1e6 == pytest.approx(44.96, abs=1.0)  # medición en Maps
+    # Medición en Maps 44,96 m²; la losa rectificada a ángulos rectos queda ≈ 2,5 % menor
+    assert g["losa"].area / 1e6 == pytest.approx(44.96, rel=0.03)
     mods = cd.colocar(g, 8)
     assert len(mods) == 8
     zona = unary_union(mods)

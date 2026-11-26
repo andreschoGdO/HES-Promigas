@@ -149,6 +149,29 @@ def colocar_modulos(cubierta: Polygon, obstaculos, n: int, retiro=400.0, sep=5.0
     raise ValueError(f"no caben {n} módulos en la cubierta")
 
 
+def colocar_alineado(cubierta: Polygon, obstaculos, n: int):
+    """Módulos en una sola hilera paralela a un borde de la cubierta (instalación más simple).
+
+    Prueba los bordes de mayor a menor longitud y usa el primero en que cabe la hilera con el
+    retiro normal. Devuelve (módulos, azimut al que miran).
+    """
+    pts = list(cubierta.exterior.coords)
+    bordes = sorted(zip(pts[:-1], pts[1:], strict=True), key=lambda e: -math.dist(*e))
+    for a, b in bordes:
+        th = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+        th = (th + 90) % 180 - 90  # entre -90° y 90°
+        if abs(th) > 45:
+            continue  # bordes norte-sur: la hilera quedaría mirando al este u oeste
+        rot = [affinity.rotate(o, -th, origin=(0, 0)) for o in (cubierta, *obstaculos)]
+        try:
+            mods = colocar_modulos(rot[0], rot[1:], n)
+        except ValueError:
+            continue
+        mods = [affinity.rotate(m, th, origin=(0, 0)) for m in mods]
+        return mods, (180.0 - th) % 360
+    return colocar_modulos(cubierta, obstaculos, n), 180.0
+
+
 # ------------------------------------------------------------------------------- dibujo
 class Marco:
     """mm del modelo → mm de papel (escala 1:N), centrado en un área."""
@@ -227,8 +250,9 @@ def _modulos(lam, m: Marco, mods, etiquetas=True) -> None:
         m.pol(lam, md, "MODULO", "#b4e8b0")
         if etiquetas:
             c = md.centroid
-            lam.texto(m((c.x, c.y + 250)), f"1.1.1.{i}", 1.5, "TEXTO", "centro", negrita=True)
-            lam.texto(m((c.x, c.y - 450)), "595 Wp", 1.1, "TEXTO", "centro")
+            h = min(1.5, 1134 * m.k / 6.2)  # el rótulo cabe en el ancho del módulo
+            lam.texto(m((c.x, c.y + 250)), f"1.1.1.{i}", h, "TEXTO", "centro", negrita=True)
+            lam.texto(m((c.x, c.y - 450)), "595 Wp", h * 0.75, "TEXTO", "centro")
 
 
 def _equipos(lam, m: Marco, g) -> None:
@@ -630,7 +654,8 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     plantilla = validar.cargar_json(validar.RAIZ / "templates" / "cajetin.json")
     g = geometria(str(d["casa"]))
     obst = [g["tanque"], *g["aa"]]
-    mods = colocar_modulos(g["cubierta"], obst, d["modulos"])
+    mods, az = colocar_alineado(g["cubierta"], obst, d["modulos"])
+    orient = f"{az:.0f}° (paralelos a la cubierta), 10°"
     g["_modulos"] = mods
     info = CASAS[str(d["casa"])]
     conj = json.loads((INSUMOS / "primavera.json").read_text(encoding="utf-8"))
@@ -639,7 +664,8 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     notas_base = [
         f"Sistema de {d['modulos']} módulos JA Solar JAM72D40 de 595 Wp ({_f(d['kwp'])} kWp) y un "
         f"inversor {d['inversor_modelo']}.",
-        "Estructura lastrada con bloques de concreto, módulos hacia el sur a 10°.",
+        f"Estructura lastrada con bloques de concreto, módulos en una hilera paralela a la "
+        f"cubierta, mirando a {az:.0f}° a 10°.",
         "Medidas en metros salvo indicación. Geometría según plano tipo: verificar en obra.",
         *SUPUESTOS,
     ]
@@ -674,7 +700,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     lam.texto((cx + 4, cy + 2), f"CASA {d['casa']}", 1.6, "ROJO", negrita=True)
     _titulo_vista(lam, mx, my - 5, 1, "Localización en el conjunto")
     lam.texto((mx + 8, my - 9.5), f"Conjunto: {conj['lat']:.5f}, {conj['lon']:.5f}", 1.4, "NOTA")
-    _resumen(lam, 14, 118, d, mods, ancho=84)
+    _resumen(lam, 14, 118, d, mods, ancho=84, orientacion=orient)
     m = Marco(todo, (100, 128, 150, 122), n_opciones=(75, 100, 125, 150))
     _casa_base(lam, m, g)
     _modulos(lam, m, mods)

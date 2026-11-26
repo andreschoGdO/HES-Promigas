@@ -344,33 +344,252 @@ def _local(geom):
     return affinity.rotate(geom, -ROT_MAPA_DEG, origin=(0, 0))
 
 
-def isometrico(lam, area, g, mods, d) -> None:
-    """Esquema isométrico de la vivienda con las rutas DC (rojo) y AC (azul) en 3D."""
+# --- Estructura lastrada (detalle tipo del usuario; bloques esquemáticos) -----------------------
+SEN10, COS10 = math.sin(math.radians(10)), math.cos(math.radians(10))
+LARGO_MOD, ANCHO_MOD = 2278.0, 1134.0
+PROY_MOD = LARGO_MOD * COS10  # 2243 mm en planta
+DESNIVEL = LARGO_MOD * SEN10  # 396 mm entre el borde bajo y el alto
+RIEL_S = (542.0, LARGO_MOD - 542.0)  # rieles a 542 mm de cada borde (1244 entre rieles)
+H_SOPORTE = 412.0  # soporte trasero, del bloque al riel (detalle tipo)
+Z_BLOQUE = 150.0  # bloque de concreto: esquemático, dimensiones y peso según proveedor
+BLOQUE_UV = (220.0, 400.0)  # esquemático: a lo largo de la fila × hacia atrás
+PASO_FILAS = 3665.0  # distancia entre filas cuando hay más de una (detalle tipo)
+
+
+def _z_modulo(z_techo):
+    """Altura del borde bajo del módulo para que el soporte trasero mida H_SOPORTE."""
+    return z_techo + Z_BLOQUE + H_SOPORTE - RIEL_S[1] * SEN10
+
+
+def _filas(mods):
+    """Agrupa los módulos en filas: u a lo largo de la fila, v hacia atrás (borde alto)."""
+    datos = []
+    for md in mods:
+        v_ = list(md.exterior.coords)[:4]
+        lados = sorted(((v_[i], v_[(i + 1) % 4]) for i in range(4)), key=lambda e: math.dist(*e))
+        sur, norte = sorted(lados[:2], key=lambda e: e[0][1] + e[1][1])
+        datos.append((sur, norte))
+    (a, b), norte = datos[0]
+    ln = math.dist(a, b)
+    u = ((b[0] - a[0]) / ln, (b[1] - a[1]) / ln)
+    if u[0] < 0:
+        u = (-u[0], -u[1])
+    v = (-u[1], u[0])
+    ms = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    mn = ((norte[0][0] + norte[1][0]) / 2, (norte[0][1] + norte[1][1]) / 2)
+    if (mn[0] - ms[0]) * v[0] + (mn[1] - ms[1]) * v[1] < 0:
+        v = (-v[0], -v[1])
+    filas: dict[int, dict] = {}
+    for sur, _n in datos:
+        t = sum((sur[0][i] + sur[1][i]) / 2 * v[i] for i in (0, 1))
+        s = sorted(sur[j][0] * u[0] + sur[j][1] * u[1] for j in (0, 1))
+        f = filas.setdefault(round(t / 200), {"u": u, "v": v, "t0": t, "mods": []})
+        f["mods"].append(tuple(s))
+    out = sorted(filas.values(), key=lambda f: f["t0"])
+    for f in out:
+        f["mods"].sort()
+        ms_ = f["mods"]
+        medias = [(p[1] + q[0]) / 2 for p, q in zip(ms_, ms_[1:], strict=False)]
+        f["juntas"] = [ms_[0][0], *medias, ms_[-1][1]]
+    return out
+
+
+def _estructura3d(lam, P, prof, filas, z_techo, color_mod="#2f4f7f", fantasma=()) -> None:
+    """Fila(s) de módulos sobre la estructura lastrada: bloques, soportes, rieles y módulos."""
+    zb = z_techo + Z_BLOQUE
+    zm0 = _z_modulo(z_techo)
+    ts = [s * COS10 for s in RIEL_S]
+    zr = [zm0 + s * SEN10 for s in RIEL_S]
+    prims = []  # (profundidad, tipo, puntos, capa, relleno)
+
+    for f in filas:
+        u, v, t0 = f["u"], f["v"], f["t0"]
+
+        def X(s, t, z, u=u, v=v, t0=t0):
+            return (u[0] * s + v[0] * (t0 + t), u[1] * s + v[1] * (t0 + t), z)
+
+        def add(tipo, pts3, capa, relleno=None):
+            c = [sum(q[i] for q in pts3) / len(pts3) for i in range(3)]
+            prims.append((prof(*c), tipo, [P(*q) for q in pts3], capa, relleno))
+
+        bu, bv = BLOQUE_UV
+        for s in f["juntas"]:
+            for t in ts:  # bloque bajo cada soporte (delantero y trasero)
+                s0, s1, t_0, t_1 = s - bu / 2, s + bu / 2, t - bv / 2, t + bv / 2
+                for cara in (
+                    [(s0, t_0), (s1, t_0)], [(s1, t_0), (s1, t_1)],
+                    [(s1, t_1), (s0, t_1)], [(s0, t_1), (s0, t_0)],
+                ):  # fmt: skip
+                    (sa, ta), (sb, tb) = cara
+                    add("p", [X(sa, ta, z_techo), X(sb, tb, z_techo), X(sb, tb, zb),
+                              X(sa, ta, zb)], "CUBIERTA", "#a9a9a9")  # fmt: skip
+                add("p", [X(s0, t_0, zb), X(s1, t_0, zb), X(s1, t_1, zb), X(s0, t_1, zb)],
+                    "CUBIERTA", "#cfcfcf")  # fmt: skip
+            add("l", [X(s, ts[0], zb), X(s, ts[1], zb)], "ESTRUCTURA")  # base del soporte
+            for t, z in zip(ts, zr, strict=True):
+                add("l", [X(s, t, zb), X(s, t, z - 40)], "ESTRUCTURA")  # patas
+            add("l", [X(s, ts[0], zb), X(s, ts[1], zr[1] - 40)], "ESTRUCTURA")  # diagonal
+        s_ini, s_fin = f["juntas"][0] - 60, f["juntas"][-1] + 60
+        for t, z in zip(ts, zr, strict=True):  # rieles a lo largo de la fila
+            add("l", [X(s_ini, t, z - 20), X(s_fin, t, z - 20)], "ESTRUCTURA")
+        for im, (sa, sb) in enumerate(f["mods"]):
+            cara = [X(sa, 0, zm0 + 35), X(sb, 0, zm0 + 35), X(sb, PROY_MOD, zm0 + DESNIVEL + 35),
+                    X(sa, PROY_MOD, zm0 + DESNIVEL + 35)]  # fmt: skip
+            if im in fantasma:  # módulo en corte: solo el contorno, deja ver la estructura
+                add("f", cara, "MODULO")
+                continue
+            add("p", cara, "MODULO", color_mod)
+            zc = zm0 + DESNIVEL / 2 + 36
+            add("l", [X(sa + 5, PROY_MOD / 2, zc), X(sb - 5, PROY_MOD / 2, zc)], "SOMBRA")
+            for s in (sa, sb):
+                add("l", [X(s, 0, zm0 + 36), X(s, PROY_MOD, zm0 + DESNIVEL + 36)], "BRILLO")
+
+    for _p, tipo, pts, capa, rel in sorted(prims, key=lambda q: -q[0]):
+        if tipo == "p":
+            lam.polilinea(pts, capa, cerrada=True, relleno=rel)
+        elif tipo == "f":
+            lam.polilinea(pts, capa, cerrada=True, trazo="discontinuo")
+        else:
+            lam.polilinea(pts, capa)
+
+
+# --- Vistas 3D --------------------------------------------------------------------------------
+def _vista(area, pts3d, desde="NE"):
+    """Proyección isométrica ajustada a un área. Devuelve P (3D → papel) y la profundidad."""
     x0, y0, w, h = area
-    loc = {k: _local(g[k]) for k in ("lote", "cubierta", "cubierta_alta", "balcon", "patio")}
-    loc_mods = [_local(m_) for m_ in mods]
     c30, s30 = math.cos(math.radians(30)), math.sin(math.radians(30))
 
-    def proy(x, y, z):  # vista desde el lado del patio y el balcón (x e y invertidos)
-        x, y = -x, -y
-        return ((x - y) * c30, (x + y) * s30 + z)
+    def proy(x, y, z):
+        if desde == "NE":  # observador al noreste (lado del patio y el balcón)
+            x, y = -x, -y
+            return ((x - y) * c30, (x + y) * s30 + z)
+        return ((x + y) * c30, (y - x) * s30 + z)  # observador al sureste
 
-    minx, miny, maxx, maxy = loc["lote"].bounds
-    esquinas = [proy(x, y, z) for x in (minx, maxx) for y in (miny, maxy) for z in (0, Z_CUB + 600)]
-    ux = [p_[0] for p_ in esquinas]
-    uy = [p_[1] for p_ in esquinas]
-    k = min((w - 10) / (max(ux) - min(ux)), (h - 10) / (max(uy) - min(uy)))
+    def prof(x, y, z):
+        return (-(x + y) if desde == "NE" else (y - x)) - 2.5 * z
+
+    us = [proy(*q) for q in pts3d]
+    ux = [p_[0] for p_ in us]
+    uy = [p_[1] for p_ in us]
+    k = min(w / (max(ux) - min(ux)), h / (max(uy) - min(uy)))
     ox = x0 + (w - (max(ux) - min(ux)) * k) / 2 - min(ux) * k
     oy = y0 + (h - (max(uy) - min(uy)) * k) / 2 - min(uy) * k
 
     def P(x, y, z):
-        u, v = proy(x, y, z)
-        return (ox + u * k, oy + v * k)
+        u_, v_ = proy(x, y, z)
+        return (ox + u_ * k, oy + v_ * k)
 
-    caras = []  # (profundidad, puntos, capa, relleno): se dibuja de lo más lejano a lo más cercano
+    return P, prof, k
 
-    def prof(x, y, z):
-        return -(x + y) - 2.5 * z  # mayor = más lejos del observador
+
+class _Recorte:
+    """Envuelve una lámina y recorta todo lo dibujado a un rectángulo (vistas de detalle)."""
+
+    def __init__(self, lam, area):
+        x, y, w, h = area
+        self.lam, self.caja = lam, box(x, y, x + w, y + h)
+
+    def polilinea(self, pts, capa="TEXTO", cerrada=False, relleno=None, trazo="continuo"):
+        from shapely.geometry import LineString
+
+        if len(pts) < 2:
+            return
+        g_ = Polygon(pts) if cerrada and len(pts) >= 3 else LineString(pts)
+        if not g_.is_valid:
+            g_ = g_.buffer(0)
+        r = g_.intersection(self.caja)
+        for parte in getattr(r, "geoms", [r]):
+            if parte.is_empty:
+                continue
+            if parte.geom_type == "Polygon":
+                self.lam.polilinea(list(parte.exterior.coords)[:-1], capa, True, relleno, trazo)
+            elif parte.geom_type == "LineString":
+                self.lam.polilinea(list(parte.coords), capa, trazo=trazo)
+
+    def linea(self, a, b, capa="TEXTO", trazo="continuo"):
+        self.polilinea([a, b], capa, trazo=trazo)
+
+    def rect(self, x, y, w, h, capa="TEXTO", relleno=None, trazo="continuo"):
+        self.polilinea([(x, y), (x + w, y), (x + w, y + h), (x, y + h)], capa, True, relleno, trazo)
+
+    def circulo(self, c, r, capa="TEXTO", relleno=None):
+        if self.caja.contains(Point(c)):
+            self.lam.circulo(c, r, capa, relleno=relleno)
+
+    def texto(self, p, s, *a, **kw):
+        if self.caja.contains(Point(p)):
+            self.lam.texto(p, s, *a, **kw)
+
+
+def _fusionar(pts):
+    """Quita los vértices intermedios de tramos colineales."""
+    out = [pts[0]]
+    for q, r in zip(pts[1:-1], pts[2:], strict=True):
+        a = out[-1]
+        d1 = [q[i] - a[i] for i in range(3)]
+        d2 = [r[i] - q[i] for i in range(3)]
+        cruz = (d1[1] * d2[2] - d1[2] * d2[1], d1[2] * d2[0] - d1[0] * d2[2],
+                d1[0] * d2[1] - d1[1] * d2[0])  # fmt: skip
+        if math.hypot(*cruz) > 1e-6 * (math.hypot(*d1) * math.hypot(*d2) + 1):
+            out.append(q)
+    out.append(pts[-1])
+    return out
+
+
+def rutas3d(g, mods):
+    """Rutas DC y AC en 3D (mm, marco de la vivienda), adosadas a cubierta, muros y piso."""
+    loc_mods = [_local(m_) for m_ in mods]
+    zp = Z_PISO
+    lleg = _local(Point(g["bajante_dc"]))
+    cerca = min(loc_mods, key=lambda m_: m_.distance(lleg))
+    bx0, by0, bx1, by1 = cerca.bounds
+    xs = min(max(lleg.x, bx0 + 200), bx1 - 200)  # salida alineada con la bajante si se puede
+    norte = abs(by1 - lleg.y) < abs(by0 - lleg.y)
+    ys = by1 + 150 if norte else by0 - 150
+    z_sal = _z_modulo(Z_CUB) + (DESNIVEL if norte else 0)
+    zr = Z_CUB + 80  # coraza apoyada sobre la cubierta
+    xb = min(max(xs, 9300), 10500)  # bajante alineada con la salida del arreglo
+    dc = _fusionar([
+        (xb, ys, z_sal), (xb, ys, zr),
+        (xb, -2440, zr),  # por la cubierta y cruza el pretil hacia el balcón
+        (xb, -2440, zp + 2300), (9030, -2440, zp + 2300),  # baja por el muro frontal
+        (9030, -680, zp + 2300), (9535, -680, zp + 2300), (9535, -680, zp + 1650),
+    ])  # fmt: skip
+    ac = _fusionar([
+        (9075, -1950, zp + 800), (9075, -1950, zp + 150), (9075, -2440, zp + 150),
+        (10930, -2440, zp + 150),  # por el piso del balcón hasta la fachada
+        (10930, -2440, 1700),  # baja por fachada, atraviesa la cubierta del patio
+    ])  # fmt: skip
+    desc_dc = [
+        "Salida del arreglo (caja de paso) a la cubierta",
+        "Sobre la cubierta hasta el borde del balcón",
+        "Baja por el muro frontal del balcón",
+        "Horizontal, adosada al muro frontal",
+        "Horizontal, adosada al muro lateral",
+        "Horizontal hasta la vertical del inversor",
+        "Baja a la entrada DC del inversor",
+    ]
+    desc_ac = [
+        "Baja del tablero FV al piso del balcón",
+        "Por el piso, junto al muro lateral",
+        "Por el piso, junto al muro frontal, a la fachada",
+        "Baja por fachada, pase en cubierta del patio, tablero P.C.",
+    ]
+    if len(desc_dc) != len(dc) - 1:
+        desc_dc = [f"Tramo {i}" for i in range(1, len(dc))]
+    if len(desc_ac) != len(ac) - 1:
+        desc_ac = [f"Tramo {i}" for i in range(1, len(ac))]
+    return {"dc": dc, "ac": ac, "desc_dc": desc_dc, "desc_ac": desc_ac}
+
+
+def _largos(pts):
+    return [math.dist(a, b) / 1000 for a, b in zip(pts[:-1], pts[1:], strict=True)]
+
+
+def _escena3d(lam, P, prof, g, mods, R) -> None:
+    """Vivienda, estructura, equipos y rutas en 3D (marco de la vivienda)."""
+    loc = {k: _local(g[k]) for k in ("lote", "cubierta", "cubierta_alta", "balcon", "patio")}
+    caras = []
 
     def prisma(pol, z0, z1, relleno, capa="CUBIERTA", lados=True):
         pts = list(pol.exterior.coords)[:-1]
@@ -381,79 +600,49 @@ def isometrico(lam, area, g, mods, d) -> None:
         c = pol.centroid
         caras.append((prof(c.x, c.y, z1), [P(x, y, z1) for x, y in pts], capa, relleno))
 
-    piso = loc["lote"]
-    lam.polilinea([P(x, y, 0) for x, y in list(piso.exterior.coords)[:-1]], "NOTA", cerrada=True,
-                  relleno="#dfe8d6")  # fmt: skip
-    techo = loc["cubierta"].union(loc["cubierta_alta"])
-    prisma(techo, 0, Z_CUB, "#ecebe6")
+    lam.polilinea([P(x, y, 0) for x, y in list(loc["lote"].exterior.coords)[:-1]], "NOTA",
+                  cerrada=True, relleno="#dfe8d6")  # fmt: skip
+    prisma(loc["cubierta"].union(loc["cubierta_alta"]), 0, Z_CUB, "#ecebe6")
     prisma(loc["balcon"], 0, Z_PISO, "#f7efe2")
     prisma(loc["patio"], Z_PATIO - 100, Z_PATIO, "#c9d8ea", "NOTA")
     for _pr, pts, capa, rel in sorted(caras, key=lambda c_: -c_[0]):
         lam.polilinea(pts, capa, cerrada=True, relleno=rel)
-    # Módulos en una fila continua, inclinados 10° hacia el sur: borde bajo al sur (lado corto
-    # de la huella, 1134 mm) y borde alto al norte, sobre el soporte lastrado.
-    z_bajo, z_alto = Z_CUB + 300, Z_CUB + 300 + 2278 * math.sin(math.radians(10))
-    for md in sorted(loc_mods, key=lambda m_: -(m_.centroid.x + m_.centroid.y)):
-        v = list(md.exterior.coords)[:4]
-        lados = sorted(((v[i], v[(i + 1) % 4]) for i in range(4)), key=lambda e: math.dist(*e))
-        sur, norte = sorted(lados[:2], key=lambda e: e[0][1] + e[1][1])
-        norte = norte[::-1]  # mismo sentido que el borde sur
-        for q in (*sur, *norte):  # patas del soporte lastrado
-            zq = z_bajo if q in sur else z_alto
-            lam.linea(P(*q, Z_CUB), P(*q, zq), "SOMBRA")
-        cara = [P(*sur[0], z_bajo), P(*sur[1], z_bajo), P(*norte[1], z_alto), P(*norte[0], z_alto)]
-        lam.polilinea(cara, "MODULO", cerrada=True, relleno="#2f4f7f")
-        # Marco de aluminio en los costados (unión entre módulos) y línea central de celdas
-        lam.linea(cara[0], cara[3], "BRILLO")
-        lam.linea(cara[1], cara[2], "BRILLO")
-        a_ = [(sur[0][i] + norte[0][i]) / 2 for i in (0, 1)]
-        b_ = [(sur[1][i] + norte[1][i]) / 2 for i in (0, 1)]
-        lam.linea(P(*a_, (z_bajo + z_alto) / 2), P(*b_, (z_bajo + z_alto) / 2), "SOMBRA")
-    # Equipos en el balcón como cajas 3D montadas en los muros
+    _estructura3d(lam, P, prof, _filas([_local(m_) for m_ in mods]), Z_CUB)
     zp = Z_PISO
     caja3d(lam, P, (9339, 9731, -800, -560, zp + 1100, zp + 1650), "#dbe9f6", "AC")  # inversor
     caja3d(lam, P, (9894, 10745, -760, -560, zp, zp + 900), "#e9c4ea", "EQUIPO")  # baterías
     caja3d(lam, P, (8975, 9175, -2150, -1750, zp + 800, zp + 1600), "#d9d9d9", "EQUIPO")  # tablero
+    tubo3d(lam, P, R["dc"], 1.7 * R.get("f", 1), "#e74c3c", "DC", abrazadera_mm=1500)
+    tubo3d(lam, P, R["ac"], 2.1 * R.get("f", 1), "#2e86de", "AC", abrazadera_mm=1500)
+    x_, y_, _z = R["dc"][0]
+    caja3d(lam, P, (x_ - 60, x_ + 60, y_ - 60, y_ + 60, _z - 60, _z + 60), "#f4f4f4", "EQUIPO")
+    lam.circulo(P(10930, -2440, Z_PATIO), 1.5 * R.get("f", 1), "ROJO", relleno="#c00000")
+    caja3d(lam, P, (10860, 10960, -2700, -2180, 900, 1700), "#ffffff", "EQUIPO")  # tablero P.C.
 
-    # Rutas ortogonales adosadas a cubierta y muros, con curvas de radio constante
-    lleg = _local(Point(g["bajante_dc"]))
-    cerca = min(loc_mods, key=lambda m_: m_.distance(lleg))
-    bx0, by0, bx1, by1 = cerca.bounds
-    xs = min(max(lleg.x, bx0 + 200), bx1 - 200)  # salida alineada con la bajante si se puede
-    ys = by1 if abs(by1 - lleg.y) < abs(by0 - lleg.y) else by0
-    zr = Z_CUB + 80  # sobre la cubierta
-    xb = min(max(xs, 9300), 10500)  # bajante alineada con la salida del arreglo
-    dc = [
-        (xb, ys, Z_CUB + 330), (xb, ys, zr),
-        (xb, -2440, zr),  # por la cubierta y cruza el pretil hacia el balcón
-        (xb, -2440, zp + 2300), (9030, -2440, zp + 2300),  # baja por el muro frontal
-        (9030, -680, zp + 2300), (9535, -680, zp + 2300), (9535, -680, zp + 1650),
-    ]  # fmt: skip
-    ac = [
-        (9075, -1950, zp + 800), (9075, -1950, zp + 150), (9075, -2440, zp + 150),
-        (10700, -2440, zp + 150), (10930, -2440, zp + 150),  # sale del balcón a la fachada
-        (10930, -2440, Z_PATIO + 60), (10930, -2440, 1700),  # baja por fachada, pasa la cubierta
-    ]  # fmt: skip
-    tubo3d(lam, P, dc, 1.7, "#e74c3c", "DC")
-    tubo3d(lam, P, ac, 2.1, "#2e86de", "AC")
-    # Pase en la cubierta del patio y tablero P.C. del 1° piso (sobre la fachada)
-    pase = P(10930, -2440, Z_PATIO)
-    lam.circulo(pase, 1.5, "ROJO", relleno="#c00000")
-    caja3d(lam, P, (10860, 10960, -2700, -2180, 900, 1700), "#ffffff", "EQUIPO")
+
+def isometrico(lam, area, g, mods, d) -> None:
+    """Esquema isométrico de la vivienda con las rutas DC (rojo) y AC (azul) en 3D."""
+    x0, y0, w, h = area
+    R = rutas3d(g, mods)
+    lote = _local(g["lote"])
+    minx, miny, maxx, maxy = lote.bounds
+    marco = [(x, y, z) for x in (minx, maxx) for y in (miny, maxy) for z in (0, Z_CUB + 600)]
+    P, prof, _k = _vista((x0 + 5, y0 + 5, w - 10, h - 10), marco)
+    _escena3d(lam, P, prof, g, mods, R)
+    dc, ac = R["dc"], R["ac"]
+    zp = Z_PISO
     rot = [
-        (P(*dc[1]), "Arreglo FV · salida string S1.1.1", (-30, 14)),
-        (P(*dc[4]), 'DC: coraza 1" por cubierta y muro del balcón', (-34, 8)),
-        (P(9535, -680, zp + 1650), "Inversor (balcón 2° piso)", (-36, 6)),
-        (P(9075, -1950, zp + 1200), "Tablero FV", (-34, -6)),
-        (P(10300, -650, zp + 600), "Baterías", (16, 10)),
-        (P(*ac[3]), 'AC: IMC 2" adosada al piso del balcón', (20, 12)),
-        (pase, "Pase en cubierta del patio", (24, 4)),
-        (P(10960, -2440, 1300), "Tablero P.C. · 1° piso (punto de conexión)", (22, -6)),
+        (P(*dc[0]), "Arreglo FV · caja de paso, salida string S1.1.1", -1),
+        (P(*dc[2]), 'DC: coraza 1" por cubierta y muro del balcón', -1),
+        (P(9535, -680, zp + 1650), "Inversor (balcón 2° piso)", -1),
+        (P(9075, -1950, zp + 1200), "Tablero FV", -1),
+        (P(10300, -650, zp + 600), "Baterías", 1),
+        (P(*ac[2]), 'AC: IMC 2" adosada al piso del balcón', 1),
+        (P(10930, -2440, Z_PATIO), "Pase en cubierta del patio", 1),
+        (P(10960, -2440, 1300), "Tablero P.C. · 1° piso (punto de conexión)", 1),
     ]
-    # Rótulos en dos columnas laterales, ordenados por altura y sin solaparse
     for lado, xcol in ((-1, x0 + 52), (1, x0 + w - 62)):
-        items = sorted(((p_, t) for p_, t, (dx, _dy) in rot if (dx < 0) == (lado < 0)),
-                       key=lambda it: -it[0][1])  # fmt: skip
+        items = sorted(((p_, t) for p_, t, s in rot if s == lado), key=lambda it: -it[0][1])
         y_prev = None
         for p_, t in items:
             yq = p_[1] + 4 if y_prev is None else min(p_[1] + 4, y_prev - 6.5)
@@ -462,7 +651,245 @@ def isometrico(lam, area, g, mods, d) -> None:
             _guia(lam, p_, q)
             _caja_texto(lam, (q[0], q[1] + 1.6), [t], h=1.3, alinear="der" if lado < 0 else "izq")
     lam.texto((x0 + 2, y0 + 2), "Alturas supuestas: piso 2,8 m; cubierta 5,6 m; cubierta del patio "
-              "2,6 m. Esquema sin escala.", 1.3, "NOTA")  # fmt: skip
+              "2,6 m. Esquema sin escala. Detalles de estructura y rutas en la hoja 4.", 1.3,
+              "NOTA")  # fmt: skip
+
+
+# --- Detalles (hoja 4) ------------------------------------------------------------------------
+def _cota(lam, a, b, texto, off=4.0, h=1.4, capa="COTA") -> None:
+    """Cota alineada entre dos puntos del papel, desplazada `off` mm a la izquierda de a→b."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    ln = math.hypot(dx, dy) or 1
+    nx, ny = -dy / ln, dx / ln
+    a2 = (a[0] + nx * off, a[1] + ny * off)
+    b2 = (b[0] + nx * off, b[1] + ny * off)
+    s = 1 if off >= 0 else -1
+    lam.linea((a[0] + nx * s * 0.8, a[1] + ny * s * 0.8), (a2[0] + nx * s, a2[1] + ny * s), capa)
+    lam.linea((b[0] + nx * s * 0.8, b[1] + ny * s * 0.8), (b2[0] + nx * s, b2[1] + ny * s), capa)
+    lam.linea(a2, b2, capa)
+    for p_ in (a2, b2):  # marcas oblicuas
+        lam.linea((p_[0] - 0.7 * (dx / ln - nx), p_[1] - 0.7 * (dy / ln - ny)),
+                  (p_[0] + 0.7 * (dx / ln - nx), p_[1] + 0.7 * (dy / ln - ny)), capa)  # fmt: skip
+    ang = math.degrees(math.atan2(dy, dx))
+    if ang > 90 or ang <= -90:
+        ang -= 180 if ang > 0 else -180
+    m_ = ((a2[0] + b2[0]) / 2 + nx * s * 1.4, (a2[1] + b2[1]) / 2 + ny * s * 1.4)
+    lam.texto(m_, texto, h, capa, "centro", rotacion=ang)
+
+
+def _arco(lam, c, r, a0, a1, capa="COTA") -> None:
+    pts = [(c[0] + r * math.cos(math.radians(a)), c[1] + r * math.sin(math.radians(a)))
+           for a in [a0 + (a1 - a0) * i / 12 for i in range(13)]]  # fmt: skip
+    lam.polilinea(pts, capa)
+
+
+def detalle_lastrada_3d(lam, area, n_mod: int) -> None:
+    """Fila completa de la estructura lastrada en 3D con cotas (vista desde el sureste)."""
+    x0, y0, w, h = area
+    sep = 5.0
+    mods = [(i * (ANCHO_MOD + sep), i * (ANCHO_MOD + sep) + ANCHO_MOD) for i in range(n_mod)]
+    medias = [(p[1] + q[0]) / 2 for p, q in zip(mods, mods[1:], strict=False)]
+    juntas = [mods[0][0], *medias, mods[-1][1]]
+    fila = {"u": (1.0, 0.0), "v": (0.0, 1.0), "t0": 0.0, "mods": mods, "juntas": juntas}
+    largo = mods[-1][1]
+    zm0 = _z_modulo(0)
+    marco = [(x, y, z) for x in (-700, largo + 900) for y in (-900, PROY_MOD + 500)
+             for z in (0, zm0 + DESNIVEL + 200)]  # fmt: skip
+    P, prof, _k = _vista((x0 + 4, y0 + 10, w - 60, h - 14), marco, desde="SE")
+    # Cubierta como referencia
+    yt = PROY_MOD + 400
+    techo = [(-500, -700), (largo + 700, -700), (largo + 700, yt), (-500, yt)]
+    lam.polilinea([P(x, y, 0) for x, y in techo], "CUBIERTA", cerrada=True, relleno="#ecebe6")
+    fant = tuple(range(max(1, n_mod - 2), n_mod))  # últimos módulos en corte
+    _estructura3d(lam, P, prof, [fila], 0.0, color_mod="#3d6aa8", fantasma=fant)
+    # Cotas
+    _cota(lam, P(0, -450, 0), P(largo, -450, 0), f"{largo:.0f}", off=-2.5)
+    _cota(lam, P(mods[0][0], -150, zm0), P(mods[0][1], -150, zm0), f"{ANCHO_MOD:.0f}", off=-2.0,
+          h=1.2)  # fmt: skip
+    xe = largo + 350
+    _cota(lam, P(xe, 0, 0), P(xe, PROY_MOD, 0), f"{PROY_MOD:.0f} (planta)", off=-2.5, h=1.2)
+    # Rótulos
+    xr = x0 + w - 54
+    rot = [
+        (
+            P(mods[1][0] + 500, PROY_MOD * 0.6, zm0 + DESNIVEL * 0.6 + 40),
+            "Módulo JAM72D40 595 Wp (1134 × 2278), 10° (ver corte 2)",
+        ),
+        (
+            P(juntas[-2], RIEL_S[1] * COS10, zm0 + RIEL_S[1] * SEN10 - 20),
+            "Riel de aluminio (2 por fila, a 542 mm de cada borde)",
+        ),
+        (P(juntas[-2], RIEL_S[1] * COS10, Z_BLOQUE + 200), f"Soporte trasero {H_SOPORTE:.0f} mm"),
+        (P(juntas[-2], RIEL_S[0] * COS10, Z_BLOQUE * 0.6), "Bloque de concreto (lastre)"),
+        (P(juntas[1], 0, zm0 + 40), "Mid clamp en cada unión · end clamp en extremos"),
+    ]
+    rot.sort(key=lambda it: -it[0][1])
+    y_prev = None
+    for p_, t in rot:
+        yq = p_[1] + 3 if y_prev is None else min(p_[1] + 3, y_prev - 6)
+        y_prev = yq
+        _guia(lam, p_, (xr, yq))
+        _caja_texto(lam, (xr, yq + 1.5), [t], h=1.15)
+    lam.texto((x0 + 2, y0 + 3), f"Separación entre módulos {sep:.0f} mm. Bloques esquemáticos: "
+              "dimensiones, peso y cantidad según proveedor y cálculo de viento.", 1.15,
+              "NOTA")  # fmt: skip
+
+
+def corte_lastrada(lam, x, y) -> None:
+    """Corte lateral a escala 1:20 de la estructura lastrada con alturas e inclinación."""
+    k = 1 / 20
+    zb = Z_BLOQUE
+    zm0 = _z_modulo(0)
+    ts = [s * COS10 for s in RIEL_S]
+    zr = [zm0 + s * SEN10 for s in RIEL_S]
+
+    def p(t, z):
+        return (x + 14 + t * k, y + 12 + z * k)
+
+    lam.linea(p(-500, 0), p(PROY_MOD + 600, 0), "CUBIERTA")
+    lam.polilinea([p(-500, 0), p(PROY_MOD + 600, 0), p(PROY_MOD + 600, -60), p(-500, -60)],
+                  "CUBIERTA", cerrada=True, relleno="#d9d4cb")  # fmt: skip
+    for t, z in zip(ts, zr, strict=True):
+        a, b = p(t - BLOQUE_UV[1] / 2, 0), p(t + BLOQUE_UV[1] / 2, zb)
+        lam.rect(a[0], a[1], b[0] - a[0], b[1] - a[1], "CUBIERTA", relleno="#cfcfcf")
+        lam.linea(p(t, zb), p(t, z - 40), "ESTRUCTURA")
+        lam.rect(p(t, z)[0] - 1, p(t, z - 40)[1], 2, 40 * k, "ESTRUCTURA", relleno="#8b5e3c")
+    lam.linea(p(ts[0], zb), p(ts[1], zb), "ESTRUCTURA")
+    lam.linea(p(ts[0], zb), p(ts[1], zr[1] - 40), "ESTRUCTURA")
+    m0, m1 = p(0, zm0), p(PROY_MOD, zm0 + DESNIVEL)
+    grosor = 35 * k
+    lam.polilinea([m0, m1, (m1[0], m1[1] + grosor), (m0[0], m0[1] + grosor)], "MODULO",
+                  cerrada=True, relleno="#3d6aa8")  # fmt: skip
+    # Cotas: largo e inclinación del módulo, rieles, alturas y proyección
+    _cota(lam, (m0[0], m0[1] + grosor), (m1[0], m1[1] + grosor), f"{LARGO_MOD:.0f}", off=6)
+    r0 = (
+        m0[0] + (m1[0] - m0[0]) * RIEL_S[0] / LARGO_MOD,
+        m0[1] + (m1[1] - m0[1]) * RIEL_S[0] / LARGO_MOD,
+    )
+    r1 = (
+        m0[0] + (m1[0] - m0[0]) * RIEL_S[1] / LARGO_MOD,
+        m0[1] + (m1[1] - m0[1]) * RIEL_S[1] / LARGO_MOD,
+    )
+    _cota(lam, (m0[0], m0[1] + grosor), (r0[0], r0[1] + grosor), "542", off=2.5, h=1.2)
+    _cota(lam, (r0[0], r0[1] + grosor), (r1[0], r1[1] + grosor), "1244", off=2.5, h=1.2)
+    _cota(lam, (r1[0], r1[1] + grosor), (m1[0], m1[1] + grosor), "542", off=2.5, h=1.2)
+    _cota(lam, p(0, -60), p(PROY_MOD, -60), f"{PROY_MOD:.0f} (proyección en planta)", off=-4)
+    _cota(lam, p(ts[0], -60), p(ts[1], -60), f"{ts[1] - ts[0]:.0f} entre bloques", off=-9,
+          h=1.2)  # fmt: skip
+    _cota(lam, p(ts[1] + 120, zb), p(ts[1] + 120, zr[1]), f"{H_SOPORTE:.0f}", off=-3, h=1.3)
+    _cota(lam, p(ts[0] - 120, zb), p(ts[0] - 120, zr[0]), f"{zr[0] - zb:.0f}*", off=3, h=1.2)
+    _cota(lam, p(PROY_MOD + 250, zm0), p(PROY_MOD + 250, zm0 + DESNIVEL),
+          f"{DESNIVEL:.0f}", off=-3, h=1.3)  # fmt: skip
+    lam.linea(p(-150, zm0), p(PROY_MOD + 330, zm0), "COTA", trazo="discontinuo")
+    lam.linea(m1, p(PROY_MOD + 330, zm0 + DESNIVEL), "COTA", trazo="discontinuo")
+    # Ángulo
+    lam.linea(m0, (m0[0] + 20, m0[1]), "COTA")
+    _arco(lam, m0, 16, 0, 10)
+    lam.texto((m0[0] + 17, m0[1] - 2.6), "10°", 1.8, "COTA", negrita=True)
+    # Rótulos
+    lam.texto((m1[0] - 30, m1[1] + 9.5), "MÓDULO FV", 1.2, "NOTA")
+    lam.texto((p(ts[1], 0)[0] + 13, p(0, 0)[1] + 2.0), "BLOQUE DE CONCRETO (esquemático)", 1.1,
+              "NOTA")  # fmt: skip
+    lam.texto((p(-500, 0)[0], p(0, -60)[1] - 2.4), "CUBIERTA", 1.1, "NOTA")
+    lam.texto((x + 2, y - 8), "Cotas en mm. * Altura del soporte delantero calculada con 10° y los "
+              "rieles a 542 mm: confirmar con el proveedor.", 1.1, "NOTA")  # fmt: skip
+    lam.texto((x + 2, y - 10.6), f"Con más de una fila, distancia entre filas {PASO_FILAS:.0f} mm "
+              "(sin sombras); en una sola hilera el bloque trasero va bajo el borde alto.", 1.1,
+              "NOTA")  # fmt: skip
+
+
+def detalle_ruta3d(lam, area, g, mods, cual: str) -> None:
+    """Ruta DC o AC ampliada en 3D: tramos numerados con su longitud y curvas marcadas."""
+    x0, y0, w, h = area
+    R = rutas3d(g, mods)
+    pts = R[cual]
+    desc = R["desc_" + cual]
+    largos = _largos(pts)
+    ancho_tabla = 74
+    vista = (x0 + 1, y0 + 1, w - ancho_tabla - 3, h - 2)
+    xs = [q[0] for q in pts]
+    ys = [q[1] for q in pts]
+    zs = [q[2] for q in pts]
+    mg = 700
+    marco = [(x, y, z) for x in (min(xs) - mg, max(xs) + mg) for y in (min(ys) - mg, max(ys) + mg)
+             for z in (min(zs) - 300, max(zs) + 300)]  # fmt: skip
+    P, prof, k = _vista(vista, marco)
+    R["f"] = min(2.6, max(1.2, k * 60))  # tubo más grueso en la vista ampliada
+    _escena3d(_Recorte(lam, vista), P, prof, g, mods, R)
+    lam.rect(*vista, "CAJETIN")
+    color = "DC" if cual == "dc" else "AC"
+    # Tramos: etiqueta T# junto a la mitad de cada tramo
+    pp = [P(*q) for q in pts]
+    ocupados = list(pp)  # vértices y etiquetas ya puestas, para no solapar
+    for i, (a, b) in enumerate(zip(pp[:-1], pp[1:], strict=True), 1):
+        if math.dist(a, b) < 2:
+            continue
+        mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        ln = math.hypot(dx, dy)
+        nx, ny = -dy / ln, dx / ln
+        if ny < 0:
+            nx, ny = -nx, -ny
+        off = 5.5
+        q = (mx + nx * off, my + ny * off)
+        while any(math.dist(q, o) < 5.5 for o in ocupados) and off < 30:
+            off += 2.5
+            q = (mx + nx * off, my + ny * off)
+        ocupados.append(q)
+        ocupados.append((q[0] + 5, q[1]))
+        lam.linea((mx, my), q, color)
+        lam.circulo(q, 2.1, color, relleno="#ffffff")
+        lam.texto(q, f"T{i}", 1.3, color, "centro", negrita=True)
+        lam.texto((q[0] + 2.6, q[1] - 0.5), f"{largos[i - 1]:.2f} m".replace(".", ","), 1.15,
+                  color)  # fmt: skip
+    # Curvas: C# en cada cambio de dirección
+    for j, c in enumerate(pp[1:-1], 1):
+        lam.circulo(c, 0.9, color, relleno="#ffd54f")
+        lam.texto((c[0] - 1.4, c[1] - 2.6), f"C{j}", 1.15, "TEXTO", "centro", negrita=True)
+    # Tabla de tramos
+    tx, ty = x0 + w - ancho_tabla, y0 + h
+    cols = [("TRAMO", 10), ("RECORRIDO", 52), ("m", 12)]
+    fila = 3.8
+    xx = tx
+    for t, cw in cols:
+        lam.rect(xx, ty - fila, cw, fila, "CAJETIN", relleno="#d9d9d9")
+        lam.texto((xx + cw / 2, ty - fila / 2), t, 1.2, "TEXTO", "centro", negrita=True)
+        xx += cw
+    yy = ty - fila
+    for i, (dsc, lg) in enumerate(zip(desc, largos, strict=True), 1):
+        xx = tx
+        for (_t, cw), val in zip(cols, (f"T{i}", dsc, f"{lg:.2f}".replace(".", ",")), strict=True):
+            lam.rect(xx, yy - fila, cw, fila, "CAJETIN")
+            centro = cw < 20
+            lam.texto((xx + (cw / 2 if centro else 0.8), yy - fila / 2), val, 1.05, "TEXTO",
+                      "centro" if centro else "izq_medio")  # fmt: skip
+            xx += cw
+        yy -= fila
+    lam.rect(tx, yy - fila, sum(c[1] for c in cols), fila, "CAJETIN", relleno="#f4f4f4")
+    lam.texto((tx + 0.8, yy - fila / 2), f"TOTAL {sum(largos):.2f} m".replace(".", ","), 1.2,
+              "TEXTO", "izq_medio", negrita=True)  # fmt: skip
+    yy -= fila + 1.5
+    nc = len(pts) - 2
+    if cual == "dc":
+        lineas = [
+            f"C1 a C{nc}: {nc} curvas de 90° hechas con la coraza",
+            'americana de 1" (radio amplio, sin aplastarla).',
+            "Caja de paso 10x10 cm IP66 a la salida del arreglo.",
+            "Soportes / abrazaderas cada 1,5 m y a 30 cm de",
+            "cada curva. Coraza siempre adosada (no en el aire).",
+            "Cruce del pretil con pasamuro sellado.",
+        ]
+    else:
+        lineas = [
+            f'C1 a C{nc}: {nc} curvas IMC 2" de 90° (fabricadas).',
+            'Uniones IMC 2" cada 3 m; abrazaderas cada 1,5 m',
+            "y a 30 cm de cada curva y de cada caja.",
+            "Pase en cubierta del patio con sello impermeable.",
+            "Tubo adosado al piso y a la fachada (no en el aire).",
+        ]
+    for ln_ in lineas:
+        lam.texto((tx, yy), ln_, 1.1, "TEXTO", "izq_medio")
+        yy -= 2.7
 
 
 def _suavizar(pts, radio=220.0, muestras=7):
@@ -543,7 +970,7 @@ def detalle_estructura(lam, x, y, n_mod: int) -> None:
     lam.linea(b, (b[0], y0 + 4), "ESTRUCTURA")
     lam.linea((x0 + 10, y0), (x0 + 15 + 3665 * k + 6, y0), "CUBIERTA")
     lam.linea((x0 + 15, y0 - 4), (x0 + 15 + 3665 * k + 1, y0 - 4), "COTA")
-    lam.texto((x0 + 15 + 3665 * k / 2, y0 - 3.3), "3665", 1.5, "COTA", "centro")
+    lam.texto((x0 + 15 + 3665 * k / 2, y0 - 3.3), "3665 (entre filas)", 1.3, "COTA", "centro")
     lam.texto(
         ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 2.5), "2278", 1.5, "COTA", "centro", rotacion=10
     )
@@ -684,7 +1111,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
         *SUPUESTOS,
     ]
     out: list[Lamina] = []
-    total = 3
+    total = 4
 
     def cerrar(lam, notas):
         lam.notas = notas
@@ -743,7 +1170,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     ruta_planta(lam, m, ruta_dc, "DC", "#f6c9c4", "DC-")
     caja_paso(lam, m(ruta_dc[0]), 2.4)
     lam.circulo(m(g["bajante_dc"]), 1.6, "DC")
-    lam.texto(m(g["bajante_dc"]), "↑", 1.6, "DC", "centro", negrita=True)
+    lam.texto(m(g["bajante_dc"]), "↓", 1.6, "DC", "centro", negrita=True)
     pc = g["bajante_ac"]
     ruta_planta(lam, m, ruta_ac, "AC", "#cfe0f5", "AC-")
     lam.circulo(m(pc), 1.6, "ROJO")
@@ -755,7 +1182,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
         "RUTA DC (rojo)",
         'Coraza 1" adosada a la cubierta, soportes c/ 1,5 m',
         "Cable FV 2x4 mm² (+/-) + 1N° 8 AWG Cu verde",
-        f"Sube {L['dc_vertical']:.1f} m por fachada al balcón (↑)",
+        f"Baja {L['dc_vertical']:.1f} m por el muro del balcón (↓)",
         f"Longitud total DC: {L['dc_total']:.1f} m",
     ], h=1.25)  # fmt: skip
     _caja_texto(lam, (278, 82), [
@@ -785,6 +1212,24 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
         "El cable AC se dimensiona con base al alimentador existente en calibre 6 AWG.",
         "Alturas supuestas: piso 2,8 m, cubierta 5,6 m, cubierta del patio 2,6 m.",
     ])  # fmt: skip
+
+    # --- Hoja 4: detalles constructivos (estructura lastrada y rutas en 3D) ----------------
+    lam = _nueva(d, 4, "DET", "Detalles de estructura lastrada y rutas DC / AC", fecha, disenador,
+                 total, plantilla)  # fmt: skip
+    lam.texto((14, 258), f"DETALLES CONSTRUCTIVOS · {titulo_casa}", 3.0, "TEXTO", negrita=True)
+    _titulo_vista(lam, 16, 248, 1, f"Estructura lastrada: fila de {d['modulos']} módulos",
+                  "SIN ESCALA (cotas en mm)")  # fmt: skip
+    detalle_lastrada_3d(lam, (14, 150, 214, 92), d["modulos"])
+    _titulo_vista(lam, 234, 248, 2, "Corte lateral de la estructura", "ESC 1:20 (cotas en mm)")
+    corte_lastrada(lam, 236, 186)
+    _titulo_vista(lam, 16, 146, 3, "Ruta DC ampliada (tramos y curvas)", "SIN ESCALA")
+    detalle_ruta3d(lam, (14, 58, 196, 84), g, mods, "dc")
+    _titulo_vista(lam, 214, 146, 4, "Ruta AC ampliada (tramos y curvas)", "SIN ESCALA")
+    detalle_ruta3d(lam, (212, 58, 196, 84), g, mods, "ac")
+    cerrar(lam, notas_base + [
+        "Longitudes de tramo medidas sobre el eje de la tubería en el modelo 3D (sin reserva).",
+        "Bloques de concreto esquemáticos: dimensiones, peso y cantidad según proveedor.",
+    ])  # fmt: skip
     return out
 
 
@@ -803,17 +1248,23 @@ def rutas(g, mods):
     def largo(r):
         return sum(math.dist(a, b) for a, b in zip(r[:-1], r[1:], strict=True)) / 1000
 
+    # Longitudes de la ruta 3D (la misma que se dibuja y se tabula en la hoja 4)
+    R = rutas3d(g, mods)
+
+    def vertical(pts, desde=0):
+        tramos = zip(pts[desde:-1], pts[desde + 1 :], strict=True)
+        return sum(abs(q[2] - p_[2]) / 1000 for p_, q in tramos if abs(q[2] - p_[2]) > 1)
+
     L = {
         "dc_cubierta": largo(ruta_dc),
-        "dc_vertical": 1.5,  # sube al balcón 2° piso (supuesto)
-        "dc_balcon": 2.0,  # del pase al inversor por la pared del balcón (supuesto)
+        "dc_vertical": vertical(R["dc"], 1),  # del borde de la cubierta al balcón e inversor
         "ac_balcon": largo(ruta_ac),
-        "ac_bajante": 3.0,  # bajante por fachada al 1° piso (supuesto)
-        "ac_piso1": 3.0,  # recorrido en el 1° piso hasta el P.C. (supuesto)
+        "ac_bajante": vertical(R["ac"], 2),  # por fachada hasta el tablero P.C.
         "n_mod": len(cs),
+        "dc_total": sum(_largos(R["dc"])),
+        "ac_total": sum(_largos(R["ac"])),
+        "curvas_ac": len(R["ac"]) - 2,
     }
-    L["dc_total"] = L["dc_cubierta"] + L["dc_vertical"] + L["dc_balcon"]
-    L["ac_total"] = L["ac_balcon"] + L["ac_bajante"] + L["ac_piso1"]
     return L, ruta_dc, ruta_ac
 
 

@@ -69,7 +69,10 @@ TECHO = Polygon([(0, 13490), (11830, 13370), (11500, 630), (3040, 0), (2900, 200
                  (800, 2000), (800, 9050), (0, 9050)])  # fmt: skip
 X_MURO = 800.0  # fachada oeste del volumen alto: muro de los equipos (usuario)
 Y_MURO = (2000.0, 9050.0)
-TERRAZA = box(-2500, 2000, X_MURO, 9050)  # terraza del 2° piso al oeste (ancho supuesto)
+TERRAZA = box(-2500, 0, X_MURO, 9050)  # terraza del 2° piso al oeste (ancho supuesto)
+PATIO_SUR = box(X_MURO, 0, 2900, 2000)  # retranqueo suroeste, al nivel de la terraza
+CLARABOYA = box(1000, 300, 2700, 1800)  # claraboya en el retranqueo (posición supuesta, foto)
+BUITRON = (1100.0, 1700.0)  # buitrón por la claraboya hasta el 1° piso (usuario)
 Z_TER = 3000.0  # piso de la terraza del 2° piso (supuesto)
 Z_CUB = 6500.0  # cubierta en el borde sur (supuesto: 2 pisos)
 PEND = 0.05  # pendiente hacia el sur, 5 % ≈ 2,9° (supuesto: "casi plana")
@@ -89,8 +92,8 @@ EQ = {
     "inversor": (X_MURO - 235, X_MURO, 4100, 4695, Z_TER + 1100, Z_TER + 1585),  # 595×485×235
     "baterias": (X_MURO - 209, X_MURO, 5100, 5970, Z_TER, Z_TER + 1167),  # BHF-S15 870×1167
 }
-Y_BAJANTE = 2300.0  # bajante al punto de conexión, extremo sur del muro (listón de madera)
-Z_TAB_PC = (900.0, 1700.0)  # tablero existente del 1° piso (supuesto: bajo la bajante)
+Y_BAJANTE = BUITRON[1]  # la AC deja la fachada y va al buitrón de la claraboya
+Z_TAB_PC = (900.0, 1700.0)  # tablero existente del 1° piso (supuesto: bajo el buitrón)
 SUPUESTOS = [
     "Cubierta según Maps (142,25 m²); alturas supuestas: terraza 3,0 m, cubierta 6,5 m (borde "
     "sur), pretil 0,6 m; pendiente 5 % hacia el sur.",
@@ -111,7 +114,9 @@ def geometria() -> dict[str, Any]:
         "interior": interior,
         "util": TECHO.buffer(-(ESP_PRETIL + RETIRO), join_style=2),
         "terraza": TERRAZA,
-        "lote": TECHO.union(TERRAZA),
+        "patio_sur": PATIO_SUR,
+        "claraboya": CLARABOYA,
+        "lote": TECHO.union(TERRAZA).union(PATIO_SUR),
     }
     for k, (x0, x1, y0, y1, _z0, _z1) in EQ.items():
         g[k] = box(x0, y0, x1, y1)
@@ -153,7 +158,7 @@ def rutas(g, mods):
     oeste = min(mods, key=lambda m: m.bounds[0])
     x0, y0, _x1, y1 = oeste.bounds
     ym = (y0 + y1) / 2
-    ym = min(max(ym, Y_MURO[0] + 600), Y_MURO[1] - 600)  # bajante sobre el muro de equipos
+    ym = min(max(ym, Y_MURO[0] + 600), Y_MURO[1] - 600)  # bajada DC sobre el muro de equipos
     zm = z_techo(ym)
     x_int = X_MURO + ESP_PRETIL + 100  # junto a la cara interna del pretil oeste
     z_pre = zm + PRETIL + 120  # paso sobre el pretil
@@ -169,7 +174,7 @@ def rutas(g, mods):
     yt = (tab[2] + tab[3]) / 2
     ac = _fusionar([
         (X_EQ, yt, tab[4]), (X_EQ, yt, Z_TER + 150), (X_EQ, Y_BAJANTE, Z_TER + 150),
-        (X_EQ, Y_BAJANTE, Z_TAB_PC[1]),
+        (BUITRON[0], Y_BAJANTE, Z_TER + 150), (BUITRON[0], Y_BAJANTE, Z_TAB_PC[1]),
     ])  # fmt: skip
     desc_dc = [
         "Caja de paso del arreglo, sobre la cubierta, al pretil oeste",
@@ -181,8 +186,9 @@ def rutas(g, mods):
     ]
     desc_ac = [
         "Baja del tablero FV al piso de la terraza",
-        "Por la fachada, junto al piso, hasta la bajante",
-        "Baja por la bajante (listón de madera), pase en placa y tablero P.C.",
+        "Por la fachada, junto al piso, al extremo sur del muro",
+        "Por el piso del retranqueo hasta la claraboya",
+        "Baja por el buitrón de la claraboya al tablero P.C.",
     ]
     if len(desc_dc) != len(dc) - 1:
         desc_dc = [f"Tramo {i}" for i in range(1, len(dc))]
@@ -198,7 +204,7 @@ def rutas(g, mods):
         "ac_bajante": (Z_TER + 150 - Z_TAB_PC[1]) / 1000,
         "curvas_ac": len(ac) - 2,
         "ubic_bat": "En la terraza del 2° piso",
-        "obs_ac": "Fachada oeste, bajante y pase en placa",
+        "obs_ac": "Fachada oeste y buitrón por la claraboya",
         "estructura": est,
         "n_minirriel": n_mr,
         "filas_estructura": [
@@ -232,18 +238,24 @@ def _planta(lam, m: Marco, g, mods, rotulos=True) -> None:
             if not parte.is_empty and parte.length > 0:
                 lam.polilinea([m(q) for q in parte.coords], "NOTA")
         x += PASO_CRESTA * 3
+    m.pol(lam, g["patio_sur"], "NOTA", "#eef5e8")
+    m.pol(lam, g["claraboya"], "NOTA", "#d6eaf8")
+    cx0, cy0, cx1, cy1 = CLARABOYA.bounds
+    lam.linea(m((cx0, cy0)), m((cx1, cy1)), "NOTA")
+    lam.linea(m((cx0, cy1)), m((cx1, cy0)), "NOTA")
     for k, col in (("baterias", "#f0c9f0"), ("inversor", "#bfe3f7"), ("tablero", "#4a4a4a")):
         m.pol(lam, g[k], "EQUIPO", col)
     _modulos(lam, m, mods)
-    lam.circulo(m((X_EQ, Y_BAJANTE)), 1.3, "ROJO", relleno="#c00000")
+    lam.circulo(m(BUITRON), 1.3, "ROJO", relleno="#c00000")
     if rotulos:
         c = g["terraza"].centroid
         lam.texto(m((c.x, c.y + 1500)), "TERRAZA 2° PISO", 1.5, "NOTA", "centro", rotacion=90)
         lam.texto(m((6500, 12300)), "CUBIERTA TIPO SÁNDWICH", 1.5, "NOTA", "centro")
         lam.texto(m((6500, 11700)), f"pendiente {PEND * 100:.0f} % → sur", 1.2, "NOTA", "centro")
         lam.texto(m((6000, 14300)), "VÍA · NORTE", 1.5, "NOTA", "centro")
-        p = m((X_EQ, Y_BAJANTE))
-        _caja_texto(lam, (p[0] - 3, p[1] - 2), ["Bajante al punto de", "conexión (1° piso)"],
+        lam.texto(m(CLARABOYA.centroid), "CLARABOYA", 1.0, "NOTA", "centro")
+        p = m(BUITRON)
+        _caja_texto(lam, (p[0] - 6, p[1] - 4), ["Buitrón por la claraboya", "al tablero (1° piso)"],
                     capa="ROJO", h=1.1, alinear="der")  # fmt: skip
 
 
@@ -357,6 +369,7 @@ def _escena(lam, P, prof, g, mods, dc, ac, f=1.0) -> None:
                    P(x1 + 1500, y1 + 1500, 0), P(x0 - 1500, y1 + 1500, 0)], "NOTA",
                   cerrada=True, relleno="#e2e8da")  # fmt: skip
     prisma(g["terraza"], 0, lambda y: Z_TER, "#efe9de")
+    prisma(g["patio_sur"], 0, lambda y: Z_TER, "#efe9de")
     prisma(TECHO, 0, z_techo, "#efece5")
     # Pretiles (tramos sobre cada borde)
     pts = list(TECHO.exterior.coords)[:-1]
@@ -380,12 +393,15 @@ def _escena(lam, P, prof, g, mods, dc, ac, f=1.0) -> None:
                            ("tablero", "#d9d9d9", "EQUIPO")):  # fmt: skip
         _caja(lam, P, EQ[key], col, capa)
     tubo3d(lam, P, dc, 1.6 * f, "#e74c3c", "DC", abrazadera_mm=1500)
-    tubo3d(lam, P, ac, 2.0 * f, "#2e86de", "AC", abrazadera_mm=1500)
+    tubo3d(lam, P, ac[:-1], 2.0 * f, "#2e86de", "AC", abrazadera_mm=1500)
     xc, yc, zc = dc[0]
     _caja(lam, P, (xc - 60, xc + 60, yc - 60, yc + 60, zc - 60, zc + 60), "#f4f4f4", "EQUIPO")
-    lam.circulo(P(X_EQ, Y_BAJANTE, Z_TER), 1.4 * f, "ROJO", relleno="#c00000")
-    _caja(lam, P, (X_EQ - 100, X_EQ + 100, Y_BAJANTE - 260, Y_BAJANTE + 260, Z_TAB_PC[0],
-                   Z_TAB_PC[1]), "#ffffff", "EQUIPO")  # fmt: skip
+    cx0, cy0, cx1, cy1 = CLARABOYA.bounds
+    _caja(lam, P, (cx0, cx1, cy0, cy1, Z_TER, Z_TER + 250), "#bcd9ee", "NOTA")
+    tubo3d(lam, P, ac[-2:], 2.0 * f, "#2e86de", "AC", abrazadera_mm=1500)
+    lam.circulo(P(*BUITRON, Z_TER + 250), 1.4 * f, "ROJO", relleno="#c00000")
+    bx, by = BUITRON
+    _caja(lam, P, (bx - 100, bx + 100, by - 260, by + 260, *Z_TAB_PC), "#ffffff", "EQUIPO")
 
 
 def isometrico(lam, area, g, mods, dc, ac) -> None:
@@ -403,8 +419,8 @@ def isometrico(lam, area, g, mods, dc, ac) -> None:
         (P(tab[0], (tab[2] + tab[3]) / 2, tab[4] + 400), "Tablero FV", -1),
         (P(bat[0], (bat[2] + bat[3]) / 2, bat[4] + 500), "Baterías", -1),
         (P(*ac[1]), 'AC: IMC 2" junto al piso de la terraza', -1),
-        (P(X_EQ, Y_BAJANTE, Z_TER), "Pase en placa · bajante al 1° piso", 1),
-        (P(X_EQ, Y_BAJANTE, (Z_TAB_PC[0] + Z_TAB_PC[1]) / 2), "Tablero P.C. · 1° piso", 1),
+        (P(*BUITRON, Z_TER + 250), "Buitrón por la claraboya · baja al 1° piso", 1),
+        (P(*BUITRON, (Z_TAB_PC[0] + Z_TAB_PC[1]) / 2), "Tablero P.C. · 1° piso", 1),
         (P(6000, 9000, z_techo(9000) + H_MOD), "Módulos coplanares sobre mini riel", 1),
     ]
     for lado, xcol in ((-1, x0 + 46), (1, x0 + w - 56)):
@@ -559,19 +575,21 @@ def detalle_equipos(lam, x, y, d) -> None:
     y_dc = _Y_DC[0]
     tubo(lam, [px(y_dc, z_techo(y_dc) + PRETIL + 300), px(y_dc, Z_TER + 1900), px(yi, Z_TER + 1900),
                px(yi, inv[5])], 1.1, "DC", "#f6c9c4", abrazaderas=7)  # fmt: skip
-    tubo(lam, [px(yt, tab[4]), px(yt, Z_TER + 150), px(Y_BAJANTE, Z_TER + 150),
-               px(Y_BAJANTE, Z_TER - 600)], 1.5, "AC", "#cfe0f5", abrazaderas=7)  # fmt: skip
+    tubo(lam, [px(yt, tab[4]), px(yt, Z_TER + 150), px(Y_BAJANTE, Z_TER + 150)], 1.5, "AC",
+         "#cfe0f5", abrazaderas=7)  # fmt: skip
+    q = px(Y_BAJANTE, Z_TER + 150)
+    lam.texto((q[0] + 2, q[1] + 2.5), "→ claraboya (buitrón)", 1.1, "AC")
     tubo(lam, [px(inv[2], Z_TER + 1300), px(tab[3], Z_TER + 1300)], 1.2, "AC", "#cfe0f5")
     tubo(lam, [px(bat[2] + 200, bat[5]), px(bat[2] + 200, Z_TER + 1250), px(inv[3], Z_TER + 1250)],
          1.0, "DC", "#f6c9c4")  # fmt: skip
-    caja_paso(lam, px(Y_BAJANTE, Z_TER + 150), 2.2)
+    caja_paso(lam, px(Y_MURO[0] + 150, Z_TER + 150), 2.2)
     _caja_texto(lam, (x - 2, y + Hm - 2), ['DC: coraza 1" cruza el pretil',
                 "Cable FV 2x4 mm² + 1N° 8 AWG Cu"], h=1.1, alinear="der")  # fmt: skip
     _guia(lam, px(y_dc, z_techo(y_dc)), (x - 2, y + Hm - 5))
-    _caja_texto(lam, (x + W + 4, y + 16), ['AC: IMC 2" a la bajante',
+    _caja_texto(lam, (x + W + 4, y + 16), ['AC: IMC 2" al buitrón de la claraboya',
                 "2 x [3N° 6 + 1N° 6 (N) + 1N° 6 (T)] Cu", "Caja de paso 10x10 IP66"],
                 h=1.1)  # fmt: skip
-    _guia(lam, px(Y_BAJANTE, Z_TER + 150), (x + W + 4, y + 12))
+    _guia(lam, px(Y_MURO[0] + 150, Z_TER + 150), (x + W + 4, y + 12))
     _caja_texto(lam, (x + W + 4, y + Hm - 4), ["Franja de ventanas", "(referencia de la foto)"],
                 h=1.1)  # fmt: skip
     _guia(lam, px(5400, Z_TER + 2700), (x + W + 4, y + Hm - 7))
@@ -583,12 +601,14 @@ _Y_DC = [5500.0]  # se actualiza con la ruta DC calculada
 
 
 def detalle_punto_conexion(lam, x, y) -> None:
-    """Corte: bajante desde la terraza, pase en la placa y tablero del 1° piso, ESC 1:60."""
+    """Corte: buitrón por la claraboya hasta el tablero del 1° piso, ESC 1:60."""
     k = 1 / 60
     H = (Z_TER + 1500) * k
     lam.rect(x + 30, y, 3, H, "CUBIERTA", relleno="#d9d4cb")  # muro
     lam.rect(x, y + Z_TER * k - 2, 30, 2, "CUBIERTA", relleno="#bdbdbd")  # placa de la terraza
-    lam.texto((x + 1, y + Z_TER * k + 0.8), "Piso de la terraza (2° piso)", 1.1, "NOTA")
+    lam.texto((x + 1, y + Z_TER * k + 0.8), "Piso del retranqueo (2° piso)", 1.1, "NOTA")
+    lam.rect(x + 12, y + Z_TER * k - 2, 18, 2 + 250 * k, "NOTA", relleno="#bcd9ee")
+    lam.texto((x + 15, y + (Z_TER + 250) * k + 0.8), "CLARABOYA", 1.0, "NOTA")
     xt = x + 26
     tubo(lam, [(xt, y + (Z_TER + 1200) * k), (xt, y + (Z_TER + 150) * k),
                (xt, y + Z_TAB_PC[1] * k)], 1.6, "AC", "#cfe0f5", abrazaderas=8)  # fmt: skip
@@ -601,11 +621,11 @@ def detalle_punto_conexion(lam, x, y) -> None:
                   i * 2.4), "NOTA")  # fmt: skip
     lam.texto((xt, y + Z_TAB_PC[0] * k - 3), "TABLERO EXISTENTE (P.C.) · 1° PISO", 1.2, "TEXTO",
               "centro", negrita=True)  # fmt: skip
-    _caja_texto(lam, (x + 36, y + (Z_TER + 1200) * k + 2), ["Viene del tablero FV por la",
-                'fachada oeste (IMC 2")'], h=1.15)  # fmt: skip
+    _caja_texto(lam, (x + 36, y + (Z_TER + 1200) * k + 2), ["Viene del tablero FV por la fachada",
+                'oeste y el retranqueo (IMC 2")'], h=1.15)  # fmt: skip
     _caja_texto(lam, (x + 36, y + (Z_TER + 150) * k + 2), ["Caja de paso 10x10 cm IP66"], h=1.15)
-    _caja_texto(lam, (x + 36, y + (Z_TER - 300) * k), ["Pase en la placa con sello",
-                "Bajante junto al listón de madera"], h=1.15)  # fmt: skip
+    _caja_texto(lam, (x + 36, y + (Z_TER - 300) * k), ["Buitrón por la claraboya,",
+                "sellado contra el agua"], h=1.15)  # fmt: skip
     _guia(lam, (xt + 1, y + Z_TER * k - 1), (x + 36, y + (Z_TER - 300) * k - 2))
     _caja_texto(lam, (x + 36, y + Z_TAB_PC[1] * k),
                 ["Ubicación del tablero existente", "supuesta: verificar en obra"],
@@ -677,14 +697,14 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     dc_p = [q for i, q in enumerate(dc_p) if i == 0 or math.dist(q, dc_p[i - 1]) > 1]
     dc_f = [q[:2] for q in dc[i_fach:]]
     dc_f = [q for i, q in enumerate(dc_f) if i == 0 or math.dist(q, dc_f[i - 1]) > 1]
-    ac_p = [q[:2] for q in ac]
+    ac_p = [(q[0] - 450 if abs(q[0] - X_EQ) < 1 else q[0], q[1]) for q in ac]
     ac_p = [q for i, q in enumerate(ac_p) if i == 0 or math.dist(q, ac_p[i - 1]) > 1]
     ruta_planta(lam, m, dc_p, "DC", "#f6c9c4", "DC-")
     if len(dc_f) > 1:
         ruta_planta(lam, m, [(q[0] - 200, q[1]) for q in dc_f], "DC", "#f6c9c4", "DC-F")
-    ruta_planta(lam, m, [(q[0] - 450, q[1]) for q in ac_p], "AC", "#cfe0f5", "AC-")
+    ruta_planta(lam, m, ac_p, "AC", "#cfe0f5", "AC-")
     caja_paso(lam, m(dc_p[0]), 2.4)
-    for p, t, capa in ((dc_p[-1], "↓", "DC"), ((X_EQ - 450, Y_BAJANTE), "↓", "ROJO")):
+    for p, t, capa in ((dc_p[-1], "↓", "DC"), (BUITRON, "↓", "ROJO")):
         lam.circulo(m(p), 1.6, capa)
         lam.texto(m(p), t, 1.6, capa, "centro", negrita=True)
     _norte(lam, 258, 248)
@@ -699,7 +719,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     _caja_texto(lam, (278, 80), [
         "RUTA AC (azul)", 'IMC 2" por la fachada oeste, junto al piso de la terraza',
         "2 x [3N° 6 AWG (F) + 1N° 6 (N) + 1N° 6 (T)] Cu",
-        f"Baja {L['ac_bajante']:.1f} m por la bajante al tablero del 1° piso (↓)",
+        f"Baja {L['ac_bajante']:.1f} m por el buitrón de la claraboya al 1° piso (↓)",
         f"Longitud total AC: {L['ac_total']:.1f} m",
     ], h=1.25)  # fmt: skip
     _detalle_dc(lam, 278, 112, d, "Cruza el pretil y baja por la fachada oeste")
@@ -743,7 +763,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
         'C1 a C{nc}: {nc} curvas IMC 2" de 90° (fabricadas).',
         'Uniones IMC 2" cada 3 m; abrazaderas cada 1,5 m',
         "y a 30 cm de cada curva y de cada caja.",
-        "Pase en la placa de la terraza con sello.",
+        "Buitrón por la claraboya, sellado contra el agua.",
         "Tablero del 1° piso: ubicación supuesta, verificar.",
     ])  # fmt: skip
     cerrar(lam, [

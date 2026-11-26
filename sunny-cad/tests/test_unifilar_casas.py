@@ -158,6 +158,7 @@ def test_estructura_lastrada_y_rutas_3d() -> None:
 
 
 def test_pance_campestre_minirriel() -> None:
+    from shapely.geometry import Point
     from shapely.ops import unary_union
 
     from engine.planos import casas_pance as cp
@@ -171,7 +172,8 @@ def test_pance_campestre_minirriel() -> None:
     assert unary_union(mods).within(g["util"])
     dc, ac, desc_dc, desc_ac, L = cp.rutas(g, mods)
     assert len(desc_dc) == len(dc) - 1 and len(desc_ac) == len(ac) - 1
-    assert dc[-1][0] == cp.X_EQ and ac[-1][1] == cp.Y_BAJANTE  # fachada oeste y bajante
+    assert dc[-1][0] == cp.X_EQ and ac[-1][:2] == cp.BUITRON  # fachada oeste y claraboya
+    assert cp.CLARABOYA.contains(Point(cp.BUITRON))
     # Dos mini rieles por junta (n + 1 juntas en una hilera), 4 tornillos por mini riel
     assert L["n_minirriel"] == 2 * (8 + 1)
     filas = {f[1]: f[3] for f in L["filas_estructura"]}

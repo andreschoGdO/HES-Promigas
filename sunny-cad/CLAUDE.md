@@ -109,4 +109,5 @@ Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y f
   solo entre filas). Bloques esquemáticos: dimensiones y peso según proveedor.
 - Pance Campestre 16 (`engine/planos/casas_pance.py`): cubierta tipo sándwich, módulos coplanares
   sobre mini riel (2 por junta, a 542 mm de los bordes, sobre cresta); equipos en la fachada oeste
-  sobre la terraza del 2° piso; la AC baja por un buitrón a través de la claraboya del retranqueo suroeste al tablero del 1° piso.
+  sobre la terraza del 2° piso; la AC baja por un buitrón a través de la claraboya del piso de la terraza (frente al listón de
+  madera) hasta el tablero del 1° piso.

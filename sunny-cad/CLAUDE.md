@@ -101,3 +101,9 @@ Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y f
   central (N) hacia el tablero existente; sin línea separada de bypass del neutro.
 - Trifásicos: alimentador hasta el punto final del tablero de conexión en 6 AWG Cu.
 
+- Planos de conjuntos (Primavera, Doral): módulos en filas rectas y continuas, alineadas entre filas
+  cuando cabe; hoja 4 de detalles con la estructura lastrada en 3D, corte 1:20 y rutas DC/AC con
+  tramos numerados, curvas y tabla. Longitudes y curvas de materiales salen de la ruta 3D.
+- Estructura lastrada (detalle tipo): rieles a 542 mm de cada borde del módulo (1244 entre rieles),
+  soporte trasero 412 mm, 10°; en una sola hilera el bloque trasero va bajo el borde alto (3665 mm
+  solo entre filas). Bloques esquemáticos: dimensiones y peso según proveedor.

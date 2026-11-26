@@ -388,10 +388,35 @@ def _filas(mods):
     out = sorted(filas.values(), key=lambda f: f["t0"])
     for f in out:
         f["mods"].sort()
-        ms_ = f["mods"]
-        medias = [(p[1] + q[0]) / 2 for p, q in zip(ms_, ms_[1:], strict=False)]
-        f["juntas"] = [ms_[0][0], *medias, ms_[-1][1]]
+        _juntas(f)
     return out
+
+
+def _juntas(f, hueco=100.0) -> None:
+    """Grupos de módulos contiguos de una fila y las juntas (soportes) de cada grupo."""
+    grupos = [[f["mods"][0]]]
+    for q in f["mods"][1:]:
+        if q[0] - grupos[-1][-1][1] > hueco:
+            grupos.append([q])
+        else:
+            grupos[-1].append(q)
+    f["grupos"] = grupos
+    f["juntas"] = []
+    for g_ in grupos:
+        medias = [(p_[1] + q[0]) / 2 for p_, q in zip(g_, g_[1:], strict=False)]
+        f["juntas"] += [g_[0][0], *medias, g_[-1][1]]
+
+
+def cantidades_estructura(mods) -> dict[str, float]:
+    """Bloques, rieles y grapas de la estructura tal como se dibuja (por tramo continuo)."""
+    grupos = [g_ for f in _filas(mods) for g_ in f["grupos"]]
+    return {
+        "bloques": 2 * sum(len(g_) + 1 for g_ in grupos),  # delantero y trasero por soporte
+        "riel_m": sum(2 * ((g_[-1][1] - g_[0][0]) + 120) / 1000 for g_ in grupos),
+        "mid_clamp": sum(2 * (len(g_) - 1) for g_ in grupos),
+        "end_clamp": 4 * len(grupos),
+        "fila_m": sum((g_[-1][1] - g_[0][0]) / 1000 for g_ in grupos),
+    }
 
 
 def _estructura3d(lam, P, prof, filas, z_techo, color_mod="#2f4f7f", fantasma=()) -> None:
@@ -429,13 +454,17 @@ def _estructura3d(lam, P, prof, filas, z_techo, color_mod="#2f4f7f", fantasma=()
             for t, z in zip(ts, zr, strict=True):
                 add("l", [X(s, t, zb), X(s, t, z - 40)], "ESTRUCTURA")  # patas
             add("l", [X(s, ts[0], zb), X(s, ts[1], zr[1] - 40)], "ESTRUCTURA")  # diagonal
-        s_ini, s_fin = f["juntas"][0] - 60, f["juntas"][-1] + 60
-        for t, z in zip(ts, zr, strict=True):  # rieles a lo largo de la fila
-            add("l", [X(s_ini, t, z - 20), X(s_fin, t, z - 20)], "ESTRUCTURA")
+        for g_ in f["grupos"]:  # rieles a lo largo de cada tramo continuo de la fila
+            s_ini, s_fin = g_[0][0] - 60, g_[-1][1] + 60
+            for t, z in zip(ts, zr, strict=True):
+                add("l", [X(s_ini, t, z - 20), X(s_fin, t, z - 20)], "ESTRUCTURA")
         for im, (sa, sb) in enumerate(f["mods"]):
             cara = [X(sa, 0, zm0 + 35), X(sb, 0, zm0 + 35), X(sb, PROY_MOD, zm0 + DESNIVEL + 35),
                     X(sa, PROY_MOD, zm0 + DESNIVEL + 35)]  # fmt: skip
-            if im in fantasma:  # módulo en corte: solo el contorno, deja ver la estructura
+            if (
+                filas.index(f),
+                im,
+            ) in fantasma:  # módulo en corte: solo el contorno, deja ver la estructura
                 add("f", cara, "MODULO")
                 continue
             add("p", cara, "MODULO", color_mod)
@@ -683,36 +712,55 @@ def _arco(lam, c, r, a0, a1, capa="COTA") -> None:
     lam.polilinea(pts, capa)
 
 
-def detalle_lastrada_3d(lam, area, n_mod: int) -> None:
-    """Fila completa de la estructura lastrada en 3D con cotas (vista desde el sureste)."""
+def detalle_lastrada_3d(lam, area, n_mod: int = 0, mods=None, sep: float = 5.0) -> None:
+    """Estructura lastrada en 3D con cotas (vista desde el sureste).
+
+    Con `mods` (polígonos en planta) dibuja la distribución real, con todas sus filas; si no,
+    una fila de `n_mod` módulos.
+    """
     x0, y0, w, h = area
-    sep = 5.0
-    mods = [(i * (ANCHO_MOD + sep), i * (ANCHO_MOD + sep) + ANCHO_MOD) for i in range(n_mod)]
-    medias = [(p[1] + q[0]) / 2 for p, q in zip(mods, mods[1:], strict=False)]
-    juntas = [mods[0][0], *medias, mods[-1][1]]
-    fila = {"u": (1.0, 0.0), "v": (0.0, 1.0), "t0": 0.0, "mods": mods, "juntas": juntas}
-    largo = mods[-1][1]
+    if mods:
+        filas = _filas(mods)
+        s0 = min(f["mods"][0][0] for f in filas)
+        t_min = filas[0]["t0"]
+        for f in filas:
+            f.update(u=(1.0, 0.0), v=(0.0, 1.0), t0=f["t0"] - t_min)
+            f["mods"] = [(a - s0, b - s0) for a, b in f["mods"]]
+            _juntas(f)
+    else:
+        f = {"t0": 0.0, "u": (1.0, 0.0), "v": (0.0, 1.0)}
+        f["mods"] = [(i * (ANCHO_MOD + sep), i * (ANCHO_MOD + sep) + ANCHO_MOD)
+                     for i in range(n_mod)]  # fmt: skip
+        _juntas(f)
+        filas = [f]
+    f0 = filas[0]
+    mods0, juntas = f0["mods"], f0["juntas"]
+    largo = max(f["mods"][-1][1] for f in filas)
+    fondo = filas[-1]["t0"] + PROY_MOD
     zm0 = _z_modulo(0)
-    marco = [(x, y, z) for x in (-700, largo + 900) for y in (-900, PROY_MOD + 500)
+    marco = [(x, y, z) for x in (-700, largo + 1400) for y in (-900, fondo + 500)
              for z in (0, zm0 + DESNIVEL + 200)]  # fmt: skip
     P, prof, _k = _vista((x0 + 4, y0 + 10, w - 60, h - 14), marco, desde="SE")
-    # Cubierta como referencia
-    yt = PROY_MOD + 400
+    yt = fondo + 400
     techo = [(-500, -700), (largo + 700, -700), (largo + 700, yt), (-500, yt)]
     lam.polilinea([P(x, y, 0) for x, y in techo], "CUBIERTA", cerrada=True, relleno="#ecebe6")
-    fant = tuple(range(max(1, n_mod - 2), n_mod))  # últimos módulos en corte
-    _estructura3d(lam, P, prof, [fila], 0.0, color_mod="#3d6aa8", fantasma=fant)
-    # Cotas
-    _cota(lam, P(0, -450, 0), P(largo, -450, 0), f"{largo:.0f}", off=-2.5)
-    _cota(lam, P(mods[0][0], -150, zm0), P(mods[0][1], -150, zm0), f"{ANCHO_MOD:.0f}", off=-2.0,
-          h=1.2)  # fmt: skip
+    n0 = len(mods0)
+    fant = {(0, i) for i in range(max(1, n0 - 2), n0)}  # últimos módulos de la 1ª fila en corte
+    _estructura3d(lam, P, prof, filas, 0.0, color_mod="#3d6aa8", fantasma=fant)
+    largo0 = mods0[-1][1] - mods0[0][0]
+    _cota(lam, P(mods0[0][0], -450, 0), P(mods0[-1][1], -450, 0), f"{largo0:.0f}", off=-2.5)
+    _cota(lam, P(mods0[0][0], -150, zm0), P(mods0[0][1], -150, zm0), f"{ANCHO_MOD:.0f}",
+          off=-2.0, h=1.2)  # fmt: skip
     xe = largo + 350
     _cota(lam, P(xe, 0, 0), P(xe, PROY_MOD, 0), f"{PROY_MOD:.0f} (planta)", off=-2.5, h=1.2)
+    for fa, fb in zip(filas, filas[1:], strict=False):
+        _cota(lam, P(xe + 1000, fa["t0"], 0), P(xe + 1000, fb["t0"], 0),
+              f"{fb['t0'] - fa['t0']:.0f} entre filas", off=-2.5, h=1.2)  # fmt: skip
     # Rótulos
     xr = x0 + w - 54
     rot = [
         (
-            P(mods[1][0] + 500, PROY_MOD * 0.6, zm0 + DESNIVEL * 0.6 + 40),
+            P(mods0[min(1, n0 - 1)][0] + 500, PROY_MOD * 0.6, zm0 + DESNIVEL * 0.6 + 40),
             "Módulo JAM72D40 595 Wp (1134 × 2278), 10° (ver corte 2)",
         ),
         (
@@ -735,7 +783,7 @@ def detalle_lastrada_3d(lam, area, n_mod: int) -> None:
               "NOTA")  # fmt: skip
 
 
-def corte_lastrada(lam, x, y) -> None:
+def corte_lastrada(lam, x, y, paso: float | None = None) -> None:
     """Corte lateral a escala 1:20 de la estructura lastrada con alturas e inclinación."""
     k = 1 / 20
     zb = Z_BLOQUE
@@ -793,17 +841,52 @@ def corte_lastrada(lam, x, y) -> None:
     lam.texto((p(-500, 0)[0], p(0, -60)[1] - 2.4), "CUBIERTA", 1.1, "NOTA")
     lam.texto((x + 2, y - 8), "Cotas en mm. * Altura del soporte delantero calculada con 10° y los "
               "rieles a 542 mm: confirmar con el proveedor.", 1.1, "NOTA")  # fmt: skip
-    lam.texto((x + 2, y - 10.6), f"Con más de una fila, distancia entre filas {PASO_FILAS:.0f} mm "
-              "(sin sombras); en una sola hilera el bloque trasero va bajo el borde alto.", 1.1,
-              "NOTA")  # fmt: skip
+    nota = (
+        f"Filas seguidas cada {paso:.0f} mm (eje a eje); bloques bajo cada riel."
+        if paso
+        else f"Con más de una fila, distancia entre filas {PASO_FILAS:.0f} mm "
+        "(sin sombras); en una sola hilera el bloque trasero va bajo el borde alto."
+    )
+    lam.texto((x + 2, y - 10.6), nota, 1.1, "NOTA")
 
 
 def detalle_ruta3d(lam, area, g, mods, cual: str) -> None:
-    """Ruta DC o AC ampliada en 3D: tramos numerados con su longitud y curvas marcadas."""
-    x0, y0, w, h = area
+    """Ruta DC o AC de Primavera ampliada en 3D (tramos y curvas)."""
     R = rutas3d(g, mods)
-    pts = R[cual]
-    desc = R["desc_" + cual]
+
+    def escena(lam_, P, prof, f):
+        _escena3d(lam_, P, prof, g, mods, {**R, "f": f})
+
+    detalle_ruta(lam, area, R[cual], R["desc_" + cual], cual, _vista, escena,
+                 NOTAS_RUTA[cual])  # fmt: skip
+
+
+NOTAS_RUTA = {
+    "dc": [
+        "C1 a C{nc}: {nc} curvas de 90° hechas con la coraza",
+        'americana de 1" (radio amplio, sin aplastarla).',
+        "Caja de paso 10x10 cm IP66 a la salida del arreglo.",
+        "Soportes / abrazaderas cada 1,5 m y a 30 cm de",
+        "cada curva. Coraza siempre adosada (no en el aire).",
+        "Cruce del pretil con pasamuro sellado.",
+    ],
+    "ac": [
+        'C1 a C{nc}: {nc} curvas IMC 2" de 90° (fabricadas).',
+        'Uniones IMC 2" cada 3 m; abrazaderas cada 1,5 m',
+        "y a 30 cm de cada curva y de cada caja.",
+        "Pase en cubierta del patio con sello impermeable.",
+        "Tubo adosado al piso y a la fachada (no en el aire).",
+    ],
+}
+
+
+def detalle_ruta(lam, area, pts, desc, cual, vista_fn, escena_fn, notas, extra=()) -> None:
+    """Ruta ampliada en 3D: tramos numerados con su longitud, curvas marcadas y tabla.
+
+    vista_fn(area, puntos) → (P, prof, k); escena_fn(lam, P, prof, f) dibuja la vivienda.
+    `extra`: filas adicionales de la tabla (rótulo, recorrido, m), p. ej. tubería existente.
+    """
+    x0, y0, w, h = area
     largos = _largos(pts)
     ancho_tabla = 74
     vista = (x0 + 1, y0 + 1, w - ancho_tabla - 3, h - 2)
@@ -813,9 +896,8 @@ def detalle_ruta3d(lam, area, g, mods, cual: str) -> None:
     mg = 700
     marco = [(x, y, z) for x in (min(xs) - mg, max(xs) + mg) for y in (min(ys) - mg, max(ys) + mg)
              for z in (min(zs) - 300, max(zs) + 300)]  # fmt: skip
-    P, prof, k = _vista(vista, marco)
-    R["f"] = min(2.6, max(1.2, k * 60))  # tubo más grueso en la vista ampliada
-    _escena3d(_Recorte(lam, vista), P, prof, g, mods, R)
+    P, prof, k = vista_fn(vista, marco)
+    escena_fn(_Recorte(lam, vista), P, prof, min(2.6, max(1.2, k * 60)))  # tubo más grueso
     lam.rect(*vista, "CAJETIN")
     color = "DC" if cual == "dc" else "AC"
     # Tramos: etiqueta T# junto a la mitad de cada tramo
@@ -865,28 +947,22 @@ def detalle_ruta3d(lam, area, g, mods, cual: str) -> None:
                       "centro" if centro else "izq_medio")  # fmt: skip
             xx += cw
         yy -= fila
+    for rot_, dsc, lg in extra:
+        xx = tx
+        for (_t, cw), val in zip(cols, (rot_, dsc, f"{lg:.2f}".replace(".", ",")), strict=True):
+            lam.rect(xx, yy - fila, cw, fila, "CAJETIN", trazo="discontinuo")
+            centro = cw < 20
+            lam.texto((xx + (cw / 2 if centro else 0.8), yy - fila / 2), val, 1.05, "TEXTO",
+                      "centro" if centro else "izq_medio")  # fmt: skip
+            xx += cw
+        yy -= fila
+    total = sum(largos) + sum(e[2] for e in extra)
     lam.rect(tx, yy - fila, sum(c[1] for c in cols), fila, "CAJETIN", relleno="#f4f4f4")
-    lam.texto((tx + 0.8, yy - fila / 2), f"TOTAL {sum(largos):.2f} m".replace(".", ","), 1.2,
+    lam.texto((tx + 0.8, yy - fila / 2), f"TOTAL {total:.2f} m".replace(".", ","), 1.2,
               "TEXTO", "izq_medio", negrita=True)  # fmt: skip
     yy -= fila + 1.5
     nc = len(pts) - 2
-    if cual == "dc":
-        lineas = [
-            f"C1 a C{nc}: {nc} curvas de 90° hechas con la coraza",
-            'americana de 1" (radio amplio, sin aplastarla).',
-            "Caja de paso 10x10 cm IP66 a la salida del arreglo.",
-            "Soportes / abrazaderas cada 1,5 m y a 30 cm de",
-            "cada curva. Coraza siempre adosada (no en el aire).",
-            "Cruce del pretil con pasamuro sellado.",
-        ]
-    else:
-        lineas = [
-            f'C1 a C{nc}: {nc} curvas IMC 2" de 90° (fabricadas).',
-            'Uniones IMC 2" cada 3 m; abrazaderas cada 1,5 m',
-            "y a 30 cm de cada curva y de cada caja.",
-            "Pase en cubierta del patio con sello impermeable.",
-            "Tubo adosado al piso y a la fachada (no en el aire).",
-        ]
+    lineas = [t.format(nc=nc) for t in notas]
     for ln_ in lineas:
         lam.texto((tx, yy), ln_, 1.1, "TEXTO", "izq_medio")
         yy -= 2.7
@@ -1264,6 +1340,7 @@ def rutas(g, mods):
         "dc_total": sum(_largos(R["dc"])),
         "ac_total": sum(_largos(R["ac"])),
         "curvas_ac": len(R["ac"]) - 2,
+        "estructura": cantidades_estructura([_local(m_) for m_ in mods]),
     }
     return L, ruta_dc, ruta_ac
 
@@ -1280,7 +1357,11 @@ def materiales_obra(d, L) -> list[tuple]:
     ldc, lac = L["dc_total"], L["ac_total"]
     cal, tub = L.get("cal_ac", "6"), L.get("tubo_ac", '2"')
     lnu = L.get("ac_nuevo", lac)  # tubería nueva (sin la existente)
-    fila_m = n * 1.139
+    est = L.get("estructura") or {
+        "bloques": 2 * (n + 1), "riel_m": 2 * n * 1.139, "mid_clamp": 2 * (n - 1),
+        "end_clamp": 4, "fila_m": n * 1.139,
+    }  # fmt: skip
+    fila_m = est["fila_m"]
     return [
         ("GENERACIÓN FV", f"Módulo FV {d['modulo']['modelo']} 595 Wp", "und", n, "Ficha JA Solar"),
         ("", f"Inversor híbrido {d['inversor_modelo']}", "und", 1, "Incluye seccionador DC"),
@@ -1291,11 +1372,12 @@ def materiales_obra(d, L) -> list[tuple]:
          L.get("ubic_bat", "En el balcón, sobre el piso")),
         ("ESTRUCTURA LASTRADA", "Kit de estructura lastrada 10° (por módulo)", "und", n,
          "Según detalle de la hoja 1"),
-        ("", "Riel de aluminio para módulos", "m", math.ceil(2 * fila_m), "2 rieles por fila"),
-        ("", "Bloque de concreto (contrapeso)", "und", 2 * (n + 1),
+        ("", "Riel de aluminio para módulos", "m", math.ceil(est["riel_m"]),
+         "2 rieles por tramo de fila"),
+        ("", "Bloque de concreto (contrapeso)", "und", est["bloques"],
          "Estimado: verificar con cálculo de viento"),
-        ("", "Mid clamp (con grounding)", "und", 2 * (n - 1), ""),
-        ("", "End clamp (con grounding)", "und", 4, ""),
+        ("", "Mid clamp (con grounding)", "und", est["mid_clamp"], ""),
+        ("", "End clamp (con grounding)", "und", est["end_clamp"], ""),
         ("", "Grounding lug para estructura", "und", 2, ""),
         ("CABLEADO DC", "Cable FV PV 4 mm² 1,8 kVdc (rojo +)", "m", m_(ldc), "String S1.1.1"),
         ("", "Cable FV PV 4 mm² 1,8 kVdc (negro -)", "m", m_(ldc), ""),

@@ -130,3 +130,28 @@ def test_ingenieria_tipo_doral() -> None:
     assert ac[-1][:2] == cd.TUBO_EXISTENTE and existente[-1][2] == cd.TAB_INTERNO_Z
     assert L["cal_ac"] == "8" and L["tubo_ac"] == '1¼"'
     assert Point(dc[-1][:2]).distance(g["inversor"]) < 300
+
+
+def test_estructura_lastrada_y_rutas_3d() -> None:
+    from engine.planos import casas_doral as cd
+    from engine.planos import casas_primavera as cp
+
+    # Doral: filas rectas; los tramos de la 2ª fila se alinean con las columnas de la 1ª si caben
+    g = cd.geometria()
+    mods = cd.colocar(g, 8)
+    filas = cp._filas(mods)
+    assert len(filas) == 2
+    cols1 = {round(a) for a, _b in filas[0]["mods"]}
+    assert {round(a) for a, _b in filas[1]["grupos"][0]} <= cols1
+    est = cp.cantidades_estructura(mods)
+    juntas = sum(len(g_) + 1 for f in filas for g_ in f["grupos"])
+    assert est["bloques"] == 2 * juntas  # bloque delantero y trasero en cada soporte
+    _dc, ac, _ex, L = cd.rutas(g, mods)
+    assert L["ac_nuevo"] == pytest.approx(sum(cp._largos(ac)))
+    # Rutas sin vértices colineales: cada vértice intermedio es una curva
+    for r in (_dc, ac):
+        assert cp._fusionar(r) == r
+    # Geometría del soporte: 412 mm al riel trasero y 10° de inclinación
+    zm0 = cp._z_modulo(0)
+    assert zm0 + cp.RIEL_S[1] * cp.SEN10 - cp.Z_BLOQUE == pytest.approx(cp.H_SOPORTE)
+    assert cp.DESNIVEL == pytest.approx(395.6, abs=0.5)

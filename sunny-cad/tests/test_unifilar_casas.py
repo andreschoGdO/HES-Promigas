@@ -155,3 +155,24 @@ def test_estructura_lastrada_y_rutas_3d() -> None:
     zm0 = cp._z_modulo(0)
     assert zm0 + cp.RIEL_S[1] * cp.SEN10 - cp.Z_BLOQUE == pytest.approx(cp.H_SOPORTE)
     assert cp.DESNIVEL == pytest.approx(395.6, abs=0.5)
+
+
+def test_pance_campestre_minirriel() -> None:
+    from shapely.ops import unary_union
+
+    from engine.planos import casas_pance as cp
+
+    g = cp.geometria()
+    # Medición en Maps: 142,25 m² y 49,54 m (contorno con los muros rectificados)
+    assert g["techo"].area / 1e6 == pytest.approx(142.25, rel=0.03)
+    assert g["techo"].length / 1000 == pytest.approx(49.54, rel=0.03)
+    mods = cp.colocar(g, 8)
+    assert len(mods) == 8 and len({round(m.bounds[1]) for m in mods}) == 1  # una sola hilera
+    assert unary_union(mods).within(g["util"])
+    dc, ac, desc_dc, desc_ac, L = cp.rutas(g, mods)
+    assert len(desc_dc) == len(dc) - 1 and len(desc_ac) == len(ac) - 1
+    assert dc[-1][0] == cp.X_EQ and ac[-1][1] == cp.Y_BAJANTE  # fachada oeste y bajante
+    # Dos mini rieles por junta (n + 1 juntas en una hilera), 4 tornillos por mini riel
+    assert L["n_minirriel"] == 2 * (8 + 1)
+    filas = {f[1]: f[3] for f in L["filas_estructura"]}
+    assert filas["Tornillo autoperforante con arandela EPDM"] == cp.TORNILLOS_MR * 18

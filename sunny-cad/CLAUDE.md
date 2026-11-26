@@ -107,3 +107,6 @@ Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y f
 - Estructura lastrada (detalle tipo): rieles a 542 mm de cada borde del módulo (1244 entre rieles),
   soporte trasero 412 mm, 10°; en una sola hilera el bloque trasero va bajo el borde alto (3665 mm
   solo entre filas). Bloques esquemáticos: dimensiones y peso según proveedor.
+- Pance Campestre 16 (`engine/planos/casas_pance.py`): cubierta tipo sándwich, módulos coplanares
+  sobre mini riel (2 por junta, a 542 mm de los bordes, sobre cresta); equipos en la fachada oeste
+  sobre la terraza del 2° piso; bajante junto al listón de madera hasta el tablero del 1° piso.

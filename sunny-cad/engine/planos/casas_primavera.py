@@ -492,10 +492,13 @@ def _vista(area, pts3d, desde="NE"):
         if desde == "NE":  # observador al noreste (lado del patio y el balcón)
             x, y = -x, -y
             return ((x - y) * c30, (x + y) * s30 + z)
+        if desde == "SO":  # observador al suroeste
+            return ((x - y) * c30, (x + y) * s30 + z)
         return ((x + y) * c30, (y - x) * s30 + z)  # observador al sureste
 
     def prof(x, y, z):
-        return (-(x + y) if desde == "NE" else (y - x)) - 2.5 * z
+        base = {"NE": -(x + y), "SO": x + y}.get(desde, y - x)
+        return base - 2.5 * z
 
     us = [proy(*q) for q in pts3d]
     ux = [p_[0] for p_ in us]
@@ -1370,15 +1373,17 @@ def materiales_obra(d, L) -> list[tuple]:
          "und", 1, ""),
         ("", "Estructura soporte para baterías", "und", 1,
          L.get("ubic_bat", "En el balcón, sobre el piso")),
-        ("ESTRUCTURA LASTRADA", "Kit de estructura lastrada 10° (por módulo)", "und", n,
-         "Según detalle de la hoja 1"),
-        ("", "Riel de aluminio para módulos", "m", math.ceil(est["riel_m"]),
-         "2 rieles por tramo de fila"),
-        ("", "Bloque de concreto (contrapeso)", "und", est["bloques"],
-         "Estimado: verificar con cálculo de viento"),
-        ("", "Mid clamp (con grounding)", "und", est["mid_clamp"], ""),
-        ("", "End clamp (con grounding)", "und", est["end_clamp"], ""),
-        ("", "Grounding lug para estructura", "und", 2, ""),
+        *(L.get("filas_estructura") or [
+            ("ESTRUCTURA LASTRADA", "Kit de estructura lastrada 10° (por módulo)", "und", n,
+             "Según detalle de la hoja 1"),
+            ("", "Riel de aluminio para módulos", "m", math.ceil(est["riel_m"]),
+             "2 rieles por tramo de fila"),
+            ("", "Bloque de concreto (contrapeso)", "und", est["bloques"],
+             "Estimado: verificar con cálculo de viento"),
+            ("", "Mid clamp (con grounding)", "und", est["mid_clamp"], ""),
+            ("", "End clamp (con grounding)", "und", est["end_clamp"], ""),
+            ("", "Grounding lug para estructura", "und", 2, ""),
+        ]),
         ("CABLEADO DC", "Cable FV PV 4 mm² 1,8 kVdc (rojo +)", "m", m_(ldc), "String S1.1.1"),
         ("", "Cable FV PV 4 mm² 1,8 kVdc (negro -)", "m", m_(ldc), ""),
         ("", "Cable Cu 8 AWG verde (tierra DC)", "m", m_(ldc + fila_m), "Equipotencialización"),
@@ -1458,7 +1463,9 @@ def tabla_materiales_compacta(lam, x, y, filas) -> None:
         yy -= h
 
 
-def _resumen(lam, x, y, d, mods, ancho=74, orientacion="Sur (180°), 10°") -> None:
+def _resumen(
+    lam, x, y, d, mods, ancho=74, orientacion="Sur (180°), 10°", estructura="Lastrada, bloques"
+) -> None:
     filas = [
         ("Módulos", f"{len(mods)} × JAM72D40-595/MB"),
         ("Potencia DC", f"{_f(d['kwp'])} kWp"),
@@ -1466,7 +1473,7 @@ def _resumen(lam, x, y, d, mods, ancho=74, orientacion="Sur (180°), 10°") -> N
         ("Strings", " + ".join(f"1 × {n} mód." for n in d["strings"])),
         ("Baterías", f"{d['bat']['n']} × {d['bat']['modulo']}"),
         ("Orientación", orientacion),
-        ("Estructura", "Lastrada, bloques"),
+        ("Estructura", estructura),
     ]
     lam.rect(x, y - 4 - len(filas) * 3.6, ancho, 4 + len(filas) * 3.6, "CAJETIN")
     lam.texto((x + ancho / 2, y - 2), "RESUMEN DEL SISTEMA", 1.7, "TEXTO", "centro", negrita=True)

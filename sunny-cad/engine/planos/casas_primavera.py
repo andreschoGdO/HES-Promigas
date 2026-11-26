@@ -390,11 +390,25 @@ def isometrico(lam, area, g, mods, d) -> None:
     prisma(loc["patio"], Z_PATIO - 100, Z_PATIO, "#c9d8ea", "NOTA")
     for _pr, pts, capa, rel in sorted(caras, key=lambda c_: -c_[0]):
         lam.polilinea(pts, capa, cerrada=True, relleno=rel)
-    # Módulos inclinados (rectángulos sobre la cubierta, 10°)
-    for md in loc_mods:
-        a, b, c, dd = list(md.exterior.coords)[:4]
-        lam.polilinea([P(*a, Z_CUB + 300), P(*b, Z_CUB + 300), P(*c, Z_CUB + 700),
-                       P(*dd, Z_CUB + 700)], "MODULO", cerrada=True, relleno="#7fb3e6")  # fmt: skip
+    # Módulos en una fila continua, inclinados 10° hacia el sur: borde bajo al sur (lado corto
+    # de la huella, 1134 mm) y borde alto al norte, sobre el soporte lastrado.
+    z_bajo, z_alto = Z_CUB + 300, Z_CUB + 300 + 2278 * math.sin(math.radians(10))
+    for md in sorted(loc_mods, key=lambda m_: -(m_.centroid.x + m_.centroid.y)):
+        v = list(md.exterior.coords)[:4]
+        lados = sorted(((v[i], v[(i + 1) % 4]) for i in range(4)), key=lambda e: math.dist(*e))
+        sur, norte = sorted(lados[:2], key=lambda e: e[0][1] + e[1][1])
+        norte = norte[::-1]  # mismo sentido que el borde sur
+        for q in (*sur, *norte):  # patas del soporte lastrado
+            zq = z_bajo if q in sur else z_alto
+            lam.linea(P(*q, Z_CUB), P(*q, zq), "SOMBRA")
+        cara = [P(*sur[0], z_bajo), P(*sur[1], z_bajo), P(*norte[1], z_alto), P(*norte[0], z_alto)]
+        lam.polilinea(cara, "MODULO", cerrada=True, relleno="#2f4f7f")
+        # Marco de aluminio en los costados (unión entre módulos) y línea central de celdas
+        lam.linea(cara[0], cara[3], "BRILLO")
+        lam.linea(cara[1], cara[2], "BRILLO")
+        a_ = [(sur[0][i] + norte[0][i]) / 2 for i in (0, 1)]
+        b_ = [(sur[1][i] + norte[1][i]) / 2 for i in (0, 1)]
+        lam.linea(P(*a_, (z_bajo + z_alto) / 2), P(*b_, (z_bajo + z_alto) / 2), "SOMBRA")
     # Equipos en el balcón como cajas 3D montadas en los muros
     zp = Z_PISO
     caja3d(lam, P, (9339, 9731, -800, -560, zp + 1100, zp + 1650), "#dbe9f6", "AC")  # inversor

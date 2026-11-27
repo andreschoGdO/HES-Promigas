@@ -858,6 +858,15 @@ def _convenciones(lam: Lamina) -> None:
     lam.texto((vx + 11, yv - 14), "String de paneles", 1.1, "TEXTO")
 
 
+def caja_bornas(d: dict[str, Any]) -> bool:
+    """Caja con bornas entre inversor y baterías: Livoltek no; DEYE solo con dos o más torres."""
+    if d["familia"].startswith("livoltek"):
+        return False
+    if d["familia"].startswith("deye"):
+        return len(d["bat"]["torres"]) > 1
+    return True
+
+
 def _baterias(lam: Lamina, d: dict[str, Any], centros: dict[str, float], iy: float) -> None:
     """Banco de baterías dibujado por torres, con su conexión DC y la comunicación BMS."""
     b, fam = d["bat"], d["fam"]
@@ -866,15 +875,19 @@ def _baterias(lam: Lamina, d: dict[str, Any], centros: dict[str, float], iy: flo
     tw, gap, x0, y0, hm = 20, 4, 104, 58, 4.0
     xb, xbm = centros["BATERÍA"], centros["BMS"]
     y_bus = 90.0
-    # Caja con bornas y cable desde el inversor
-    lam.linea((xb, iy + 2), (xb, 97), "DC")
-    lam.rect(xb - 2, 92, 4, 5, "UNIFILAR")
-    caja = "Caja con bornas (paralelo)" if len(torres) > 1 else "Caja con bornas"
-    lam.texto((xb + 3, 95.5), caja, 1.05, "TEXTO")
-    lam.texto((xb + 3, 93.5), "> 60 A DC, > 500 VDC", 1.05, "TEXTO")
+    # Cable desde el inversor; caja con bornas solo donde se requiere (usuario): Livoltek nunca,
+    # DEYE solo con dos o más torres (paralelo)
+    if caja_bornas(d):
+        lam.linea((xb, iy + 2), (xb, 97), "DC")
+        lam.rect(xb - 2, 92, 4, 5, "UNIFILAR")
+        caja = "Caja con bornas (paralelo)" if len(torres) > 1 else "Caja con bornas"
+        lam.texto((xb + 3, 95.5), caja, 1.05, "TEXTO")
+        lam.texto((xb + 3, 93.5), "> 60 A DC, > 500 VDC", 1.05, "TEXTO")
+        lam.linea((xb, 92), (xb, y_bus), "DC")
+    else:
+        lam.linea((xb, iy + 2), (xb, y_bus), "DC")
     for k, t in enumerate(fam["cable_bateria"]):
         lam.texto((xb - 1.5, iy - 3 - k * 2), t, 1.15, "TEXTO", "der")
-    lam.linea((xb, 92), (xb, y_bus), "DC")
     centros_t = [x0 + i * (tw + gap) + tw / 2 for i in range(len(torres))]
     lam.linea((min([*centros_t, xb]), y_bus), (max([*centros_t, xb]), y_bus), "DC")
     alto_max = 0.0

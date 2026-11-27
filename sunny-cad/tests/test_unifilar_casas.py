@@ -178,3 +178,15 @@ def test_pance_campestre_minirriel() -> None:
     assert L["n_minirriel"] == 2 * (8 + 1)
     filas = {f[1]: f[3] for f in L["filas_estructura"]}
     assert filas["Tornillo autoperforante con arandela EPDM"] == cp.TORNILLOS_MR * 18
+
+
+def test_caja_bornas_segun_marca_y_torres() -> None:
+    from engine.planos.unifilar_casas import caja_bornas
+
+    def d(familia, torres):
+        return {"familia": familia, "bat": {"torres": torres}}
+
+    assert not caja_bornas(d("livoltek15kw", [3]))
+    assert not caja_bornas(d("livoltek10kw", [3, 2]))
+    assert not caja_bornas(d("deye15kw", [4]))
+    assert caja_bornas(d("deye15kw", [4, 4]))

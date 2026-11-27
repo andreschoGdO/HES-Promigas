@@ -112,7 +112,8 @@ Tomadas de un layout de referencia (Revit, Cali, HP3-15KL2 + BHF 3 módulos) y f
   sobre mini riel (2 por junta, a 542 mm de los bordes, sobre cresta); equipos en la fachada oeste
   sobre la terraza del 2° piso; la AC baja por un buitrón a través de la claraboya del piso de la terraza (frente al listón de
   madera) hasta el tablero del 1° piso.
-- Portón de la Rivera 28 (`engine/planos/casas_porton.py`): teja española a dos aguas (15°), cumbreras
-  este-oeste en cada brazo y limahoyas entre ellos; riel completo con anclajes en L; módulos
-  horizontales en las aguas sur (3 + 4); equipos en la losa contra el testero de ladrillo; AC por el
-  muro blanco y el cielo falso del 1° piso (≈ 5 m) hasta el tablero de la cocina.
+- Portón de la Rivera 28 (`engine/planos/casas_porton.py`): teja española a dos aguas (15°) con
+  cumbrera norte-sur (aguas oeste y este); en el bloque sur la losa de equipos separa las dos aguas;
+  muros blancos entre franjas. Riel completo con anclajes en L; módulos verticales en el agua oeste
+  junto a la losa; equipos en la losa contra el muro de ladrillo; AC por el muro blanco y el cielo
+  falso del 1° piso (≈ 5 m) hasta el tablero de la cocina.

@@ -196,12 +196,12 @@ def test_porton_rivera_teja_riel() -> None:
     from engine.planos import casas_porton as cp
 
     filas = cp.hileras(7)
-    assert [f["n"] for f in filas] == [3, 4]  # dos hileras rectas en las aguas sur
+    assert sum(f["n"] for f in filas) == 7 and len(filas) == 2  # agua oeste junto a la losa
+    x0g, x1g, y0g, y1g = cp.G_SUR_O
     for f in filas:
-        g = f["g"]
-        assert g[2] <= f["y0"] and f["y1"] <= (g[2] + g[3]) / 2  # dentro del agua sur
-        assert f["x0"] + f["largo"] <= g[1]
-        assert f["x0"] == filas[0]["x0"]  # mismo arranque al oeste
+        assert x0g <= f["xa"] < f["xb"] <= x1g and y0g <= f["y0"]
+        assert f["y0"] + f["largo"] <= y1g and f["y0"] == filas[0]["y0"]  # columnas alineadas
+    assert filas[0]["xb"] > filas[1]["xb"]  # la primera hilera junto al muro de ladrillo
     dc, ac, puente, desc_dc, desc_ac, L = cp.rutas(filas)
     assert len(desc_dc) == len(dc) - 1 and len(desc_ac) == len(ac) - 1
     assert dc[-1][0] == cp.X_EQ and ac[-1][:2] == cp.TABLERO_PC

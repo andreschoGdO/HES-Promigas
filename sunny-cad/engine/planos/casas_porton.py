@@ -63,28 +63,35 @@ from engine.planos.unifilar_casas import (
 from engine.simulacion import pvsyst
 
 # ------------------------------------------------------------------------------- vivienda (mm)
-# Marco de la vivienda: x a lo largo de las cumbreras (≈ este), y ≈ norte; origen al suroeste
+# Marco de la vivienda: x ≈ este, y ≈ norte; origen al suroeste. Cubiertas a dos aguas con
+# cumbrera norte-sur (aguas al oeste y al este, usuario); en el bloque sur las dos aguas las separa
+# la losa de equipos: el agua oeste (testero de ladrillo) y el agua este (muro blanco).
 GIRO_DEG = 8.1  # la vivienda está girada 8,1° (antihorario) respecto al norte (Maps)
 INCL = 15.0  # inclinación de la teja (usuario)
 TAN = math.tan(math.radians(INCL))
 COS = math.cos(math.radians(INCL))
 Z_LOSA = 7800.0  # losa de equipos (usuario: "casi 8 m")
-Z_ALERO = Z_LOSA + 1700  # alero: el ladrillo sube 1,2 a 2,4 m sobre la losa (foto; supuesto)
 Z_CIELO = 2700.0  # cielo falso del 1° piso (supuesto)
-# Cubiertas a dos aguas (x0, x1, y0, y1): cumbrera al centro en y; limahoyas en y = 5120 y 8370
+# Franjas de la medición (x0, x1, y0, y1) separadas por muros blancos con canal
 G_NORTE = (1950.0, 11800.0, 8370.0, 11645.0)
 G_MEDIO = (300.0, 11800.0, 5120.0, 8370.0)
-G_SUR_O = (0.0, 6900.0, 0.0, 5120.0)  # bloque sur, al oeste de la losa (testero de ladrillo)
-G_SUR_E = (9480.0, 11800.0, 0.0, 5120.0)  # bloque sur, al este de la losa (muro blanco)
+G_SUR_O = (0.0, 6900.0, 0.0, 5120.0)  # agua oeste del bloque sur (testero de ladrillo al sur)
+G_SUR_E = (9480.0, 11800.0, 0.0, 5120.0)  # agua este del bloque sur (muro blanco)
 LOSA = (6900.0, 9480.0, 0.0, 4206.0)  # losa de los equipos (flecha del usuario)
+FRANJA = (6900.0, 9480.0, 4206.0, 5120.0)  # cubierta del bloque sur al norte de la losa
+MUROS_Y = (5120.0, 8370.0)  # muros blancos entre franjas (como en la foto de referencia)
 X_LADRILLO, X_BLANCO = LOSA[0], LOSA[1]
-# Módulos horizontales en las aguas sur, dos hileras rectas con el mismo arranque al oeste
-X_INICIO = 2300.0
+X_CUM = (X_LADRILLO + X_BLANCO) / 2  # cumbrera norte-sur
+Z_BORDE = Z_LOSA + 2400  # borde alto del agua oeste sobre la losa (foto: ≈ 2,4 m; supuesto)
+Z_CUM = Z_BORDE + (X_CUM - X_LADRILLO) * TAN
+# Módulos verticales en el agua oeste del bloque sur, junto a la losa (usuario)
+Y_MARGEN = 250.0  # a los bordes sur y norte del agua
+RETIRO_BORDE = 300.0  # del borde alto (muro de ladrillo) a la primera hilera
 SEP = 20.0
 H_MOD = 160.0  # cara superior del módulo sobre la teja: anclaje + riel + marco (supuesto)
-RIEL_DESDE_BORDE = ANCHO_MOD / 4  # rieles a 1/4 del ancho del módulo (esquemático, ver manual)
+RIEL_DESDE_BORDE = LARGO_MOD / 4  # rieles a 1/4 del largo del módulo (esquemático, ver manual)
 PASO_ANCLAJE = 1200.0  # separación máxima entre anclajes por riel (supuesto, según fabricante)
-# Equipos en el testero de ladrillo (cara x = X_LADRILLO, mirando al este), sobre la losa
+# Equipos en el muro de ladrillo (cara x = X_LADRILLO, mirando al este), sobre la losa
 X_EQ = X_LADRILLO + 90  # eje de las tuberías sobre el muro
 EQ = {
     "tablero": (X_LADRILLO, X_LADRILLO + 200, 900, 1300, Z_LOSA + 800, Z_LOSA + 1600),
@@ -95,76 +102,69 @@ X_BAJADA, Y_BAJADA = X_BLANCO - 90, 150.0  # baja por el muro blanco (usuario)
 TABLERO_PC = (X_LADRILLO, 2800.0)  # tablero existente: centro de la casa, cocina (supuesto)
 Z_TAB_PC = (1100.0, 1900.0)
 SUPUESTOS = [
-    "Cubierta según Maps (99,83 m²) rectificada; teja a 15° (usuario); losa a 7,8 m (usuario); "
-    "alero a 9,5 m y cielo falso del 1° piso a 2,7 m (supuestos).",
+    "Cubierta según Maps (99,83 m²) rectificada; teja a 15° con cumbrera norte-sur (usuario); "
+    "losa a 7,8 m (usuario); borde del agua oeste 2,4 m sobre la losa (foto); cielo falso 2,7 m.",
     "Anclajes en L para teja, riel y tornillería según el fabricante; retirar y reponer la teja "
     "en cada anclaje y sellar la perforación.",
 ]
 
 
-def _cubiertas() -> list[tuple[float, float, float, float]]:
-    return [G_NORTE, G_MEDIO, G_SUR_O, G_SUR_E]
-
-
-def z_agua_sur(g, y: float) -> float:
-    """Cota de la teja en el agua sur de la cubierta g (sube hacia la cumbrera)."""
-    return Z_ALERO + (y - g[2]) * TAN
+def z_techo(x: float) -> float:
+    """Cota de la teja: dos aguas con cumbrera norte-sur en X_CUM."""
+    return Z_CUM - TAN * abs(x - X_CUM)
 
 
 def hileras(n: int) -> list[dict[str, Any]]:
-    """Hileras horizontales centradas en las aguas sur de las cubiertas norte y media."""
-    prof = ANCHO_MOD * COS  # proyección del módulo horizontal sobre el agua
-    out = []
-    for g, k in ((G_NORTE, n - (n * 4) // 7), (G_MEDIO, (n * 4) // 7)):
-        if k <= 0:
-            continue
-        agua = (g[3] - g[2]) / 2
-        y0 = g[2] + (agua - prof) / 2
-        largo = k * LARGO_MOD + (k - 1) * SEP
-        if X_INICIO + largo > g[1] - 300 or prof > agua - 100:
-            raise ValueError(f"no caben {k} módulos en la cubierta {g}")
-        out.append({"g": g, "n": k, "x0": X_INICIO, "y0": y0, "y1": y0 + prof, "largo": largo})
+    """Módulos verticales en el agua oeste del bloque sur: hileras norte-sur, la primera junto
+    al muro de ladrillo (borde alto) y las demás aguas abajo, con las columnas alineadas."""
+    x0g, x1g, y0g, y1g = G_SUR_O
+    por_fila = math.floor((y1g - y0g - 2 * Y_MARGEN + SEP) / (ANCHO_MOD + SEP))
+    prof = LARGO_MOD * COS  # proyección del módulo vertical sobre el agua
+    out, resto, xb = [], n, x1g - RETIRO_BORDE
+    while resto > 0:
+        k = min(por_fila, resto)
+        xa = xb - prof
+        if xa < x0g + 300:
+            raise ValueError(f"no caben {n} módulos en el agua oeste")
+        largo = k * ANCHO_MOD + (k - 1) * SEP
+        out.append({"n": k, "y0": y0g + Y_MARGEN, "largo": largo, "xa": xa, "xb": xb})
+        resto -= k
+        xb = xa - SEP * COS
     return out
 
 
 def modulos(filas) -> list[tuple[float, float, float, float]]:
-    return [(f["x0"] + i * (LARGO_MOD + SEP), f["y0"], f["x0"] + i * (LARGO_MOD + SEP) + LARGO_MOD,
-             f["y1"]) for f in filas for i in range(f["n"])]  # fmt: skip
+    paso = ANCHO_MOD + SEP
+    return [(f["xa"], f["y0"] + i * paso, f["xb"], f["y0"] + i * paso + ANCHO_MOD)
+            for f in filas for i in range(f["n"])]  # fmt: skip
+
+
+def rieles_x(f) -> list[float]:
+    """Posición x (en planta) de los dos rieles de una hilera, a 1/4 del largo del módulo."""
+    return [f["xb"] - RIEL_DESDE_BORDE * COS, f["xa"] + RIEL_DESDE_BORDE * COS]
 
 
 def anclajes(f) -> list[float]:
-    """Posiciones x de los anclajes de un riel (a 200 mm de los extremos, ≤ PASO_ANCLAJE)."""
-    a, b = f["x0"] + 200, f["x0"] + f["largo"] - 200
-    k = math.ceil((b - a) / PASO_ANCLAJE)
+    """Posiciones y de los anclajes de un riel (a 200 mm de los extremos, ≤ PASO_ANCLAJE)."""
+    a, b = f["y0"] + 200, f["y0"] + f["largo"] - 200
+    k = max(1, math.ceil((b - a) / PASO_ANCLAJE))
     return [a + (b - a) * i / k for i in range(k + 1)]
 
 
 def rutas(filas):
     """Rutas 3D (mm, marco de la vivienda) y longitudes (m)."""
-    fb = filas[-1]  # hilera de la cubierta media: sale el string hacia la losa
-    g = fb["g"]
-    xc = fb["x0"] + fb["largo"] + 150
-    yc = (fb["y0"] + fb["y1"]) / 2
-    x_l = 9200.0  # cruce de la franja norte del bloque sur hacia la losa
-    z_franja = Z_ALERO + (G_SUR_O[3] - LOSA[3]) * TAN  # borde de la franja sobre la losa
+    f = filas[0]  # hilera junto al muro de ladrillo: de ahí sale el string
+    ym = f["y0"] + f["largo"] / 2
+    xc = f["xb"] + 150
+    x_m = X_LADRILLO - 100
     inv = EQ["inversor"]
     yi = (inv[2] + inv[3]) / 2
     dc = _fusionar([
-        (xc, yc, z_agua_sur(g, yc) + 80), (xc, g[2] + 120, Z_ALERO + 80),  # baja por la teja
-        (x_l, g[2] + 120, Z_ALERO + 80),  # por la limahoya hacia el oeste
-        (x_l, LOSA[3] + 60, z_franja + 80),  # sube por la franja del bloque sur
-        (x_l, LOSA[3] - 100, z_franja + 80), (x_l, LOSA[3] - 100, Z_LOSA + 150),  # a la losa
-        (X_EQ, LOSA[3] - 100, Z_LOSA + 150), (X_EQ, yi, Z_LOSA + 150), (X_EQ, yi, inv[4]),
+        (xc, ym, z_techo(xc) + 80), (x_m, ym, z_techo(x_m) + 80),  # por la teja al muro
+        (x_m, ym, Z_BORDE + 150), (X_EQ, ym, Z_BORDE + 150),  # sobre el borde del muro
+        (X_EQ, ym, Z_LOSA + 150),  # baja por el muro de ladrillo a la losa
+        (X_EQ, yi, Z_LOSA + 150), (X_EQ, yi, inv[4]),  # junto al piso, entra por debajo
     ])  # fmt: skip
-    fa = filas[0]
-    xp = fa["x0"] + fa["largo"] + 120
-    gm = G_MEDIO
-    ym = (gm[2] + gm[3]) / 2
-    puente = [  # entre hileras: baja a la limahoya, cruza la cubierta media por la cumbrera
-        (xp, (fa["y0"] + fa["y1"]) / 2, z_agua_sur(fa["g"], (fa["y0"] + fa["y1"]) / 2) + 80),
-        (xp, fa["g"][2] + 60, Z_ALERO + 80), (xp, ym, Z_ALERO + (ym - gm[2]) * TAN + 80),
-        (xp, fb["y1"] + 100, z_agua_sur(gm, fb["y1"] + 100) + 80),
-    ]  # fmt: skip
     tab = EQ["tablero"]
     yt = (tab[2] + tab[3]) / 2
     ac = _fusionar([
@@ -176,13 +176,11 @@ def rutas(filas):
         (TABLERO_PC[0], TABLERO_PC[1], Z_TAB_PC[1]),
     ])  # fmt: skip
     desc_dc = [
-        "Caja de paso del arreglo, baja por la teja a la limahoya",
-        "Por la limahoya hacia el oeste",
-        "Sube por la franja norte del bloque sur",
-        "Cruza el borde de la franja",
-        "Baja a la losa de equipos",
-        "Junto al piso de la losa, hacia el muro de ladrillo",
-        "Junto al piso, hasta el inversor",
+        "Caja de paso del arreglo, por la teja hacia el muro",
+        "Sube sobre el borde del muro de ladrillo",
+        "Cruza el borde del muro hacia la losa",
+        "Baja por el muro de ladrillo a la losa",
+        "Junto al piso de la losa hasta el inversor",
         "Sube a la entrada DC del inversor (por debajo)",
     ]
     desc_ac = [
@@ -198,17 +196,17 @@ def rutas(filas):
         desc_dc = [f"Tramo {i}" for i in range(1, len(dc))]
     if len(desc_ac) != len(ac) - 1:
         desc_ac = [f"Tramo {i}" for i in range(1, len(ac))]
-    n_anc = sum(2 * len(anclajes(f)) for f in filas)
-    riel = sum(2 * (f["largo"] + 120) / 1000 for f in filas)
-    mid = sum(2 * (f["n"] - 1) for f in filas)
+    n_anc = sum(2 * len(anclajes(f_)) for f_ in filas)
+    riel = sum(2 * (f_["largo"] + 120) / 1000 for f_ in filas)
+    mid = sum(2 * (f_["n"] - 1) for f_ in filas)
     L = {
-        "dc_total": sum(_largos(dc)) + sum(_largos(puente)),
+        "dc_total": sum(_largos(dc)),
         "ac_total": sum(_largos(ac)),
-        "dc_vertical": (z_franja - Z_LOSA) / 1000,
+        "dc_vertical": (Z_BORDE - Z_LOSA) / 1000,
         "curvas_ac": len(ac) - 2,
         "ubic_bat": "En la losa, junto al muro de ladrillo",
         "obs_ac": "Losa, muro blanco y cielo falso",
-        "estructura": {"fila_m": sum(f["largo"] for f in filas) / 1000},
+        "estructura": {"fila_m": sum(f_["largo"] for f_ in filas) / 1000},
         "n_anclajes": n_anc,
         "filas_estructura": [
             ("ESTRUCTURA RIEL", "Riel de aluminio para módulos", "m", math.ceil(riel),
@@ -221,25 +219,39 @@ def rutas(filas):
             ("", "Sellante / cinta butílica para la teja", "und", 2, "Perforaciones"),
         ],
     }  # fmt: skip
-    return dc, ac, puente, desc_dc, desc_ac, L
+    return dc, ac, [], desc_dc, desc_ac, L
 
 
 # ------------------------------------------------------------------------------- planta
-def _planta(lam, m: Marco, filas, rotulos=True) -> None:
-    for g in _cubiertas():
+def _partes() -> list[tuple[float, float, float, float]]:
+    """Partes de cubierta con una sola agua: cada franja se corta en la cumbrera."""
+    out = []
+    for g in (G_NORTE, G_MEDIO, FRANJA, G_SUR_O, G_SUR_E):
         x0, x1, y0, y1 = g
+        if x0 < X_CUM < x1:
+            out += [(x0, X_CUM, y0, y1), (X_CUM, x1, y0, y1)]
+        else:
+            out.append(g)
+    return out
+
+
+def _planta(lam, m: Marco, filas, rotulos=True) -> None:
+    for x0, x1, y0, y1 in _partes():
         lam.polilinea([m(q) for q in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))], "CUBIERTA",
                       cerrada=True, relleno="#ead7c8")  # fmt: skip
-        yc = (y0 + y1) / 2
-        lam.polilinea([m((x0, yc)), m((x1, yc))], "NOTA", trazo="discontinuo")  # cumbrera
-        for xf in (x0 + 900, x1 - 900):  # flechas de caída de agua
-            lam.texto(m((xf, (y0 + yc) / 2)), "↓", 1.4, "NOTA", "centro")
-            lam.texto(m((xf, (yc + y1) / 2)), "↑", 1.4, "NOTA", "centro")
+        if x1 - x0 > 1500:  # flechas de caída del agua
+            t = "←" if x1 <= X_CUM else "→"
+            for yy in (y0 + (y1 - y0) * 0.25, y0 + (y1 - y0) * 0.75):
+                lam.texto(m(((x0 + x1) / 2 if x1 - x0 < 4000 else x0 + 900, yy)), t, 1.4,
+                          "NOTA", "centro")  # fmt: skip
+    for g in (G_NORTE, G_MEDIO, FRANJA):  # cumbrera norte-sur
+        lam.polilinea([m((X_CUM, g[2])), m((X_CUM, g[3]))], "NOTA", trazo="discontinuo")
+    for y in MUROS_Y:  # muros blancos entre franjas
+        x0 = min(g[0] for g in (G_NORTE, G_MEDIO) if g[2] <= y <= g[3])
+        lam.polilinea([m(q) for q in ((x0, y - 100), (11800, y - 100), (11800, y + 100),
+                                      (x0, y + 100))], "CUBIERTA", cerrada=True,
+                      relleno="#ffffff")  # fmt: skip
     lx0, lx1, ly0, ly1 = LOSA
-    yn = G_SUR_O[3]  # franja del agua norte del bloque sur, sobre la losa
-    lam.polilinea([m(q) for q in ((lx0, ly1), (lx1, ly1), (lx1, yn), (lx0, yn))], "CUBIERTA",
-                  cerrada=True, relleno="#ead7c8")  # fmt: skip
-    lam.texto(m(((lx0 + lx1) / 2, (ly1 + yn) / 2)), "↑", 1.2, "NOTA", "centro")
     lam.polilinea([m(q) for q in ((lx0, ly0), (lx1, ly0), (lx1, ly1), (lx0, ly1))], "CUBIERTA",
                   cerrada=True, relleno="#dcdcdc")  # fmt: skip
     for k, col in (("baterias", "#f0c9f0"), ("inversor", "#bfe3f7"), ("tablero", "#4a4a4a")):
@@ -251,45 +263,43 @@ def _planta(lam, m: Marco, filas, rotulos=True) -> None:
                       cerrada=True, relleno="#b4e8b0")  # fmt: skip
         if rotulos:
             c = m(((x0 + x1) / 2, (y0 + y1) / 2))
-            lam.texto((c[0], c[1] + 0.6), f"1.1.1.{i}", 1.2, "TEXTO", "centro", negrita=True)
+            lam.texto((c[0], c[1] + 0.6), f"1.1.1.{i}", 1.1, "TEXTO", "centro", negrita=True)
             lam.texto((c[0], c[1] - 1.4), "595 Wp", 0.9, "TEXTO", "centro")
     lam.circulo(m((X_BAJADA, Y_BAJADA)), 1.2, "ROJO", relleno="#c00000")
     if rotulos:
         lam.texto(m(((lx0 + lx1) / 2, 3000)), "LOSA", 1.4, "NOTA", "centro", negrita=True)
         lam.texto(m(((lx0 + lx1) / 2, 2400)), "equipos", 1.1, "NOTA", "centro")
-        for y, t in ((8370, "limahoya"), (5120, "limahoya")):
-            lam.texto(m((900 if y == 5120 else 2600, y + 120)), t, 0.95, "NOTA")
+        for y in MUROS_Y:
+            lam.texto(m((11900, y)), "muro blanco", 0.95, "NOTA")
         lam.texto(m((5900, -900)), "FACHADA SUR (vía)", 1.4, "NOTA", "centro")
-        lam.texto(m((X_LADRILLO - 250, 600)), "muro ladrillo", 0.95, "NOTA", "der")
+        lam.texto(m((X_LADRILLO - 250, -350)), "muro ladrillo", 0.95, "NOTA", "der")
         lam.texto(m((X_BLANCO + 200, -350)), "muro blanco", 0.95, "NOTA")
 
 
 def planta_fijacion(lam, x, y, filas) -> None:
-    """Planta de fijación de la hilera tipo: rieles, anclajes y grapas (cotas en mm), ESC 1:80."""
-    k = 1 / 80
+    """Planta de fijación en verdadera magnitud (pendiente hacia abajo), ESC 1:100."""
+    k = 1 / 100
+    yy = y + sum(LARGO_MOD + SEP for _ in filas) * k  # borde alto (junto al muro) arriba
+    for fi, f in enumerate(filas):
+        ytop = yy - fi * (LARGO_MOD + SEP) * k
+        for i in range(f["n"]):
+            x0 = x + i * (ANCHO_MOD + SEP) * k
+            lam.rect(x0, ytop - LARGO_MOD * k, ANCHO_MOD * k, LARGO_MOD * k, "MODULO",
+                     relleno="#b4e8b0")  # fmt: skip
+        for dr in (RIEL_DESDE_BORDE, LARGO_MOD - RIEL_DESDE_BORDE):
+            yr = ytop - dr * k
+            lam.rect(x - 0.6, yr - 0.3, (f["largo"] + 120) * k, 0.6, "ESTRUCTURA",
+                     relleno="#8b5e3c")  # fmt: skip
+            for ya in anclajes(f):
+                lam.circulo((x + (ya - f["y0"]) * k, yr), 0.45, "ESTRUCTURA", relleno="#ffffff")
     f = filas[0]
-    prof = ANCHO_MOD  # en verdadera magnitud sobre el agua
-    for i in range(f["n"]):
-        x0 = x + i * (LARGO_MOD + SEP) * k
-        lam.rect(x0, y, LARGO_MOD * k, prof * k, "MODULO", relleno="#b4e8b0")
-    for dy in (RIEL_DESDE_BORDE, ANCHO_MOD - RIEL_DESDE_BORDE):
-        lam.rect(x - 60 * k, y + dy * k - 0.4, (f["largo"] + 120) * k, 0.8, "ESTRUCTURA",
-                 relleno="#8b5e3c")  # fmt: skip
-        for xa in anclajes(f):
-            lam.circulo((x + (xa - f["x0"]) * k, y + dy * k), 0.7, "ESTRUCTURA", relleno="#ffffff")
-    _cota(lam, (x, y + prof * k), (x + f["largo"] * k, y + prof * k), f"{f['largo']:.0f}", off=3)
-    _cota(lam, (x, y), (x + LARGO_MOD * k, y), f"{LARGO_MOD:.0f}", off=-3, h=1.2)
+    _cota(lam, (x, yy), (x + f["largo"] * k, yy), f"{f['largo']:.0f}", off=3, h=1.1)
     xr = x + f["largo"] * k
-    _cota(lam, (xr, y), (xr, y + RIEL_DESDE_BORDE * k), f"{RIEL_DESDE_BORDE:.0f}", off=-3, h=1.1)
-    _cota(lam, (xr, y + RIEL_DESDE_BORDE * k), (xr, y + (ANCHO_MOD - RIEL_DESDE_BORDE) * k),
-          f"{ANCHO_MOD - 2 * RIEL_DESDE_BORDE:.0f}", off=-3, h=1.1)  # fmt: skip
-    a = anclajes(f)
-    _cota(lam, (x + (a[0] - f["x0"]) * k, y - 1), (x + (a[1] - f["x0"]) * k, y - 1),
-          f"{a[1] - a[0]:.0f}", off=-2.5, h=1.1)  # fmt: skip
-    lam.texto((x, y - 7), "Módulos horizontales; 2 rieles por hilera (marrón); anclajes en L "
-              "(círculos) a la estructura bajo la teja.", 1.1, "NOTA")  # fmt: skip
-    lam.texto((x, y - 9.4), f"Hilera tipo de {f['n']} módulos; la otra hilera ({filas[-1]['n']}) "
-              "se arma igual. ↓ pendiente hacia abajo.", 1.1, "NOTA")  # fmt: skip
+    _cota(lam, (xr, yy - LARGO_MOD * k), (xr, yy), f"{LARGO_MOD:.0f}", off=-3, h=1.1)
+    lam.texto((xr + 6, yy + 1), "muro de ladrillo (borde alto)", 1.0, "NOTA")
+    lam.texto((xr + 6, yy - 5), "↓ pendiente 15° (agua oeste)", 1.0, "NOTA")
+    lam.texto((x, y - 4), "Módulos verticales; 2 rieles por hilera (marrón) a 1/4 del largo; "
+              "anclajes en L (círculos).", 1.05, "NOTA")  # fmt: skip
 
 
 # ------------------------------------------------------------------------------- 3D
@@ -310,38 +320,39 @@ def _caja(lam, P, bx, color, capa) -> None:
 
 
 def _techo3d(caras, P, prof) -> None:
-    """Volúmenes con las cubiertas a dos aguas, la franja norte del bloque sur y la losa."""
+    """Volúmenes con las cubiertas a dos aguas (cumbrera norte-sur), muros blancos y losa."""
 
     def cara(pts3, rel, capa="CUBIERTA"):
         c = [sum(q[i] for q in pts3) / len(pts3) for i in range(3)]
         caras.append((prof(*c), [P(*q) for q in pts3], capa, rel))
 
-    for g in _cubiertas():
-        x0, x1, y0, y1 = g
-        ym = (y0 + y1) / 2
-        zr = Z_ALERO + (ym - y0) * TAN
-        za = Z_ALERO
-        cara([(x0, y0, 0), (x1, y0, 0), (x1, y0, za), (x0, y0, za)], "#f1ece3")
-        cara([(x0, y1, 0), (x1, y1, 0), (x1, y1, za), (x0, y1, za)], "#f1ece3")
-        blanco = "#f4f4f4" if g is G_SUR_E else "#c7714f"
-        for xx, rel in ((x0, blanco), (x1, "#c7714f")):  # testeros (ladrillo; blanco al este)
-            cara([(xx, y0, 0), (xx, y1, 0), (xx, y1, za), (xx, ym, zr), (xx, y0, za)], rel)
-        cara([(x0, y0, za), (x1, y0, za), (x1, ym, zr), (x0, ym, zr)], "#c9653f")  # agua sur
-        cara([(x0, ym, zr), (x1, ym, zr), (x1, y1, za), (x0, y1, za)], "#a8552f")  # agua norte
+    for x0, x1, y0, y1 in _partes():
+        z0, z1 = z_techo(x0), z_techo(x1)
+        base = Z_LOSA if (x0, x1, y0, y1)[2] == FRANJA[2] else 0.0
+        sur = "#c7714f" if x1 <= X_LADRILLO else "#f1ece3"  # testero de ladrillo al oeste
+        cara([(x0, y0, base), (x1, y0, base), (x1, y0, z1), (x0, y0, z0)], sur)
+        cara([(x0, y1, 0), (x1, y1, 0), (x1, y1, z1), (x0, y1, z0)], "#f1ece3")
+        este = "#c7714f" if x1 == X_LADRILLO else "#f1ece3"
+        cara([(x1, y0, 0), (x1, y1, 0), (x1, y1, z1), (x1, y0, z1)], este)
+        cara([(x0, y0, 0), (x0, y1, 0), (x0, y1, z0), (x0, y0, z0)], "#f1ece3")
+        cara([(x0, y0, z0), (x1, y0, z1), (x1, y1, z1), (x0, y1, z0)],
+             "#c9653f" if x1 <= X_CUM else "#a8552f")  # fmt: skip
+    for y in MUROS_Y:  # muros blancos entre franjas, 400 mm sobre la teja
+        x0 = min(g[0] for g in (G_NORTE, G_MEDIO) if g[2] <= y <= g[3])
+        pts = [(x0, z_techo(x0)), (X_CUM, Z_CUM), (11800, z_techo(11800))]
+        cara([(x0, y - 100, 0), (11800, y - 100, 0)] +
+             [(xx, y - 100, zz + 400) for xx, zz in reversed(pts)], "#ffffff")  # fmt: skip
+        for (xa, za), (xb, zb) in zip(pts[:-1], pts[1:], strict=True):
+            cara([(xa, y - 100, za + 400), (xb, y - 100, zb + 400), (xb, y + 100, zb + 400),
+                  (xa, y + 100, za + 400)], "#f4f4f4")  # fmt: skip
     lx0, lx1, ly0, ly1 = LOSA
-    # Franja del agua norte del bloque sur sobre la losa
-    zf = Z_ALERO + (G_SUR_O[3] - ly1) * TAN
-    cara([(lx0, ly1, Z_LOSA), (lx1, ly1, Z_LOSA), (lx1, ly1, zf), (lx0, ly1, zf)], "#c7714f")
-    cara([(lx0, ly1, zf), (lx1, ly1, zf), (lx1, G_SUR_O[3], Z_ALERO), (lx0, G_SUR_O[3], Z_ALERO)],
-         "#a8552f")  # fmt: skip
-    # Losa de los equipos y el volumen bajo ella (ventanal)
     cara([(lx0, ly0, 0), (lx1, ly0, 0), (lx1, ly0, Z_LOSA), (lx0, ly0, Z_LOSA)], "#d6e4ef")
     cara([(lx0, ly0, Z_LOSA), (lx1, ly0, Z_LOSA), (lx1, ly1, Z_LOSA), (lx0, ly1, Z_LOSA)],
          "#d9d9d9")  # fmt: skip
 
 
-def _riel3d(lam, P, prof, filas, color="#2f4f7f", fantasma=()) -> None:
-    """Hileras sobre riel completo: anclajes, rieles y módulos coplanares con la teja."""
+def _riel3d(lam, P, prof, filas, zf=z_techo, color="#2f4f7f", fantasma=()) -> None:
+    """Hileras sobre riel completo en el agua oeste: anclajes, rieles y módulos coplanares."""
     prims = []
 
     def add(tipo, pts3, capa, rel=None):
@@ -349,32 +360,26 @@ def _riel3d(lam, P, prof, filas, color="#2f4f7f", fantasma=()) -> None:
         prims.append((prof(*c), tipo, [P(*q) for q in pts3], capa, rel))
 
     for fi, f in enumerate(filas):
-        g = f["g"]
-
-        def z(y, g=g):
-            return z_agua_sur(g, y)
-
-        for dy in (RIEL_DESDE_BORDE, ANCHO_MOD - RIEL_DESDE_BORDE):
-            y = f["y0"] + dy * COS
-            xa, xb = f["x0"] - 60, f["x0"] + f["largo"] + 60
-            add("l", [(xa, y, z(y) + 100), (xb, y, z(y) + 100)], "ESTRUCTURA")
-            for x in anclajes(f):
-                add("l", [(x, y, z(y)), (x, y, z(y) + 100)], "ESTRUCTURA")
-                add("p", [(x - 40, y - 40, z(y)), (x + 40, y - 40, z(y)), (x + 40, y + 40, z(y)),
-                          (x - 40, y + 40, z(y))], "ESTRUCTURA", "#9aa3ad")  # fmt: skip
+        for xr in rieles_x(f):
+            z = zf(xr)
+            add("l", [(xr, f["y0"] - 60, z + 100), (xr, f["y0"] + f["largo"] + 60, z + 100)],
+                "ESTRUCTURA")  # fmt: skip
+            for ya in anclajes(f):
+                add("l", [(xr, ya, z), (xr, ya, z + 100)], "ESTRUCTURA")
+                add("p", [(xr - 40, ya - 40, z), (xr + 40, ya - 40, z), (xr + 40, ya + 40, z),
+                          (xr - 40, ya + 40, z)], "ESTRUCTURA", "#9aa3ad")  # fmt: skip
         for im, (x0, y0, x1, y1) in enumerate(modulos([f])):
-            cara = [(x0, y0, z(y0) + H_MOD), (x1, y0, z(y0) + H_MOD), (x1, y1, z(y1) + H_MOD),
-                    (x0, y1, z(y1) + H_MOD)]  # fmt: skip
+            za, zb = zf(x0) + H_MOD, zf(x1) + H_MOD
+            cara = [(x0, y0, za), (x0, y1, za), (x1, y1, zb), (x1, y0, zb)]
             if (fi, im) in fantasma:
                 add("f", cara, "MODULO")
                 continue
             add("p", cara, "MODULO", color)
-            ym = (y0 + y1) / 2
             xm = (x0 + x1) / 2
-            add("l", [(xm, y0, z(y0) + H_MOD + 1), (xm, y1, z(y1) + H_MOD + 1)], "SOMBRA")
-            for xx in (x0, x1):
-                add("l", [(xx, y0, z(y0) + H_MOD + 1), (xx, y1, z(y1) + H_MOD + 1)], "BRILLO")
-            del ym
+            zm = (za + zb) / 2 + 1
+            add("l", [(xm, y0, zm), (xm, y1, zm)], "SOMBRA")
+            for yy in (y0, y1):
+                add("l", [(x0, yy, za + 1), (x1, yy, zb + 1)], "BRILLO")
     for _p, tipo, pts, capa, rel in sorted(prims, key=lambda q: -q[0]):
         if tipo == "p":
             lam.polilinea(pts, capa, cerrada=True, relleno=rel)
@@ -396,7 +401,8 @@ def _escena(lam, P, prof, filas, dc, ac, puente, f=1.0) -> None:
                            ("tablero", "#d9d9d9", "EQUIPO")):  # fmt: skip
         _caja(lam, P, EQ[key], col, capa)
     tubo3d(lam, P, dc, 1.6 * f, "#e74c3c", "DC", abrazadera_mm=1500)
-    tubo3d(lam, P, puente, 1.3 * f, "#e74c3c", "DC", abrazadera_mm=1500)
+    if puente:
+        tubo3d(lam, P, puente, 1.3 * f, "#e74c3c", "DC", abrazadera_mm=1500)
     i_in = next(i for i, q in enumerate(ac) if abs(q[2] - Z_CIELO) < 1)  # entra al cielo falso
     tubo3d(lam, P, ac[: i_in + 1], 2.0 * f, "#2e86de", "AC", abrazadera_mm=1500)
     lam.polilinea([P(*q) for q in ac[i_in:]], "AC", trazo="discontinuo")  # dentro de la casa
@@ -408,15 +414,17 @@ def _escena(lam, P, prof, filas, dc, ac, puente, f=1.0) -> None:
 
 def isometrico(lam, area, filas, dc, ac, puente) -> None:
     x0, y0, w, h = area
-    esq = [(x, y, z) for x in (-1500, 13300) for y in (-2500, 13100) for z in (0, Z_ALERO + 1200)]
+    esq = [(x, y, z) for x in (-1500, 13300) for y in (-2500, 13100) for z in (0, Z_CUM + 600)]
     P, prof, _k = _vista((x0 + 3, y0 + 3, w - 6, h - 6), esq, desde="SE")
     _escena(lam, P, prof, filas, dc, ac, puente)
     inv, tab, bat = EQ["inversor"], EQ["tablero"], EQ["baterias"]
+    mods = modulos(filas)
+    xm, ym = (mods[0][0] + mods[0][2]) / 2, (mods[0][1] + mods[0][3]) / 2
     rot = [
+        (P(xm, ym, z_techo(xm) + H_MOD), "Módulos en el agua oeste, junto a la losa", -1),
         (P(*dc[0]), "Caja de paso, salida string S1.1.1", 1),
-        (P(*puente[2]), 'Puente entre hileras (coraza 1")', 1),
-        (P(*dc[3]), 'DC: coraza 1" por la limahoya y la franja a la losa', 1),
-        (P(inv[1], (inv[2] + inv[3]) / 2, inv[4] + 300), "Inversor", -1),
+        (P(*dc[3]), 'DC: coraza 1" sobre el muro de ladrillo a la losa', 1),
+        (P(inv[1], (inv[2] + inv[3]) / 2, inv[4] + 300), "Inversor", 1),
         (P(bat[1], (bat[2] + bat[3]) / 2, bat[4] + 400), "Baterías", -1),
         (P(tab[1], (tab[2] + tab[3]) / 2, tab[4] + 400), "Tablero FV", -1),
         (P(X_BAJADA, Y_BAJADA, (Z_LOSA + Z_CIELO) / 2), 'AC: IMC 2" baja por el muro blanco', 1),
@@ -431,48 +439,48 @@ def isometrico(lam, area, filas, dc, ac, puente) -> None:
             y_prev = yq
             _guia(lam, p, (xcol, yq))
             _caja_texto(lam, (xcol, yq + 1.6), [t], h=1.3, alinear="der" if lado < 0 else "izq")
-    lam.texto((x0 + 2, y0 + 2), "Vista desde el sureste. Teja a 15°; losa a 7,8 m; alero 9,5 m y "
-              "cielo falso 2,7 m (supuestos). Punteado: dentro de la casa. Sin escala.", 1.3,
+    lam.texto((x0 + 2, y0 + 2), "Vista desde el sureste. Teja a 15°, cumbrera norte-sur; losa a "
+              "7,8 m; cielo falso 2,7 m (supuesto). Punteado: dentro de la casa. Sin escala.", 1.3,
               "NOTA")  # fmt: skip
 
 
 # ------------------------------------------------------------------------------- detalles
 def detalle_riel_3d(lam, area, filas) -> None:
-    """Hilera tipo sobre la teja con rieles y anclajes (dos módulos en corte), vista sureste."""
+    """Hileras sobre la teja con rieles y anclajes (dos módulos en corte), vista suroeste."""
     x0, y0, w, h = area
-    f = dict(filas[-1])
-    g = (0.0, f["largo"] + 600, 0.0, 2 * (ANCHO_MOD * COS + 500))
-    f.update(g=g, x0=300.0, y0=500.0, y1=500.0 + ANCHO_MOD * COS)
-    zt = Z_ALERO
-    ym = (g[2] + g[3]) / 2
-    marco = [(x, y, z) for x in (-300, g[1] + 600) for y in (-500, ym + 300)
-             for z in (zt - 200, zt + (ym - g[2]) * TAN + 300)]  # fmt: skip
-    P, prof, _k = _vista((x0 + 2, y0 + 8, w - 58, h - 12), marco, desde="SE")
-    # Teja: agua sur con las canales de la teja española a lo largo de la pendiente
-    lam.polilinea([P(g[0], g[2], zt), P(g[1], g[2], zt), P(g[1], ym, zt + (ym - g[2]) * TAN),
-                   P(g[0], ym, zt + (ym - g[2]) * TAN)], "CUBIERTA", cerrada=True,
+    xg0 = filas[-1]["xa"] - 500
+    xg1 = filas[0]["xb"] + 300
+    yg0, yg1 = G_SUR_O[2], G_SUR_O[3]
+    marco = [(x, y, z) for x in (xg0 - 300, xg1 + 300) for y in (yg0 - 300, yg1 + 300)
+             for z in (z_techo(xg0) - 200, z_techo(xg1) + 400)]  # fmt: skip
+    P, prof, _k = _vista((x0 + 2, y0 + 8, w - 58, h - 12), marco, desde="SO")
+    lam.polilinea([P(xg0, yg0, z_techo(xg0)), P(xg1, yg0, z_techo(xg1)), P(xg1, yg1, z_techo(xg1)),
+                   P(xg0, yg1, z_techo(xg0))], "CUBIERTA", cerrada=True,
                   relleno="#d77a50")  # fmt: skip
-    xt = g[0] + 120
-    while xt < g[1]:
-        lam.polilinea([P(xt, g[2], zt + 30), P(xt, ym, zt + (ym - g[2]) * TAN + 30)], "NOTA")
-        xt += 240
-    _riel3d(lam, P, prof, [f], color="#3d6aa8", fantasma={(0, f["n"] - 1), (0, f["n"] - 2)})
-    _cota(lam, P(f["x0"], 200, zt + 200 * TAN), P(f["x0"] + f["largo"], 200, zt + 200 * TAN),
-          f"{f['largo']:.0f}", off=-2.5, h=1.2)  # fmt: skip
+    xt = xg0 + 120
+    yt = yg0 + 120
+    while yt < yg1:  # canales de la teja a lo largo de la pendiente (en x)
+        lam.polilinea([P(xg0, yt, z_techo(xg0) + 30), P(xg1, yt, z_techo(xg1) + 30)], "NOTA")
+        yt += 240
+    del xt
+    n0 = filas[0]["n"]
+    _riel3d(lam, P, prof, filas, color="#3d6aa8", fantasma={(0, n0 - 1), (0, n0 - 2)})
+    f = filas[0]
+    _cota(lam, P(f["xb"] + 200, f["y0"], z_techo(f["xb"] + 200)),
+          P(f["xb"] + 200, f["y0"] + f["largo"], z_techo(f["xb"] + 200)), f"{f['largo']:.0f}",
+          off=2.5, h=1.2)  # fmt: skip
     xr = x0 + w - 54
     a = anclajes(f)
+    r0, r1 = rieles_x(f)
     rot = [
-        (P(f["x0"] + 1000, f["y0"] + 500, z_agua_sur(g, f["y0"] + 500) + H_MOD),
-         "Módulo horizontal, coplanar a 15°"),
-        (P(a[-1], f["y0"] + (ANCHO_MOD - RIEL_DESDE_BORDE) * COS,
-           z_agua_sur(g, f["y0"] + (ANCHO_MOD - RIEL_DESDE_BORDE) * COS) + 100),
-         "Riel de aluminio (2 por hilera)"),
-        (P(a[-2], f["y0"] + RIEL_DESDE_BORDE * COS,
-           z_agua_sur(g, f["y0"] + RIEL_DESDE_BORDE * COS)),
-         f"Anclaje en L para teja c/ ≤ {PASO_ANCLAJE / 1000:.1f} m"),
-        (P(f["x0"] + LARGO_MOD + SEP / 2, f["y0"], z_agua_sur(g, f["y0"]) + H_MOD),
+        (P(f["xa"] + 800, f["y0"] + 500, z_techo(f["xa"] + 800) + H_MOD),
+         "Módulo vertical, coplanar a 15° (agua oeste)"),
+        (P(r0, a[-1], z_techo(r0) + 100), "Riel de aluminio (2 por hilera)"),
+        (P(r1, a[-2], z_techo(r1)), f"Anclaje en L para teja c/ ≤ {PASO_ANCLAJE / 1000:.1f} m"),
+        (P(f["xa"], f["y0"] + ANCHO_MOD + SEP / 2, z_techo(f["xa"]) + H_MOD),
          "Mid clamp en juntas · end clamp en extremos"),
-        (P(g[1] - 200, 300, zt + 300 * TAN), "Teja española (canales en la pendiente)"),
+        (P(xg0 + 200, yg1 - 300, z_techo(xg0 + 200)), "Teja española (canales en la pendiente)"),
+        (P(xg1, yg0 + 300, z_techo(xg1)), "Borde alto: muro de ladrillo sobre la losa"),
     ]  # fmt: skip
     rot.sort(key=lambda it: -it[0][1])
     y_prev = None
@@ -481,8 +489,8 @@ def detalle_riel_3d(lam, area, filas) -> None:
         y_prev = yq
         _guia(lam, p_, (xr, yq))
         _caja_texto(lam, (xr, yq + 1.5), [t], h=1.1)
-    lam.texto((x0 + 2, y0 + 2), f"Hilera de {f['n']} módulos (cubierta media); los dos últimos en "
-              "corte para ver rieles y anclajes.", 1.1, "NOTA")  # fmt: skip
+    lam.texto((x0 + 2, y0 + 2), f"Hileras {' + '.join(str(f_['n']) for f_ in filas)} en el agua "
+              "oeste; dos módulos en corte para ver rieles y anclajes.", 1.1, "NOTA")  # fmt: skip
 
 
 def corte_teja(lam, x, y) -> None:
@@ -526,20 +534,18 @@ def detalle_equipos(lam, x, y, d) -> None:
     b = d["bat"]
     k = 1 / 50
     ya, yb = LOSA[2], LOSA[3]
-    zr = Z_ALERO + (G_SUR_O[3] - G_SUR_O[2]) / 2 * TAN
+    zr = Z_BORDE
 
     def px(ym, zm):
         return (x + (ym - ya) * k, y + (zm - Z_LOSA) * k)
 
-    ycum = (G_SUR_O[2] + G_SUR_O[3]) / 2
-    lam.polilinea([px(ya, Z_LOSA), px(yb, Z_LOSA), px(yb, Z_ALERO + (G_SUR_O[3] - yb) * TAN),
-                   px(ycum, zr), px(ya, Z_ALERO)], "CUBIERTA", cerrada=True,
-                  relleno="#e3a183")  # fmt: skip
+    lam.polilinea([px(ya, Z_LOSA), px(yb, Z_LOSA), px(yb, Z_BORDE), px(ya, Z_BORDE)], "CUBIERTA",
+                  cerrada=True, relleno="#e3a183")  # fmt: skip
     lam.rect(x - 3, y - 1.2, (yb - ya) * k + 6, 1.2, "CUBIERTA", relleno="#bdbdbd")
-    lam.texto((x + (yb - ya) * k / 2, y + (zr - Z_LOSA) * k + 2), "TESTERO DE LADRILLO · LOSA",
+    lam.texto((x + (yb - ya) * k / 2, y + (zr - Z_LOSA) * k + 2), "MURO DE LADRILLO · LOSA",
               1.4, "NOTA", "centro")  # fmt: skip
-    lam.texto((x + 1, y - 3.2), "Losa de equipos (≈ 7,8 m); ladrillo hasta el alero (≈ 9,5 m)", 1.1,
-              "NOTA")  # fmt: skip
+    lam.texto((x + 1, y - 3.2), "Losa de equipos (≈ 7,8 m); borde de la teja ≈ 2,4 m sobre la losa",
+              1.1, "NOTA")  # fmt: skip
     lam.texto((x, y + 1), "← SUR", 1.0, "NOTA")
 
     def r(bx, col, capa, t1, t2=""):
@@ -556,8 +562,9 @@ def detalle_equipos(lam, x, y, d) -> None:
     r(EQ["tablero"], "#e6e6e6", "EQUIPO", "T.FV")
     inv, tab, bat = EQ["inversor"], EQ["tablero"], EQ["baterias"]
     yi, yt = (inv[2] + inv[3]) / 2, (tab[2] + tab[3]) / 2
-    tubo(lam, [px(yb, Z_LOSA + 150), px(yi, Z_LOSA + 150), px(yi, inv[4])], 1.1, "DC", "#f6c9c4",
-         abrazaderas=7)  # fmt: skip
+    y_dc = _Y_DC[0]
+    tubo(lam, [px(y_dc, Z_BORDE + 300), px(y_dc, Z_LOSA + 150), px(yi, Z_LOSA + 150),
+               px(yi, inv[4])], 1.1, "DC", "#f6c9c4", abrazaderas=7)  # fmt: skip
     tubo(lam, [px(yt, tab[4]), px(yt, Z_LOSA + 400), px(ya, Z_LOSA + 400)], 1.5, "AC", "#cfe0f5",
          abrazaderas=7)  # fmt: skip
     tubo(lam, [px(inv[2], Z_LOSA + 1300), px(tab[3], Z_LOSA + 1300)], 1.2, "AC", "#cfe0f5")
@@ -566,14 +573,17 @@ def detalle_equipos(lam, x, y, d) -> None:
          "#f6c9c4")  # fmt: skip
     caja_paso(lam, px(yt - 400, Z_LOSA + 400), 2.0)
     W = (yb - ya) * k
-    _caja_texto(lam, (x + W + 3, y + 6), ['DC: coraza 1" desde la cubierta', "junto al piso"],
-                h=1.1)  # fmt: skip
-    _guia(lam, px(yb - 200, Z_LOSA + 150), (x + W + 3, y + 3))
+    _caja_texto(lam, (x + W + 3, y + 6), ['DC: coraza 1" sobre el muro,',
+                "baja y va junto al piso"], h=1.1)  # fmt: skip
+    _guia(lam, px(y_dc, Z_LOSA + 1200), (x + W + 3, y + 3))
     _caja_texto(lam, (x - 2, y + 9), ['AC: IMC 2" hacia el muro blanco', "Caja de paso 10x10 IP66",
                 "2 x [3N° 6 + 1N° 6 (N) + 1N° 8 (T)] Cu"], h=1.1, alinear="der")  # fmt: skip
     _guia(lam, px(ya + 200, Z_LOSA + 400), (x - 2, y + 6))
     _caja_texto(lam, (x + W + 3, y + 22), ["Batería DEYE GB-L en el piso", 'Coraza 1" a inversor',
                 f"Inversor {d['inversor_modelo']}"], h=1.1)  # fmt: skip
+
+
+_Y_DC = [2500.0]  # se actualiza con la ruta DC
 
 
 def detalle_punto_conexion(lam, x, y) -> None:
@@ -610,13 +620,15 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     dc, ac, puente, desc_dc, desc_ac, L = rutas(filas)
     conj = json.loads((INSUMOS / "porton.json").read_text(encoding="utf-8"))
     titulo = f"CASA {d['casa']} - PORTÓN DE LA RIVERA"
-    az = (180 - GIRO_DEG) % 360
-    orient = f"{az:.0f}°, coplanar {INCL:.0f}° (teja)"
+    _Y_DC[0] = dc[0][1]
+    az = (270 - GIRO_DEG) % 360
+    orient = f"{az:.0f}° (oeste), coplanar {INCL:.0f}° (teja)"
     notas = [
         f"Sistema de {d['modulos']} módulos JA Solar de 595 Wp ({_f(d['kwp'])} kWp) y un inversor "
         f"{d['inversor_modelo']}.",
-        f"Módulos horizontales en las aguas sur, en dos hileras rectas ({filas[0]['n']} + "
-        f"{filas[-1]['n']}), mirando a {az:.0f}° a {INCL:.0f}°, sobre riel completo.",
+        f"Módulos verticales en el agua oeste del bloque sur, junto a la losa, en hileras "
+        f"({' + '.join(str(f['n']) for f in filas)}), mirando a {az:.0f}° a {INCL:.0f}°, sobre "
+        "riel completo.",
         *SUPUESTOS,
     ]
     out: list[Lamina] = []
@@ -652,8 +664,10 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     lam.texto((246, 240), f"Vivienda girada {GIRO_DEG:.0f}°", 1.1, "NOTA", "centro")
     _escala(lam, 116, 100, m.n)
     _titulo_vista(lam, 116, 94, 2, "Distribución de módulos (marco de la vivienda)", f"ESC 1:{m.n}")
-    planta_fijacion(lam, 18, 116, filas)
-    _titulo_vista(lam, 14, 144, 3, "Planta de fijación con riel completo", "ESC 1:80 (cotas en mm)")
+    planta_fijacion(lam, 18, 90, filas)
+    _titulo_vista(
+        lam, 14, 146, 3, "Planta de fijación con riel completo", "ESC 1:100 (cotas en mm)"
+    )
     tabla_materiales_compacta(lam, 256, 250, materiales_obra(d, L))
     cerrar(lam, ["Materiales: cableado y canalización sobre la ruta 3D + 10 % de reserva."])
 
@@ -668,15 +682,14 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
         return [q for i, q in enumerate(pts) if i == 0 or math.dist(q, pts[i - 1]) > 1]
 
     ruta_planta(lam, m, en_planta(dc), "DC", "#f6c9c4", "DC-", pos=0.3)
-    ruta_planta(lam, m, en_planta(puente), "DC", "#f6c9c4", "P-")
     i_in = next(i for i, q in enumerate(ac) if abs(q[2] - Z_CIELO) < 1)
     ac_p = en_planta(ac[: i_in + 1])
     ruta_planta(lam, m, [(q[0] + 250, q[1]) if abs(q[0] - X_EQ) < 1 else q for q in ac_p], "AC",
                 "#cfe0f5", "AC-", pos=0.7)  # fmt: skip
     interior = [m(q[:2]) for q in ac[i_in:]]  # dentro de la casa, por el cielo falso del 1° piso
     lam.polilinea(interior, "AC", trazo="discontinuo")
-    lam.texto((interior[1][0] - 1, interior[1][1] + 1.2), "cielo falso 1° piso ≈ 5 m", 1.1, "AC",
-              "der")  # fmt: skip
+    lam.texto(((interior[1][0] + interior[2][0]) / 2, interior[1][1] - 2.2),
+              "cielo falso 1° piso ≈ 5 m (punteado)", 1.0, "AC", "centro")  # fmt: skip
     caja_paso(lam, m(dc[0][:2]), 2.4)
     for p, t, capa in (((X_BAJADA, Y_BAJADA), "↓", "ROJO"), (TABLERO_PC, "T", "ROJO")):
         lam.circulo(m(p), 1.6, capa)
@@ -687,8 +700,8 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     _caja_texto(lam, (278, 104), [
         "RUTA DC (rojo)", 'Coraza 1" adosada a la teja y a la losa, soportes c/ 1,5 m',
         "Cable FV 2x4 mm² (+/-) + 1N° 8 AWG Cu verde",
-        "Puente entre hileras por la cumbrera de la cubierta media",
-        f"Longitud total DC (con el puente): {L['dc_total']:.1f} m",
+        "Sobre el muro de ladrillo y baja a la losa (equipos)",
+        f"Longitud total DC: {L['dc_total']:.1f} m",
     ], h=1.25)  # fmt: skip
     _caja_texto(lam, (278, 80), [
         "RUTA AC (azul)", 'IMC 2" por la losa y el muro blanco; cielo falso ≈ 5 m',
@@ -696,7 +709,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
         "Hasta el tablero de distribución junto a la cocina",
         f"Longitud total AC: {L['ac_total']:.1f} m",
     ], h=1.25)  # fmt: skip
-    _detalle_dc(lam, 278, 112, d, "Por la limahoya y la franja hasta la losa")
+    _detalle_dc(lam, 278, 112, d, "Sobre el muro de ladrillo hasta la losa")
     cerrar(lam, ["Cable tipo PV-PVC-SR-DB-FR-90°C-Cu-TC-AD7, 1.8 kVdc para conductores DC.",
                  "Planta en el marco de la vivienda (girada 8° respecto al norte)."])  # fmt: skip
 
@@ -730,9 +743,16 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
         return _vista(area, pts, desde="SE")
 
     _titulo_vista(lam, 16, 146, 3, "Ruta DC ampliada (tramos y curvas)", "SIN ESCALA")
-    detalle_ruta(lam, (14, 58, 196, 84), dc, desc_dc, "dc", vista, escena, NOTAS_RUTA["dc"][:5],
-                 extra=[("P", "Puente entre hileras (por la cumbrera)",
-                         sum(_largos(puente)))])  # fmt: skip
+    detalle_ruta(
+        lam,
+        (14, 58, 196, 84),
+        dc,
+        desc_dc,
+        "dc",
+        vista,
+        escena,
+        NOTAS_RUTA["dc"][:5],
+    )
     _titulo_vista(lam, 214, 146, 4, "Ruta AC ampliada (tramos y curvas)", "SIN ESCALA")
     detalle_ruta(lam, (212, 58, 196, 84), ac, desc_ac, "ac", vista, escena, [
         'C1 a C{nc}: {nc} curvas IMC 2" de 90° (fabricadas).',

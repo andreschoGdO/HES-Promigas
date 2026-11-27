@@ -196,15 +196,13 @@ def test_porton_rivera_teja_riel() -> None:
     from engine.planos import casas_porton as cp
 
     filas = cp.hileras(7)
-    assert sum(f["n"] for f in filas) == 7 and len(filas) == 2  # agua oeste junto a la losa
-    x0g, x1g, y0g, y1g = cp.G_SUR_O
-    for f in filas:
-        assert x0g <= f["xa"] < f["xb"] <= x1g and y0g <= f["y0"]
-        assert f["y0"] + f["largo"] <= y1g and f["y0"] == filas[0]["y0"]  # columnas alineadas
-    assert filas[0]["xb"] > filas[1]["xb"]  # la primera hilera junto al muro de ladrillo
+    assert [f["n"] for f in filas] == [4, 3]  # una hilera por agua (bloque sur y medio)
+    for f, g in zip(filas, (cp.G_SUR_O, cp.G_MEDIO), strict=True):
+        assert f["xa"] >= cp.X_LADRILLO - cp.TEJA and f["xb"] <= cp.X_LADRILLO  # solo en la teja
+        assert g[2] <= f["y0"] and f["y0"] + f["largo"] <= g[3]
     dc, ac, puente, desc_dc, desc_ac, L = cp.rutas(filas)
     assert len(desc_dc) == len(dc) - 1 and len(desc_ac) == len(ac) - 1
-    assert dc[-1][0] == cp.X_EQ and ac[-1][:2] == cp.TABLERO_PC
+    assert dc[-1][0] == cp.X_EQ and ac[-1][:2] == cp.TABLERO_PC and puente
     assert any(abs(q[2] - cp.Z_CIELO) < 1 for q in ac)  # entra por el cielo falso
     assert L["n_anclajes"] == sum(2 * len(cp.anclajes(f)) for f in filas)
     for f in filas:

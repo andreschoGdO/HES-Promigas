@@ -757,30 +757,27 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
     # ---------------------------------------------------------------- tablero existente del cliente
     ex, ey, ew, eh = 262, 56, 96, 38
     lam.rect(ex, ey, ew, eh, "PROTECCION", trazo="discontinuo")
-    lam.texto(
-        (ex + ew / 2, ey + eh + 1.5),
-        "Tablero existente general del cliente",
-        1.8,
-        "PROTECCION",
-        "centro",
-    )
+    lam.texto((ex + 1, ey + eh + 1.5), "Tablero existente general del cliente", 1.8, "PROTECCION")
     lam.rect(ex + 6, ey + eh - 8, ew - 12, 1.2, "UNIFILAR", relleno="#000000")
     lam.texto((ex + ew / 2 - 10, ey + eh - 5), "220V", 1.5, "TEXTO", "centro")
     lam.texto((ex + ew / 2 + 10, ey + eh - 5), "60Hz", 1.5, "TEXTO", "centro")
     lam.linea((kx + 3.5, k_bot), (kx + 3.5, ey + eh - 6.8), "UNIFILAR")
-    lam.texto((kx + 5, ty - 4), "Alimentador de la vivienda (cargas)", 1.15, "TEXTO")
+    lam.texto((kx + 5, ty - 2.6), "Alimentador de la vivienda (cargas)", 1.1, "TEXTO",
+              negrita=True)  # fmt: skip
+    lam.texto((kx + 5, ty - 4.3), "3N° 6 AWG (F) + 1N° 6 AWG (N) + 1N° 8 AWG (T) Cu", 1.0, "TEXTO")
+    lam.texto((kx + 5, ty - 5.9), "THHN/THWN-2 @90°C - 0.6 kV - SR", 1.0, "TEXTO")
+    for i in range(3):  # marcas de fases sobre el alimentador
+        lam.linea((kx + 2.5, ty - 6.5 + i * 1.2), (kx + 4.5, ty - 5.5 + i * 1.2), "PROTECCION")
     for k in range(12):
         x = ex + 7 + k * 7.5
-        lam.linea((x, ey + eh - 8), (x, ey + eh - 12), "PROTECCION")
-        lam.linea((x, ey + eh - 12), (x + 1.2, ey + eh - 16), "PROTECCION")
-        lam.linea((x, ey + eh - 16.5), (x, ey + 8), "PROTECCION")
+        _ramal(lam, x, ey + eh - 8, ey + 8)
         lam.polilinea(
             [(x - 0.9, ey + 9), (x + 0.9, ey + 9), (x, ey + 7)],
             "PROTECCION",
             cerrada=True,
             relleno="#e67e22",
         )
-        lam.texto((x + 1.2, ey + eh - 11), "2x20A" if k % 3 != 2 else "1x20A", 0.9, "TEXTO")
+        lam.texto((x + 1.1, ey + eh - 10.5), "2x20A" if k % 3 != 2 else "1x20A", 0.85, "TEXTO")
     lam.texto((ex + ew / 2, ey + 3), "CARGAS GENERALES DE LA CASA", 1.4, "TEXTO", "centro")
 
     # ---------------------------------------------------------------- circuito de control
@@ -803,10 +800,14 @@ def dibujar(lam: Lamina, d: dict[str, Any]) -> None:
     for k, (titulo, eq, tipo, bornas, carga) in enumerate(ramas):
         x = cx0 + 22 + k * 28
         lam.texto((x, cy0 + 31.5), titulo, 1.2, "TEXTO", "centro")
+        # Borne superior en y+23 y borne inferior (pivote de la cuchilla) en y+18.5
         lam.linea((x, cy0 + 29.5), (x, cy0 + 23), "ROJO")
-        lam.linea((x, cy0 + 23), (x + 2, cy0 + 19), "ROJO")
-        if tipo == "NC":
-            lam.linea((x - 1, cy0 + 21.5), (x + 1.5, cy0 + 21.5), "ROJO")
+        lam.circulo((x, cy0 + 18.5), 0.3, "ROJO", relleno="#b03a2e")
+        if tipo == "NC":  # cerrado: la cuchilla toca el gancho del borne superior
+            lam.linea((x, cy0 + 23), (x + 1.6, cy0 + 23), "ROJO")
+            lam.linea((x, cy0 + 18.5), (x + 1.6, cy0 + 23), "ROJO")
+        else:  # abierto: la cuchilla queda separada del borne superior
+            lam.linea((x, cy0 + 18.5), (x + 2.2, cy0 + 22.3), "ROJO")
         lam.linea((x, cy0 + 18.5), (x, cy0 + 15), "ROJO")
         lam.texto((x - 2.5, cy0 + 21), eq, 1.5, "TEXTO", "der")
         lam.texto((x + 3, cy0 + 21), f"{tipo} ({bornas})", 1.2, "TEXTO")
@@ -921,6 +922,13 @@ def _baterias(lam: Lamina, d: dict[str, Any], centros: dict[str, float], iy: flo
     lam.texto((x0, y0 - 1.8), total, 1.3, "TEXTO", negrita=True)
 
 
+def _ramal(lam: Lamina, x: float, y_barra: float, y_fin: float) -> None:
+    """Ramal de un circuito: línea continua desde la barra con su interruptor (caja) encima."""
+    lam.linea((x, y_barra), (x, y_fin), "PROTECCION")
+    lam.rect(x - 0.8, y_barra - 7, 1.6, 3.0, "PROTECCION", relleno="#ffffff")
+    lam.linea((x - 0.8, y_barra - 7), (x + 0.8, y_barra - 4), "PROTECCION")
+
+
 def _tablero_existente(lam: Lamina, titulo: str, rotulos: list[str]) -> tuple[float, float]:
     ex, ey, ew, eh = 262, 56, 96, 38
     lam.rect(ex, ey, ew, eh, "PROTECCION", trazo="discontinuo")
@@ -928,16 +936,14 @@ def _tablero_existente(lam: Lamina, titulo: str, rotulos: list[str]) -> tuple[fl
     lam.rect(ex + 6, ey + eh - 8, ew - 12, 1.2, "UNIFILAR", relleno="#000000")
     for k, rot in enumerate(rotulos):
         x = ex + 7 + k * 7.5
-        lam.linea((x, ey + eh - 8), (x, ey + eh - 12), "PROTECCION")
-        lam.linea((x, ey + eh - 12), (x + 1.2, ey + eh - 16), "PROTECCION")
-        lam.linea((x, ey + eh - 16.5), (x, ey + 8), "PROTECCION")
+        _ramal(lam, x, ey + eh - 8, ey + 8)
         lam.polilinea(
             [(x - 0.9, ey + 9), (x + 0.9, ey + 9), (x, ey + 7)],
             "PROTECCION",
             cerrada=True,
             relleno="#e67e22",
         )
-        lam.texto((x + 1.2, ey + eh - 11), rot, 0.9, "TEXTO")
+        lam.texto((x + 1.1, ey + eh - 10.5), rot, 0.85, "TEXTO")
     lam.texto((ex + ew / 2, ey + 3), "CARGAS GENERALES DE LA CASA", 1.4, "TEXTO", "centro")
     return ex, ey + eh - 7.4
 

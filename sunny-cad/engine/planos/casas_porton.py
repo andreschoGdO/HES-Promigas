@@ -84,7 +84,7 @@ X_LADRILLO, X_BLANCO = LOSA[0], LOSA[1]
 X_CUM = X_LADRILLO  # borde alto de las aguas (línea del muro de ladrillo)
 Z_BORDE = Z_LOSA + 2400  # borde alto del agua oeste sobre la losa (foto: ≈ 2,4 m; supuesto)
 Z_CUM = Z_BORDE
-TEJA = 2800.0 * COS  # franja de teja en planta (2,8 m en la pendiente); abajo, losa gris (usuario)
+ANCHO_LOSA = 1000.0  # franja de losa gris en la parte baja de cada agua (foto del usuario)
 # Módulos verticales en el agua oeste del bloque sur, junto a la losa (usuario)
 Y_MARGEN = 250.0  # a los bordes sur y norte del agua
 RETIRO_BORDE = 300.0  # del borde alto (muro de ladrillo) a la primera hilera
@@ -104,8 +104,9 @@ TABLERO_PC = (X_LADRILLO, 2800.0)  # tablero existente: centro de la casa, cocin
 Z_TAB_PC = (1100.0, 1900.0)
 SUPUESTOS = [
     "Cubierta según Maps (99,83 m²) rectificada; teja a 15° con cumbrera norte-sur (usuario); "
-    "losa a 7,8 m (usuario); borde del agua oeste 2,4 m sobre la losa (foto); franja de teja "
-    "≈ 2,8 m (estimada) y agua del medio ≥ 3,5 m de ancho: verificar en obra; cielo falso 2,7 m.",
+    "losa a 7,8 m (usuario); borde del agua oeste 2,4 m sobre la losa (foto); losa gris de "
+    "≈ 1 m en la parte baja de cada agua (foto) y agua del medio ≥ 3,5 m de ancho: verificar "
+    "en obra; cielo falso 2,7 m.",
     "Anclajes en L para teja, riel y tornillería según el fabricante; retirar y reponer la teja "
     "en cada anclaje y sellar la perforación.",
 ]
@@ -116,9 +117,23 @@ def _borde_alto(x: float, y: float) -> float:
     return X_BLANCO if (y < MUROS_Y[0] and x >= X_BLANCO) else X_LADRILLO
 
 
+def _borde_bajo(x: float, y: float) -> float:
+    """x del borde bajo del agua que contiene el punto."""
+    xa = _borde_alto(x, y)
+    if x > xa:
+        return 11800.0
+    g = next((g for g in (G_SUR_O, G_MEDIO, G_NORTE) if g[2] <= y <= g[3]), G_SUR_O)
+    return g[0]
+
+
+def largo_teja(x: float, y: float) -> float:
+    """Largo en planta de la teja del agua: del borde alto hasta la losa gris de la parte baja."""
+    return abs(_borde_alto(x, y) - _borde_bajo(x, y)) - ANCHO_LOSA
+
+
 def z_techo(x: float, y: float = 0.0) -> float:
-    """Cota de la cubierta: teja a 15° desde el borde alto y, pasada la franja, losa gris plana."""
-    d = min(abs(x - _borde_alto(x, y)), TEJA)
+    """Cota de la cubierta: teja a 15° desde el borde alto y losa gris plana en la parte baja."""
+    d = min(abs(x - _borde_alto(x, y)), largo_teja(x, y))
     return Z_BORDE - d * TAN
 
 
@@ -128,7 +143,7 @@ def hileras(n: int) -> list[dict[str, Any]]:
     prof = LARGO_MOD * COS
     xb = X_LADRILLO - RETIRO_BORDE
     xa = xb - prof
-    if xa < X_LADRILLO - TEJA:
+    if xa < G_MEDIO[0] + ANCHO_LOSA:
         raise ValueError("el módulo no cabe en la franja de teja")
     out, resto = [], n
     for y0g, y1g in ((G_SUR_O[2], G_SUR_O[3]), (G_MEDIO[2], G_MEDIO[3])):
@@ -252,16 +267,14 @@ def _partes() -> list[tuple[float, float, float, float, str]]:
         x0, x1, y0, y1 = g
         ym = (y0 + y1) / 2
         cortes = {x0, x1}
-        for xb in (X_LADRILLO, X_BLANCO if y1 <= MUROS_Y[0] else None):
-            if xb is None:
-                continue
-            for xc in (xb - TEJA, xb, xb + TEJA):
-                if x0 < xc < x1:
-                    cortes.add(xc)
+        for xc in (X_LADRILLO, X_BLANCO, 11800 - ANCHO_LOSA, x0 + ANCHO_LOSA):
+            if x0 < xc < x1:
+                cortes.add(xc)
         xs = sorted(cortes)
         for a, b in zip(xs[:-1], xs[1:], strict=True):
             xm = (a + b) / 2
-            tipo = "losa" if abs(xm - _borde_alto(xm, ym)) > TEJA else "teja"
+            dist_alto = abs(xm - _borde_alto(xm, ym))
+            tipo = "losa" if dist_alto > largo_teja(xm, ym) else "teja"
             out.append((a, b, y0, y1, tipo))
     return out
 
@@ -376,7 +389,7 @@ def _techo3d(caras, P, prof) -> None:
         cara([(x0, y0, z0), (x1, y0, z1), (x1, y1, z1), (x0, y1, z0)], color)
     for y in MUROS_Y:  # muros blancos entre franjas, 400 mm sobre la teja
         x0 = min(g[0] for g in (G_NORTE, G_MEDIO) if g[2] <= y <= g[3])
-        xs = [x0, X_LADRILLO - TEJA, X_LADRILLO, X_LADRILLO + TEJA, 11800]
+        xs = [x0, x0 + ANCHO_LOSA, X_LADRILLO, 11800 - ANCHO_LOSA, 11800]
         pts = [(xx, z_techo(xx, y)) for xx in xs]
         cara([(x0, y - 100, 0), (11800, y - 100, 0)] +
              [(xx, y - 100, zz + 400) for xx, zz in reversed(pts)], "#ffffff")  # fmt: skip
@@ -487,7 +500,7 @@ def detalle_riel_3d(lam, area, filas) -> None:
     """Hilera tipo sobre la teja con rieles y anclajes (dos módulos en corte), vista suroeste."""
     x0, y0, w, h = area
     filas = filas[:1]
-    xg0 = max(filas[-1]["xa"] - 500, X_LADRILLO - TEJA)
+    xg0 = filas[-1]["xa"] - 500
     xg1 = filas[0]["xb"] + 300
     yg0, yg1 = G_SUR_O[2], G_SUR_O[3]
     marco = [(x, y, z) for x in (xg0 - 300, xg1 + 300) for y in (yg0 - 300, yg1 + 300)

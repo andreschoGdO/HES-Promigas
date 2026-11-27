@@ -198,7 +198,7 @@ def test_porton_rivera_teja_riel() -> None:
     filas = cp.hileras(7)
     assert [f["n"] for f in filas] == [4, 3]  # una hilera por agua (bloque sur y medio)
     for f, g in zip(filas, (cp.G_SUR_O, cp.G_MEDIO), strict=True):
-        assert f["xa"] >= cp.X_LADRILLO - cp.TEJA and f["xb"] <= cp.X_LADRILLO  # solo en la teja
+        assert f["xa"] >= g[0] + cp.ANCHO_LOSA and f["xb"] <= cp.X_LADRILLO  # solo en la teja
         assert g[2] <= f["y0"] and f["y0"] + f["largo"] <= g[3]
     dc, ac, puente, desc_dc, desc_ac, L = cp.rutas(filas)
     assert len(desc_dc) == len(dc) - 1 and len(desc_ac) == len(ac) - 1

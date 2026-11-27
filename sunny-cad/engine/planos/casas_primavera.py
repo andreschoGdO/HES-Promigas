@@ -315,14 +315,14 @@ def caja_paso(lam, c, lado=2.6, rotulo="") -> None:
         lam.texto((c[0] + lado / 2 + 1, c[1]), rotulo, 1.1, "TEXTO", "izq_medio")
 
 
-def etiqueta_tramo(lam, a, b, texto, capa="TEXTO") -> None:
-    """Rótulo de un tramo (número y longitud) en un círculo sobre su punto medio."""
-    c = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+def etiqueta_tramo(lam, a, b, texto, capa="TEXTO", pos=0.5) -> None:
+    """Rótulo de un tramo (número y longitud) sobre el tramo, a la fracción `pos` de a hacia b."""
+    c = (a[0] + (b[0] - a[0]) * pos, a[1] + (b[1] - a[1]) * pos)
     lam.rect(c[0] - 4.6, c[1] + 1.4, 9.2, 3, "CAJETIN", relleno="#ffffff")
     lam.texto((c[0], c[1] + 2.9), texto, 1.2, capa, "centro", negrita=True)
 
 
-def ruta_planta(lam, m, pts_mm, capa, relleno, prefijo, diam=1.4) -> list[float]:
+def ruta_planta(lam, m, pts_mm, capa, relleno, prefijo, diam=1.4, pos=0.5) -> list[float]:
     """Ruta en planta como tubería, con cada tramo rotulado (prefijo-n: longitud en m)."""
     pts = [m(p) for p in pts_mm]
     tubo(lam, pts, diam, capa, relleno)
@@ -331,7 +331,7 @@ def ruta_planta(lam, m, pts_mm, capa, relleno, prefijo, diam=1.4) -> list[float]
         largo = math.dist(a, b) / 1000
         largos.append(largo)
         if largo > 0.4:
-            etiqueta_tramo(lam, m(a), m(b), f"{prefijo}{i}: {largo:.1f} m", capa)
+            etiqueta_tramo(lam, m(a), m(b), f"{prefijo}{i}: {largo:.1f} m", capa, pos)
     return largos
 
 

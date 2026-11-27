@@ -96,6 +96,8 @@ EQ = {
     "inversor": (X_MURO - 235, X_MURO, 5800, 6395, Z_TER + 1100, Z_TER + 1585),  # 595×485×235
     "baterias": (X_MURO - 209, X_MURO, 6800, 7670, Z_TER, Z_TER + 1167),  # BHF-S15 870×1167
 }
+Y_CRUCE = Y_MURO[0] + ESP_PRETIL + 100  # la DC cruza el pretil en la esquina sur (usuario)
+Z_DC, Z_AC = Z_TER + 150, Z_TER + 400  # DC junto al piso; AC por encima (no se cruzan)
 Y_BAJANTE = BUITRON[1]  # la AC deja la fachada y va al buitrón de la claraboya
 Z_TAB_PC = (900.0, 1700.0)  # tablero existente del 1° piso (supuesto: bajo el buitrón)
 SUPUESTOS = [
@@ -165,28 +167,31 @@ def rutas(g, mods):
     ym = min(max(ym, Y_MURO[0] + 600), Y_MURO[1] - 600)  # bajada DC sobre el muro de equipos
     zm = z_techo(ym)
     x_int = X_MURO + ESP_PRETIL + 100  # junto a la cara interna del pretil oeste
-    z_pre = zm + PRETIL + 120  # paso sobre el pretil
+    yc = Y_CRUCE
+    z_pre = z_techo(yc) + PRETIL + 120  # paso sobre el pretil
     inv = EQ["inversor"]
     yi = (inv[2] + inv[3]) / 2
-    z_h = Z_TER + 1900
+    # Por la cubierta junto al pretil oeste hasta la esquina sur, cruza el pretil, baja por la
+    # esquina y va junto al piso de la terraza hasta entrar por debajo al inversor
     dc = _fusionar([
-        (x0 - 150, ym, zm + 80), (x_int, ym, zm + 80),
-        (x_int, ym, z_pre), (X_EQ, ym, z_pre), (X_EQ, ym, z_h), (X_EQ, yi, z_h),
-        (X_EQ, yi, inv[5]),
+        (x0 - 150, ym, zm + 80), (x_int, ym, zm + 80), (x_int, yc, z_techo(yc) + 80),
+        (x_int, yc, z_pre), (X_EQ, yc, z_pre), (X_EQ, yc, Z_DC), (X_EQ, yi, Z_DC),
+        (X_EQ, yi, inv[4]),
     ])  # fmt: skip
     tab = EQ["tablero"]
     yt = (tab[2] + tab[3]) / 2
     ac = _fusionar([
-        (X_EQ, yt, tab[4]), (X_EQ, yt, Z_TER + 150), (X_EQ, Y_BAJANTE, Z_TER + 150),
-        (BUITRON[0], Y_BAJANTE, Z_TER + 150), (BUITRON[0], Y_BAJANTE, Z_TAB_PC[1]),
+        (X_EQ, yt, tab[4]), (X_EQ, yt, Z_AC), (X_EQ, Y_BAJANTE, Z_AC),
+        (BUITRON[0], Y_BAJANTE, Z_AC), (BUITRON[0], Y_BAJANTE, Z_TAB_PC[1]),
     ])  # fmt: skip
     desc_dc = [
         "Caja de paso del arreglo, sobre la cubierta, al pretil oeste",
+        "Junto al pretil oeste hacia el sur, hasta la esquina",
         "Sube para cruzar el pretil",
-        "Cruza el pretil hacia la fachada oeste",
-        "Baja por la fachada oeste",
-        "Horizontal por la fachada hasta el inversor",
-        "Baja a la entrada DC del inversor",
+        "Cruza el pretil en la esquina sur",
+        "Baja por la esquina sur de la fachada",
+        "Junto al piso de la terraza hasta el inversor",
+        "Sube a la entrada DC del inversor (por debajo)",
     ]
     desc_ac = [
         "Baja del tablero FV al piso de la terraza",
@@ -204,8 +209,8 @@ def rutas(g, mods):
     L = {
         "dc_total": sum(_largos(dc)),
         "ac_total": sum(_largos(ac)),
-        "dc_vertical": (z_pre - z_h) / 1000,
-        "ac_bajante": (Z_TER + 150 - Z_TAB_PC[1]) / 1000,
+        "dc_vertical": (z_pre - Z_DC) / 1000,
+        "ac_bajante": (Z_AC - Z_TAB_PC[1]) / 1000,
         "curvas_ac": len(ac) - 2,
         "ubic_bat": "En la terraza del 2° piso",
         "obs_ac": "Fachada oeste y buitrón por la claraboya",
@@ -418,7 +423,7 @@ def isometrico(lam, area, g, mods, dc, ac) -> None:
     inv, tab, bat = EQ["inversor"], EQ["tablero"], EQ["baterias"]
     rot = [
         (P(*dc[0]), "Arreglo FV · caja de paso, salida string S1.1.1", 1),
-        (P(*dc[4]), 'DC: coraza 1" cruza el pretil y baja por la fachada', -1),
+        (P(*dc[5]), 'DC: coraza 1" baja por la esquina sur y va junto al piso', -1),
         (P(inv[0], (inv[2] + inv[3]) / 2, inv[4] + 250), "Inversor", -1),
         (P(tab[0], (tab[2] + tab[3]) / 2, tab[4] + 400), "Tablero FV", -1),
         (P(bat[0], (bat[2] + bat[3]) / 2, bat[4] + 500), "Baterías", -1),
@@ -582,33 +587,31 @@ def detalle_equipos(lam, x, y, d) -> None:
     r(EQ["tablero"], "#e6e6e6", "EQUIPO", "T.FV")
     inv, tab, bat = EQ["inversor"], EQ["tablero"], EQ["baterias"]
     yi, yt = (inv[2] + inv[3]) / 2, (tab[2] + tab[3]) / 2
-    y_dc = _Y_DC[0]
-    tubo(lam, [px(y_dc, z_techo(y_dc) + PRETIL + 300), px(y_dc, Z_TER + 1900), px(yi, Z_TER + 1900),
-               px(yi, inv[5])], 1.1, "DC", "#f6c9c4", abrazaderas=7)  # fmt: skip
-    tubo(lam, [px(yt, tab[4]), px(yt, Z_TER + 150), px(Y_BAJANTE, Z_TER + 150),
-               px(Y_BAJANTE, Z_TER - 700)], 1.5, "AC", "#cfe0f5", abrazaderas=7)  # fmt: skip
+    y_dc = Y_CRUCE
+    tubo(lam, [px(y_dc, z_techo(y_dc) + PRETIL + 300), px(y_dc, Z_DC), px(yi, Z_DC),
+               px(yi, inv[4])], 1.1, "DC", "#f6c9c4", abrazaderas=7)  # fmt: skip
+    tubo(lam, [px(yt, tab[4]), px(yt, Z_AC), px(Y_BAJANTE, Z_AC), px(Y_BAJANTE, Z_TER - 700)],
+         1.5, "AC", "#cfe0f5", abrazaderas=7)  # fmt: skip
     c0, c1 = px(CLARABOYA.bounds[3], Z_TER - 120), px(CLARABOYA.bounds[1], Z_TER)
     lam.rect(c0[0], c0[1], c1[0] - c0[0], c1[1] - c0[1], "NOTA", relleno="#bcd9ee")
     lam.texto(((c0[0] + c1[0]) / 2, c0[1] - 2.2), "claraboya (buitrón ↓)", 1.0, "AC", "centro")
     tubo(lam, [px(inv[2], Z_TER + 1300), px(tab[3], Z_TER + 1300)], 1.2, "AC", "#cfe0f5")
     tubo(lam, [px(bat[2] + 200, bat[5]), px(bat[2] + 200, Z_TER + 1250), px(inv[3], Z_TER + 1250)],
          1.0, "DC", "#f6c9c4")  # fmt: skip
-    caja_paso(lam, px(Y_BAJANTE + 250, Z_TER + 150), 2.2)
-    _caja_texto(lam, (x - 2, y + Hm - 2), ['DC: coraza 1" cruza el pretil',
-                "Cable FV 2x4 mm² + 1N° 8 AWG Cu"], h=1.1, alinear="der")  # fmt: skip
+    caja_paso(lam, px(Y_BAJANTE + 250, Z_AC), 2.2)
+    _caja_texto(lam, (x - 2, y + Hm - 2), ['DC: coraza 1" cruza el pretil en la esquina',
+                "sur, baja y va junto al piso al inversor", "Cable FV 2x4 mm² + 1N° 8 AWG Cu"],
+                h=1.1, alinear="der")  # fmt: skip
     _guia(lam, px(y_dc, z_techo(y_dc)), (x - 2, y + Hm - 5))
     _caja_texto(lam, (x + W + 4, y + 16), ['AC: IMC 2" al buitrón de la claraboya',
                 "2 x [3N° 6 + 1N° 6 (N) + 1N° 6 (T)] Cu", "Caja de paso 10x10 IP66"],
                 h=1.1)  # fmt: skip
-    _guia(lam, px(Y_BAJANTE + 250, Z_TER + 150), (x + W + 4, y + 12))
+    _guia(lam, px(Y_BAJANTE + 250, Z_AC), (x + W + 4, y + 12))
     _caja_texto(lam, (x + W + 4, y + Hm - 4), ["Franja de ventanas", "(referencia de la foto)"],
                 h=1.1)  # fmt: skip
     _guia(lam, px(5400, Z_TER + 2700), (x + W + 4, y + Hm - 7))
     _caja_texto(lam, (x - 2, y + 12), ['Coraza 1" cable de baterías', 'Coraza ¾" comunicaciones',
                 f"Inversor {d['inversor_modelo']}"], h=1.1, alinear="der")  # fmt: skip
-
-
-_Y_DC = [5500.0]  # se actualiza con la ruta DC calculada
 
 
 def detalle_punto_conexion(lam, x, y) -> None:
@@ -649,7 +652,6 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     g = geometria()
     mods = colocar(g, d["modulos"])
     dc, ac, desc_dc, desc_ac, L = rutas(g, mods)
-    _Y_DC[0] = dc[0][1]
     conj = json.loads((INSUMOS / "pance.json").read_text(encoding="utf-8"))
     titulo = f"CASA {d['casa']} - PANCE CAMPESTRE"
     orient = f"Sur (180°), coplanar {INCL:.1f}°"
@@ -710,10 +712,10 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     dc_f = [q for i, q in enumerate(dc_f) if i == 0 or math.dist(q, dc_f[i - 1]) > 1]
     ac_p = [(q[0] - 450 if abs(q[0] - X_EQ) < 1 else q[0], q[1]) for q in ac]
     ac_p = [q for i, q in enumerate(ac_p) if i == 0 or math.dist(q, ac_p[i - 1]) > 1]
-    ruta_planta(lam, m, dc_p, "DC", "#f6c9c4", "DC-")
+    ruta_planta(lam, m, dc_p, "DC", "#f6c9c4", "DC-", pos=0.2)  # rótulos escalonados
     if len(dc_f) > 1:
         ruta_planta(lam, m, [(q[0] - 200, q[1]) for q in dc_f], "DC", "#f6c9c4", "DC-F")
-    ruta_planta(lam, m, ac_p, "AC", "#cfe0f5", "AC-")
+    ruta_planta(lam, m, ac_p, "AC", "#cfe0f5", "AC-", pos=0.85)
     caja_paso(lam, m(dc_p[0]), 2.4)
     for p, t, capa in ((dc_p[-1], "↓", "DC"), (BUITRON, "↓", "ROJO")):
         lam.circulo(m(p), 1.6, capa)
@@ -724,7 +726,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
     _caja_texto(lam, (278, 104), [
         "RUTA DC (rojo)", 'Coraza 1" adosada a la cubierta, soportes c/ 1,5 m',
         "Cable FV 2x4 mm² (+/-) + 1N° 8 AWG Cu verde",
-        f"Cruza el pretil oeste y baja {L['dc_vertical']:.1f} m por la fachada (↓)",
+        f"Cruza el pretil en la esquina sur y baja {L['dc_vertical']:.1f} m (↓)",
         f"Longitud total DC: {L['dc_total']:.1f} m",
     ], h=1.25)  # fmt: skip
     _caja_texto(lam, (278, 80), [
@@ -733,7 +735,7 @@ def laminas(d: dict[str, Any], fecha: str, disenador: str = "") -> list[Lamina]:
         f"Baja {L['ac_bajante']:.1f} m por el buitrón de la claraboya al 1° piso (↓)",
         f"Longitud total AC: {L['ac_total']:.1f} m",
     ], h=1.25)  # fmt: skip
-    _detalle_dc(lam, 278, 112, d, "Cruza el pretil y baja por la fachada oeste")
+    _detalle_dc(lam, 278, 112, d, "Baja por la esquina sur y va junto al piso")
     cerrar(lam, ["Cable tipo PV-PVC-SR-DB-FR-90°C-Cu-TC-AD7, 1.8 kVdc para conductores DC.",
                  "Rutas sobre la fachada desplazadas en planta para que se lean."])  # fmt: skip
 

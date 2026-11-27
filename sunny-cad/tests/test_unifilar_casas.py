@@ -190,3 +190,23 @@ def test_caja_bornas_segun_marca_y_torres() -> None:
     assert not caja_bornas(d("livoltek10kw", [3, 2]))
     assert not caja_bornas(d("deye15kw", [4]))
     assert caja_bornas(d("deye15kw", [4, 4]))
+
+
+def test_porton_rivera_teja_riel() -> None:
+    from engine.planos import casas_porton as cp
+
+    filas = cp.hileras(7)
+    assert [f["n"] for f in filas] == [3, 4]  # dos hileras rectas en las aguas sur
+    for f in filas:
+        g = f["g"]
+        assert g[2] <= f["y0"] and f["y1"] <= (g[2] + g[3]) / 2  # dentro del agua sur
+        assert f["x0"] + f["largo"] <= g[1]
+        assert f["x0"] == filas[0]["x0"]  # mismo arranque al oeste
+    dc, ac, puente, desc_dc, desc_ac, L = cp.rutas(filas)
+    assert len(desc_dc) == len(dc) - 1 and len(desc_ac) == len(ac) - 1
+    assert dc[-1][0] == cp.X_EQ and ac[-1][:2] == cp.TABLERO_PC
+    assert any(abs(q[2] - cp.Z_CIELO) < 1 for q in ac)  # entra por el cielo falso
+    assert L["n_anclajes"] == sum(2 * len(cp.anclajes(f)) for f in filas)
+    for f in filas:
+        a = cp.anclajes(f)
+        assert max(b - c for b, c in zip(a[1:], a[:-1], strict=False)) <= cp.PASO_ANCLAJE
